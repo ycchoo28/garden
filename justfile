@@ -100,15 +100,17 @@ backend-check:
 
 # Backend tests against the real Postgres in Compose, in a separate *_test database.
 # CI runs this against the Postgres that `just up` starts in the same job.
+# Set GARDEN_TEST_DB to use another test database (its name must end in _test), for example when worktrees run tests in parallel.
 test:
     #!/usr/bin/env bash
     set -euo pipefail
     just up
     psql_dev() { docker compose -f dev/compose.yaml exec -T postgres psql -U garden -d garden -v ON_ERROR_STOP=1 "$@"; }
-    if [ "$(psql_dev -tAc "select 1 from pg_database where datname = 'garden_test'")" != "1" ]; then
-        psql_dev -c "create database garden_test"
+    db="${GARDEN_TEST_DB:-garden_test}"
+    if [ "$(psql_dev -tAc "select 1 from pg_database where datname = '$db'")" != "1" ]; then
+        psql_dev -c "create database $db"
     fi
-    export GARDEN_DATABASE_URL="${GARDEN_DATABASE_URL%/*}/garden_test"
+    export GARDEN_DATABASE_URL="${GARDEN_DATABASE_URL%/*}/$db"
     cd backend && uv run pytest
 
 # Frontend type check (vue-tsc, strict), lint with module-boundary rules, unit tests, and no raw colours outside the tokens.
