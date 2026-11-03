@@ -1,0 +1,7 @@
+# Terms that must not appear in any tracked or new file. Each term is base64-encoded so this list does not spell them out.
+# Format: <substring|word> <base64 of the lowercase term>. Matching is case-insensitive. Run by `just deny-check`.
+substring bWVob3c=
+substring c3lzdGVtaHVi
+substring Y29yZGlz
+word aXNv
+substring aXNtcw==

@@ -1,0 +1,32 @@
+# Local dev dependencies only. Bound to 127.0.0.1, so nothing outside this machine can reach them.
+name: garden
+
+services:
+  postgres:
+    image: ${GARDEN_DEV_POSTGRES_IMAGE:-garden-postgres:local}
+    environment:
+      POSTGRES_USER: garden
+      POSTGRES_PASSWORD: garden-dev
+      POSTGRES_DB: garden
+    ports:
+      - "127.0.0.1:${GARDEN_DEV_POSTGRES_PORT:-55432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U garden -d garden"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  oidc:
+    # Fake identity provider for local sign-in. The backend refuses it outside dev.
+    image: ghcr.io/navikt/mock-oauth2-server:6.0.4
+    environment:
+      JSON_CONFIG_PATH: /config/config.json
+    volumes:
+      - ./oidc/config.json:/config/config.json:ro
+    ports:
+      - "127.0.0.1:${GARDEN_DEV_OIDC_PORT:-55081}:8080"
+
+volumes:
+  pgdata:

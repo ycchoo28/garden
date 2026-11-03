@@ -1,0 +1,24 @@
+"""HTTP endpoints of the __NAME__ module."""
+
+from typing import Annotated
+
+from fastapi import APIRouter, Depends
+
+from app.core.users import CurrentPerson, require
+from app.modules.__NAME__.schemas import StatusOut
+from app.modules.__NAME__.service import __CLASS__Service, get_service
+from app.shared.operations import op
+
+router = APIRouter(prefix="/api/__NAME__", tags=["__NAME__"])
+
+
+@router.get(
+    "/status",
+    response_model=StatusOut,
+    **op("__NAME__.status.read", "Read whether the __NAME__ module is up and can reach its database."),
+)
+async def read_status(
+    _person: Annotated[CurrentPerson, require("__NAME__.view")],
+    service: Annotated[__CLASS__Service, Depends(get_service)],
+) -> StatusOut:
+    return await service.status()

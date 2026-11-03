@@ -1,0 +1,21 @@
+{
+  "interactiveLogin": true,
+  "httpServer": "NettyWrapper",
+  "tokenCallbacks": [
+    {
+      "issuerId": "default",
+      "tokenExpiry": 3600,
+      "requestMappings": [
+        {
+          "requestParam": "scope",
+          "match": "*",
+          "claims": {
+            "sub": "dev.admin@fernhill.example",
+            "email": "dev.admin@fernhill.example",
+            "name": "Dev Admin"
+          }
+        }
+      ]
+    }
+  ]
+}

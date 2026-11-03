@@ -1,0 +1,35 @@
+import { expect, test } from '@playwright/test';
+
+import { signIn } from './fake-sign-in';
+import { OIDC_URL, WEB_URL } from './urls';
+
+const PERSON = 'dev.admin@fernhill.example';
+
+test('the signed-out page is shown to a visitor with no session', async ({ page }) => {
+  await page.goto('/signed-out');
+  await expect(page.getByRole('heading', { name: 'You are signed out' })).toBeVisible();
+});
+
+test('a visitor with no session is sent to the fake sign-in provider', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForURL((url) => url.href.startsWith(OIDC_URL));
+  await expect(page.locator('input[name="username"]')).toBeVisible();
+});
+
+test('a seeded person signs in and sees their name and permissions', async ({ page }) => {
+  await signIn(page, PERSON, 'Dev Admin');
+
+  await expect(page.getByRole('banner').getByText('Dev Admin')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Your permissions' })).toBeVisible();
+  await expect(page.getByText('users.self', { exact: true })).toBeVisible();
+});
+
+test('signing out ends the session and shows the signed-out page', async ({ page }) => {
+  await signIn(page, PERSON, 'Dev Admin');
+  await expect(page.getByRole('banner').getByText('Dev Admin')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Sign out' }).click();
+
+  await expect(page).toHaveURL(`${WEB_URL}/signed-out`);
+  await expect(page.getByRole('heading', { name: 'You are signed out' })).toBeVisible();
+});

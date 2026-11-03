@@ -1,0 +1,10 @@
+"""ORM models. Every table lives in the __NAME__ schema."""
+
+from sqlalchemy import MetaData
+from sqlalchemy.orm import DeclarativeBase
+
+from app.shared.db import NAMING_CONVENTION
+
+
+class Base(DeclarativeBase):
+    metadata = MetaData(schema="__NAME__", naming_convention=NAMING_CONVENTION)

@@ -1,0 +1,81 @@
+"""FastAPI dependencies that identify the caller and check permissions. Routes depend on these."""
+
+from collections.abc import Callable
+from typing import Annotated, cast
+
+from fastapi import Depends, FastAPI, Request, params
+from fastapi.routing import APIRoute
+
+from app.core.users.service import CurrentPerson, UserService, get_user_service
+from app.shared.errors import Forbidden
+from app.shared.request_login import VIA_WEB, RequestLogin, current_request_login
+
+SESSION_COOKIE = "garden_session"
+
+# Each check dependency maps to the permission it enforces, so the contract can advertise it.
+_PERMISSION_OF: dict[Callable[..., object], str] = {}
+
+
+async def current_person(
+    request: Request,
+    service: Annotated[UserService, Depends(get_user_service)],
+) -> CurrentPerson:
+    person = await service.current_person(
+        request.cookies.get(SESSION_COOKIE), request.app.state.roles
+    )
+    # Agent logins set their own login first. A browser request only fills in the default.
+    if current_request_login.get() is None:
+        _ = current_request_login.set(RequestLogin(via=VIA_WEB))
+    return person
+
+
+def require(permission: str) -> params.Depends:
+    """Route dependency that refuses callers without `permission`."""
+
+    async def check(
+        person: Annotated[CurrentPerson, Depends(current_person)],
+    ) -> CurrentPerson:
+        if permission not in person.permissions:
+            raise Forbidden(f"You need the {permission} permission for this.")
+        return person
+
+    _PERMISSION_OF[check] = permission
+    return Depends(check)
+
+
+def route_permission(route: APIRoute) -> str | None:
+    """The permission a route's check enforces, or None when the route has no check."""
+    for dependency in route.dependant.dependencies:
+        call = dependency.call
+        if call is not None and call in _PERMISSION_OF:
+            return _PERMISSION_OF[call]
+    return None
+
+
+def advertise_permissions(app: FastAPI) -> None:
+    """Write `x-permission` onto every operation that a permission check guards."""
+    build_openapi = app.openapi
+
+    def openapi() -> dict[str, object]:
+        schema: dict[str, object] = build_openapi()
+        paths_value = schema.get("paths")
+        if not isinstance(paths_value, dict):
+            return schema
+        paths = cast("dict[str, object]", paths_value)
+        for route in app.routes:
+            if not isinstance(route, APIRoute) or not route.include_in_schema:
+                continue
+            permission = route_permission(route)
+            if permission is None:
+                continue
+            path_item = paths.get(route.path_format)
+            if not isinstance(path_item, dict):
+                continue
+            operations = cast("dict[str, object]", path_item)
+            for method in route.methods or ():
+                operation = operations.get(method.lower())
+                if isinstance(operation, dict):
+                    cast("dict[str, object]", operation)["x-permission"] = permission
+        return schema
+
+    app.openapi = openapi  # type: ignore[method-assign]

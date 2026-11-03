@@ -1,0 +1,15 @@
+"""Roles and permissions of the __NAME__ module, checked by the portal."""
+
+from app.shared.permissions import Permission, Role
+
+ROLES: tuple[Role, ...] = (
+    Role("__NAME__.viewer", frozenset({"__NAME__.view"})),
+    Role("__NAME__.admin", frozenset({"__NAME__.view", "__NAME__.admin"})),
+)
+
+# Every permission a role names must be declared here, or the app refuses to start.
+# agent_allowed=False marks an act only a person may do, which an agent login never holds.
+PERMISSIONS: tuple[Permission, ...] = (
+    Permission("__NAME__.view", agent_allowed=True),
+    Permission("__NAME__.admin", agent_allowed=True),
+)

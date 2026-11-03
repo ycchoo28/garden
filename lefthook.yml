@@ -1,0 +1,19 @@
+# Commit hooks: the fast deterministic checks, on the staged files only. Installed by `just hooks` (see README.md).
+# No type checks, tests or audits here: `just quick` and `just check` run those (see README.md).
+pre-commit:
+  parallel: true
+  commands:
+    ruff-format:
+      root: backend/
+      glob: "*.py"
+      run: uv run ruff format --check {staged_files}
+    ruff-check:
+      root: backend/
+      glob: "*.py"
+      run: uv run ruff check {staged_files}
+    eslint:
+      root: frontend/
+      glob: "*.{js,mjs,ts,vue}"
+      run: bun run eslint {staged_files}
+    gitleaks:
+      run: gitleaks git --staged --no-banner --redact --exit-code 1 .

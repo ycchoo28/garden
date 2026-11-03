@@ -1,0 +1,127 @@
+/* PrimeVue's styles sit in their own layer before Tailwind's utilities, so a utility can always adjust a component. */
+@layer theme, base, primevue, components, utilities;
+@import "tailwindcss";
+
+/* Dark mode is one class on <html>, shared with PrimeVue's darkModeSelector (docs/ui.md). */
+@custom-variant dark (&:where(.app-dark, .app-dark *));
+
+/* Tokens PrimeVue has no name for. PrimeVue's own come from src/shared/ui/theme.ts as --p-* variables. */
+:root {
+  --app-canvas: #f5f6f8;
+  --app-surface-muted: #f0f2f5;
+  --app-primary-fg: var(--p-primary-700);
+  --app-primary-soft: var(--p-primary-50);
+  --app-primary-line: var(--p-primary-200);
+  --app-warn-soft: #fff8e6;
+  --app-warn-line: #f3d58b;
+  --app-warn-fg: #8a4b06;
+  --app-warn: #b45309;
+  --app-danger-soft: #fdf0f0;
+  --app-danger-line: #f1b9b9;
+  --app-danger-fg: #a51d1d;
+  --app-danger: #b91c1c;
+  --app-success-soft: #edf8f1;
+  --app-success-line: #b6e2c4;
+  --app-success-fg: #17663a;
+  --app-success: #15803d;
+  --app-info-soft: #eef4fb;
+  --app-info-line: #c5d7ee;
+  --app-info-fg: #1f4f86;
+  --app-shadow-sm: 0 1px 2px rgb(16 24 40 / 0.06);
+  --app-shadow-md: 0 8px 24px rgb(16 24 40 / 0.12);
+}
+
+.app-dark {
+  --app-canvas: #0d1117;
+  --app-surface-muted: #1c222b;
+  --app-primary-fg: var(--p-primary-300);
+  --app-primary-soft: rgb(123 203 209 / 0.12);
+  --app-primary-line: rgb(123 203 209 / 0.35);
+  --app-warn-soft: rgb(252 211 77 / 0.1);
+  --app-warn-line: rgb(252 211 77 / 0.35);
+  --app-warn-fg: #fcd34d;
+  --app-warn: #fbbf24;
+  --app-danger-soft: rgb(248 113 113 / 0.1);
+  --app-danger-line: rgb(248 113 113 / 0.4);
+  --app-danger-fg: #fca5a5;
+  --app-danger: #f87171;
+  --app-success-soft: rgb(134 239 172 / 0.1);
+  --app-success-line: rgb(134 239 172 / 0.3);
+  --app-success-fg: #86efac;
+  --app-success: #4ade80;
+  --app-info-soft: rgb(147 197 253 / 0.1);
+  --app-info-line: rgb(147 197 253 / 0.3);
+  --app-info-fg: #93c5fd;
+  --app-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --app-shadow-md: 0 12px 32px rgb(0 0 0 / 0.5);
+}
+
+/* The only colour utilities screens use. Raw palette classes such as text-slate-600 fail `just frontend-check`. */
+@theme inline {
+  --font-sans: "Inter Variable", "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "Noto Sans SC", "Noto Sans CJK SC", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+
+  --color-canvas: var(--app-canvas);
+  --color-surface: var(--p-content-background);
+  --color-surface-muted: var(--app-surface-muted);
+  --color-surface-hover: var(--p-content-hover-background);
+  --color-line: var(--p-content-border-color);
+  --color-line-strong: var(--p-form-field-border-color);
+  --color-fg: var(--p-text-color);
+  --color-muted: var(--p-text-muted-color);
+
+  --color-primary: var(--p-primary-color);
+  --color-primary-hover: var(--p-primary-hover-color);
+  --color-primary-contrast: var(--p-primary-contrast-color);
+  --color-primary-fg: var(--app-primary-fg);
+  --color-primary-soft: var(--app-primary-soft);
+  --color-primary-line: var(--app-primary-line);
+
+  --color-warn: var(--app-warn);
+  --color-warn-fg: var(--app-warn-fg);
+  --color-warn-soft: var(--app-warn-soft);
+  --color-warn-line: var(--app-warn-line);
+  --color-danger: var(--app-danger);
+  --color-danger-fg: var(--app-danger-fg);
+  --color-danger-soft: var(--app-danger-soft);
+  --color-danger-line: var(--app-danger-line);
+  --color-success: var(--app-success);
+  --color-success-fg: var(--app-success-fg);
+  --color-success-soft: var(--app-success-soft);
+  --color-success-line: var(--app-success-line);
+  --color-info-fg: var(--app-info-fg);
+  --color-info-soft: var(--app-info-soft);
+  --color-info-line: var(--app-info-line);
+
+  --shadow-card: var(--app-shadow-sm);
+  --shadow-pop: var(--app-shadow-md);
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+
+  html.app-dark {
+    color-scheme: dark;
+  }
+
+  body {
+    background: var(--color-canvas);
+    color: var(--color-fg);
+    font-size: 0.9375rem;
+    line-height: 1.55;
+  }
+
+  /* Chinese reads better with more leading, and never with letter-spacing (docs/ui.md, "Chinese"). */
+  :lang(zh) {
+    line-height: 1.7;
+    letter-spacing: 0;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--p-focus-ring-color);
+    outline-offset: 2px;
+  }
+}

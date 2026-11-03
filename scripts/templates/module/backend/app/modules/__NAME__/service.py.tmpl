@@ -1,0 +1,23 @@
+"""Business rules. Endpoints call this, never the database."""
+
+from typing import Annotated
+
+from fastapi import Depends
+
+from app.modules.__NAME__.repository import __CLASS__Repository, get_repository
+from app.modules.__NAME__.schemas import StatusOut
+
+
+class __CLASS__Service:
+    def __init__(self, repository: __CLASS__Repository) -> None:
+        self._repository = repository
+
+    async def status(self) -> StatusOut:
+        await self._repository.ping()
+        return StatusOut(module="__NAME__", status="ok", database="ok")
+
+
+async def get_service(
+    repository: Annotated[__CLASS__Repository, Depends(get_repository)],
+) -> __CLASS__Service:
+    return __CLASS__Service(repository)

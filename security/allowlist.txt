@@ -1,0 +1,5 @@
+# Accepted dependency advisories. `just check` fails on a high or critical advisory unless it is listed here.
+# Each entry needs a review date. After that date `just check` fails until the entry is reviewed again.
+# Format: <advisory id> <review-by YYYY-MM-DD> <why it is accepted>
+# Entries are read by scripts/allowed-advisories.sh and passed to bun audit, pip-audit and Trivy.
+GHSA-vfj7-8cjw-p6xm 2027-01-19 braces 3.0.3, dev tooling only (eslint-plugin-boundaries); no fixed version is published, so it is not in the shipped bundle.

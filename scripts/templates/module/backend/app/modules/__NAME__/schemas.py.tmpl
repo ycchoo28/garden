@@ -1,0 +1,9 @@
+"""Request and response shapes for the __NAME__ module."""
+
+from pydantic import BaseModel
+
+
+class StatusOut(BaseModel):
+    module: str
+    status: str
+    database: str

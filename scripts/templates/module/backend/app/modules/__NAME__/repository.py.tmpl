@@ -1,0 +1,23 @@
+"""The only code in the __NAME__ module that talks to the database."""
+
+from typing import Annotated
+
+from fastapi import Depends
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.shared.db import get_session
+
+
+class __CLASS__Repository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def ping(self) -> None:
+        _ = await self._session.execute(text("select 1"))
+
+
+async def get_repository(
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> __CLASS__Repository:
+    return __CLASS__Repository(session)
