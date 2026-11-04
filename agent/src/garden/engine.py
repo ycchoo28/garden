@@ -118,8 +118,9 @@ class Engine:
         """
         if notify is not None:
             notify(
-                "Confirmation required. Ask the person to approve this action in the browser, at "
-                f"{needed.approve_url}. It runs once they approve it, and not before."
+                "Confirmation required. Ask the person to approve this action in the browser:\n"
+                f"  {needed.approve_url}\n"
+                "It runs once they approve it, and not before."
             )
         status_path = f"/api/confirmations/{_path_segment(needed.confirmation_id)}"
         deadline = _deadline(needed.expires_at, self._clock())

@@ -72,6 +72,18 @@ def test_every_route_is_guarded_or_public() -> None:
             assert _guarded(route), f"{method} {route.path} has no permission check"
 
 
+def test_contract_names_the_permission_of_every_guarded_route() -> None:
+    # The agent CLI lists only the tools whose x-permission the person holds.
+    paths = app.openapi()["paths"]
+    for route in _api_routes():
+        permission = route_permission(route)
+        if permission is None:
+            continue
+        for method in route.methods:
+            operation = paths[route.path_format][method.lower()]
+            assert operation["x-permission"] == permission, f"{method} {route.path}"
+
+
 def test_public_routes_exist() -> None:
     present = {(method, route.path) for route in _api_routes() for method in route.methods}
     assert present >= PUBLIC_ROUTES
