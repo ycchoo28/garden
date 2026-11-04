@@ -28,5 +28,15 @@ services:
     ports:
       - "127.0.0.1:${GARDEN_DEV_OIDC_PORT:-55081}:8080"
 
+  embedding:
+    # Local bge-m3 embeddings for the knowledge module. Opt in with `just embedding-up`, which needs `just models` first.
+    profiles: ["embedding"]
+    image: ${GARDEN_LLAMA_CPP_IMAGE:-ghcr.io/ggml-org/llama.cpp:server}
+    command: ["--model", "/models/bge-m3-Q8_0.gguf", "--embedding", "--pooling", "mean", "--host", "0.0.0.0", "--port", "8080", "--ctx-size", "8192"]
+    volumes:
+      - ../var/models:/models:ro
+    ports:
+      - "127.0.0.1:${GARDEN_DEV_EMBEDDING_PORT:-55083}:8080"
+
 volumes:
   pgdata:

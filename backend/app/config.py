@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     files_root: Path = Path("var/files")
     # The largest file an upload may send, in bytes.
     files_max_bytes: int = 5 * 1024 * 1024
+    # The llama.cpp server that serves bge-m3 for embeddings. Started by `just embedding-up`.
+    embedding_url: str = "http://127.0.0.1:55083"
 
     @model_validator(mode="after")
     def refuse_fake_oidc_outside_dev(self) -> Self:

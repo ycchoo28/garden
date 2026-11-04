@@ -11,9 +11,10 @@ from app.core.audit.models import Base as audit_base
 from app.core.confirmations.models import Base as confirmations_base
 from app.core.files.models import Base as files_base
 from app.core.users.models import Base as users_base
-from app.modules import budgets, claims, spend
+from app.modules import budgets, claims, knowledge, spend
 from app.modules.budgets.models import Base as budgets_base
 from app.modules.claims.models import Base as claims_base
+from app.modules.knowledge.models import Base as knowledge_base
 from app.modules.spend.models import Base as spend_base
 from app.shared.permissions import Permission, Role
 
@@ -54,5 +55,12 @@ MODULES: tuple[InstalledModule, ...] = (
         "budgets", budgets.router, budgets.ROLES, budgets.PERMISSIONS, budgets_base.metadata
     ),
     InstalledModule("spend", spend.router, spend.ROLES, spend.PERMISSIONS, spend_base.metadata),
+    InstalledModule(
+        "knowledge",
+        knowledge.router,
+        knowledge.ROLES,
+        knowledge.PERMISSIONS,
+        knowledge_base.metadata,
+    ),
     # new-module: insert entries above this line
 )

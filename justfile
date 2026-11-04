@@ -27,6 +27,31 @@ up:
         -t garden-postgres:local infra/postgres
     GARDEN_DEV_POSTGRES_IMAGE=garden-postgres:local docker compose -f dev/compose.yaml up -d --wait
 
+# Download the pinned bge-m3 model into var/models and check its SHA-256. A file that does not match is moved aside, never used.
+models:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    source infra/embedding/model.env
+    mkdir -p var/models
+    target="var/models/$MODEL_FILE"
+    if [ -f "$target" ] && [ "$(shasum -a 256 "$target" | cut -d' ' -f1)" = "$MODEL_SHA256" ]; then
+        echo "The model is present and matches its pinned SHA-256."
+        exit 0
+    fi
+    partial="$target.partial"
+    curl --fail --location --output "$partial" "https://huggingface.co/$MODEL_REPO/resolve/$MODEL_REVISION/$MODEL_FILE"
+    actual="$(shasum -a 256 "$partial" | cut -d' ' -f1)"
+    if [ "$actual" != "$MODEL_SHA256" ]; then
+        mv -f "$partial" "$target.mismatch"
+        echo "The downloaded model does not match its pinned SHA-256. It was moved to $target.mismatch." >&2
+        exit 1
+    fi
+    mv -f "$partial" "$target"
+
+# Start the local embedding service (llama.cpp serving bge-m3) in Compose. Not part of `just up`.
+embedding-up: models
+    docker compose -f dev/compose.yaml --profile embedding up -d --wait embedding
+
 # Apply Alembic migrations, and create the job queue tables if they are missing.
 migrate: up
     #!/usr/bin/env bash

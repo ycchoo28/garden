@@ -8,7 +8,6 @@ from app.shared.permissions import Permission, Role
 EMPLOYEE = "employee"
 MANAGER = "manager"
 FINANCE = "finance"
-KNOWLEDGE_ADMIN = "knowledge_admin"
 ADMIN = "admin"
 
 # What finance and admin hold over budgets and card statements. The business modules declare them.
@@ -48,8 +47,6 @@ ROLES: tuple[Role, ...] = (
         frozenset({"users.directory.view", "audit.view", "files.view", "claims.decide"})
         | FINANCE_BUDGET_AND_SPEND,
     ),
-    # Knowledge permissions arrive with the knowledge module; until then this role grants nothing.
-    Role(KNOWLEDGE_ADMIN, frozenset()),
     Role(
         ADMIN,
         frozenset({"users.directory.view", "audit.view", "files.view"}) | FINANCE_BUDGET_AND_SPEND,

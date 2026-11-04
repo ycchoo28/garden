@@ -2,10 +2,14 @@
 
 import base64
 import hashlib
+import math
+import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from app.core.users.identity import IdentityClaims, IdentityRejected, TokenSet
+from app.modules.knowledge.embedding import EMBEDDING_DIMENSIONS
 
 GOOD_CODE = "good-code"
 
@@ -48,3 +52,27 @@ class MovableClock:
 
     def advance(self, delta: timedelta) -> None:
         self.current = self.current + delta
+
+
+@dataclass
+class FakeEmbedder:
+    """A deterministic stand-in for bge-m3.
+
+    Texts that share words get similar vectors, so ranking is testable.
+    """
+
+    async def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        return [_hashed_vector(text) for text in texts]
+
+
+def _hashed_vector(text: str) -> list[float]:
+    vector = [0.0] * EMBEDDING_DIMENSIONS
+    for token in re.findall(r"[a-z0-9]+|[\u4e00-\u9fff]", text.lower()):
+        digest = hashlib.sha256(token.encode()).digest()
+        index = int.from_bytes(digest[:4], "big") % EMBEDDING_DIMENSIONS
+        vector[index] += 1.0 if digest[4] % 2 == 0 else -1.0
+    length = math.sqrt(sum(value * value for value in vector))
+    if length == 0:
+        vector[0] = 1.0
+        return vector
+    return [value / length for value in vector]
