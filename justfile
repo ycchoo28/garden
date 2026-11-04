@@ -58,11 +58,8 @@ migrate: up
     #!/usr/bin/env bash
     set -euo pipefail
     cd backend
-    uv run alembic upgrade heads
-    queue_exists="$(docker compose -f ../dev/compose.yaml exec -T postgres psql -U garden -d garden -tAc "select to_regclass('public.procrastinate_jobs') is not null")"
-    if [ "$queue_exists" = "f" ]; then
-        uv run python -m procrastinate --app=app.shared.jobs.app schema --apply
-    fi
+    # Migrates the database in GARDEN_DATABASE_URL and adds the job queue tables when missing.
+    uv run python -m app.migrate
 
 # Load the fake organisation and the seeded personas. Idempotent. Migrates first.
 seed: migrate

@@ -1,4 +1,4 @@
-"""Migrations for the container: `python -m app.migrate`, the same steps as `just migrate`."""
+"""Run the migrations: `python -m app.migrate`, which `just migrate` and the browser tests call."""
 
 import subprocess
 import sys
