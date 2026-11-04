@@ -20,3 +20,6 @@ Records are numbered in the order they were made, and a later record may replace
 | [0013](0013-scaffold.md) | New modules come from one template that CI proves |
 | [0014](0014-local-only-runtime.md) | Everything runs on the developer's machine |
 | [0015](0015-single-currency.md) | One currency, USD, with no exchange rates |
+| [0016](0016-agent-login-permissions.md) | A CLI login holds the person's permissions minus the person-only ones |
+| [0017](0017-cli-discovery-and-mcp.md) | The command and its MCP server come from the published contract |
+| [0018](0018-model-gateway.md) | A model gateway with limits per login and per person, and counts only |

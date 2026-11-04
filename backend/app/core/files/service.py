@@ -16,7 +16,7 @@ from app.core.audit import AuditService, get_audit_service
 from app.core.files.models import StoredFile
 from app.core.files.repository import FileRepository, get_file_repository
 from app.shared.clock import Clock, get_clock
-from app.shared.errors import NotFound, ProblemError, Unprocessable
+from app.shared.errors import Forbidden, NotFound, ProblemError, Unprocessable
 
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _MAX_NAME_LENGTH = 255
@@ -112,6 +112,25 @@ class FileService:
         if stored is None or not path.is_file():
             raise NotFound("No file has that identifier.")
         return stored, path.read_bytes()
+
+    async def delete(self, *, sha256: str, actor_id: uuid.UUID) -> None:
+        """Only the first uploader may delete a file. The blob goes once its row is gone."""
+        if _SHA256.fullmatch(sha256) is None:
+            raise NotFound("No file has that identifier.")
+        stored = await self._repo.get(sha256)
+        if stored is None:
+            raise NotFound("No file has that identifier.")
+        if stored.first_uploaded_by != actor_id:
+            raise Forbidden("Only the person who first uploaded this file may delete it.")
+        await self._repo.remove(stored)
+        self._audit.record(
+            actor_id=actor_id,
+            operation="files.file.delete",
+            target=f"file:{sha256}",
+            summary=f"Deleted {stored.first_name} ({stored.size_bytes} bytes).",
+        )
+        await self._repo.commit()
+        self._path(sha256).unlink(missing_ok=True)
 
 
 def get_file_service(

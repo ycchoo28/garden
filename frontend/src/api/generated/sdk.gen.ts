@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AuditEventListData, AuditEventListErrors, AuditEventListResponses, ConfirmationsRequestDecideData, ConfirmationsRequestDecideErrors, ConfirmationsRequestDecideResponses, ConfirmationsRequestReadData, ConfirmationsRequestReadErrors, ConfirmationsRequestReadResponses, FilesFileReadData, FilesFileReadErrors, FilesFileReadResponses, FilesFileUploadData, FilesFileUploadErrors, FilesFileUploadResponses, PlatformHealthReadData, PlatformHealthReadErrors, PlatformHealthReadResponses, UsersDirectoryListData, UsersDirectoryListErrors, UsersDirectoryListResponses, UsersSelfReadData, UsersSelfReadErrors, UsersSelfReadResponses, UsersSessionEndData, UsersSessionEndErrors, UsersSessionEndResponses, UsersSessionFinishData, UsersSessionFinishErrors, UsersSessionFinishResponses, UsersSessionStartData, UsersSessionStartErrors, UsersSessionStartResponses } from './types.gen';
+import type { AuditEventListData, AuditEventListErrors, AuditEventListResponses, ConfirmationsRequestDecideData, ConfirmationsRequestDecideErrors, ConfirmationsRequestDecideResponses, ConfirmationsRequestReadData, ConfirmationsRequestReadErrors, ConfirmationsRequestReadResponses, FilesFileDeleteData, FilesFileDeleteErrors, FilesFileDeleteResponses, FilesFileReadData, FilesFileReadErrors, FilesFileReadResponses, FilesFileUploadData, FilesFileUploadErrors, FilesFileUploadResponses, GatewayModelCompleteData, GatewayModelCompleteErrors, GatewayModelCompleteResponses, GatewayModelListData, GatewayModelListErrors, GatewayModelListResponses, GatewayUsageReadData, GatewayUsageReadErrors, GatewayUsageReadResponses, PlatformHealthReadData, PlatformHealthReadErrors, PlatformHealthReadResponses, UsersCliLoginCreateData, UsersCliLoginCreateErrors, UsersCliLoginCreateResponses, UsersCliLoginListData, UsersCliLoginListErrors, UsersCliLoginListResponses, UsersCliLoginRevokeData, UsersCliLoginRevokeErrors, UsersCliLoginRevokeResponses, UsersCliLoginStartData, UsersCliLoginStartErrors, UsersCliLoginStartResponses, UsersDirectoryListData, UsersDirectoryListErrors, UsersDirectoryListResponses, UsersSelfReadData, UsersSelfReadErrors, UsersSelfReadResponses, UsersSessionEndData, UsersSessionEndErrors, UsersSessionEndResponses, UsersSessionFinishData, UsersSessionFinishErrors, UsersSessionFinishResponses, UsersSessionStartData, UsersSessionStartErrors, UsersSessionStartResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -24,6 +24,41 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
  * List the most recent saved changes, newest first.
  */
 export const auditEventList = <ThrowOnError extends boolean = false>(options?: Options<AuditEventListData, ThrowOnError>): RequestResult<AuditEventListResponses, AuditEventListErrors, ThrowOnError> => (options?.client ?? client).get<AuditEventListResponses, AuditEventListErrors, ThrowOnError>({ url: '/api/audit/events', ...options });
+
+/**
+ * List Cli Logins
+ *
+ * List the caller's CLI logins, newest first, with their state.
+ */
+export const usersCliLoginList = <ThrowOnError extends boolean = false>(options?: Options<UsersCliLoginListData, ThrowOnError>): RequestResult<UsersCliLoginListResponses, UsersCliLoginListErrors, ThrowOnError> => (options?.client ?? client).get<UsersCliLoginListResponses, UsersCliLoginListErrors, ThrowOnError>({ url: '/api/cli-logins', ...options });
+
+/**
+ * Create Cli Login
+ *
+ * Finish a CLI login with the code the browser returned. The token is shown once.
+ */
+export const usersCliLoginCreate = <ThrowOnError extends boolean = false>(options: Options<UsersCliLoginCreateData, ThrowOnError>): RequestResult<UsersCliLoginCreateResponses, UsersCliLoginCreateErrors, ThrowOnError> => (options.client ?? client).post<UsersCliLoginCreateResponses, UsersCliLoginCreateErrors, ThrowOnError>({
+    url: '/api/cli-logins',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Start Cli Login
+ *
+ * Start a CLI login. Redirects the browser to the identity provider, which returns the code to a listener on this machine.
+ */
+export const usersCliLoginStart = <ThrowOnError extends boolean = false>(options: Options<UsersCliLoginStartData, ThrowOnError>): RequestResult<UsersCliLoginStartResponses, UsersCliLoginStartErrors, ThrowOnError> => (options.client ?? client).get<UsersCliLoginStartResponses, UsersCliLoginStartErrors, ThrowOnError>({ url: '/api/cli-logins/authorize', ...options });
+
+/**
+ * Revoke Cli Login
+ *
+ * Revoke one of the caller's CLI logins. Only a browser sign-in may do this.
+ */
+export const usersCliLoginRevoke = <ThrowOnError extends boolean = false>(options: Options<UsersCliLoginRevokeData, ThrowOnError>): RequestResult<UsersCliLoginRevokeResponses, UsersCliLoginRevokeErrors, ThrowOnError> => (options.client ?? client).delete<UsersCliLoginRevokeResponses, UsersCliLoginRevokeErrors, ThrowOnError>({ url: '/api/cli-logins/{login_id}', ...options });
 
 /**
  * Read Confirmation
@@ -62,11 +97,46 @@ export const filesFileUpload = <ThrowOnError extends boolean = false>(options: O
 });
 
 /**
+ * Delete File
+ *
+ * Delete a file you first uploaded. The person must approve it in the browser first.
+ */
+export const filesFileDelete = <ThrowOnError extends boolean = false>(options: Options<FilesFileDeleteData, ThrowOnError>): RequestResult<FilesFileDeleteResponses, FilesFileDeleteErrors, ThrowOnError> => (options.client ?? client).delete<FilesFileDeleteResponses, FilesFileDeleteErrors, ThrowOnError>({ url: '/api/files/{sha256}', ...options });
+
+/**
  * Read File
  *
  * Download a file by its SHA-256.
  */
 export const filesFileRead = <ThrowOnError extends boolean = false>(options: Options<FilesFileReadData, ThrowOnError>): RequestResult<FilesFileReadResponses, FilesFileReadErrors, ThrowOnError> => (options.client ?? client).get<FilesFileReadResponses, FilesFileReadErrors, ThrowOnError>({ url: '/api/files/{sha256}', ...options });
+
+/**
+ * Usage Today
+ *
+ * Read today's model requests and tokens for the signed-in person. Counts only.
+ */
+export const gatewayUsageRead = <ThrowOnError extends boolean = false>(options?: Options<GatewayUsageReadData, ThrowOnError>): RequestResult<GatewayUsageReadResponses, GatewayUsageReadErrors, ThrowOnError> => (options?.client ?? client).get<GatewayUsageReadResponses, GatewayUsageReadErrors, ThrowOnError>({ url: '/api/gateway/usage/today', ...options });
+
+/**
+ * Chat Completions
+ *
+ * Send an OpenAI-compatible chat completion to a model on the gateway allowlist.
+ */
+export const gatewayModelComplete = <ThrowOnError extends boolean = false>(options: Options<GatewayModelCompleteData, ThrowOnError>): RequestResult<GatewayModelCompleteResponses, GatewayModelCompleteErrors, ThrowOnError> => (options.client ?? client).post<GatewayModelCompleteResponses, GatewayModelCompleteErrors, ThrowOnError>({
+    url: '/api/gateway/v1/chat/completions',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * List Models
+ *
+ * List the models the gateway forwards.
+ */
+export const gatewayModelList = <ThrowOnError extends boolean = false>(options?: Options<GatewayModelListData, ThrowOnError>): RequestResult<GatewayModelListResponses, GatewayModelListErrors, ThrowOnError> => (options?.client ?? client).get<GatewayModelListResponses, GatewayModelListErrors, ThrowOnError>({ url: '/api/gateway/v1/models', ...options });
 
 /**
  * Health

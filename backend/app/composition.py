@@ -5,10 +5,11 @@ from dataclasses import dataclass
 from fastapi import APIRouter
 from sqlalchemy import MetaData
 
-from app.core import audit, confirmations, files, users
+from app.core import audit, confirmations, files, gateway, users
 from app.core.audit.models import Base as audit_base
 from app.core.confirmations.models import Base as confirmations_base
 from app.core.files.models import Base as files_base
+from app.core.gateway.models import Base as gateway_base
 from app.core.users.models import Base as users_base
 from app.shared.permissions import Permission, Role
 
@@ -34,6 +35,9 @@ MODULES: tuple[InstalledModule, ...] = (
         confirmations.ROLES,
         confirmations.PERMISSIONS,
         confirmations_base.metadata,
+    ),
+    InstalledModule(
+        "gateway", gateway.router, gateway.ROLES, gateway.PERMISSIONS, gateway_base.metadata
     ),
     # new-module: insert entries above this line
 )

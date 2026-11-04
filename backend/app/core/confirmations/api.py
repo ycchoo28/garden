@@ -20,6 +20,10 @@ router = APIRouter()
 class ConfirmationOut(BaseModel):
     id: UUID
     operation: str
+    method: str
+    target: str
+    # The request as the person reads it before deciding.
+    summary: str | None
     status: str
     expires_at: str
 
@@ -28,6 +32,9 @@ class ConfirmationOut(BaseModel):
         return cls(
             id=view.id,
             operation=view.operation,
+            method=view.method,
+            target=view.target,
+            summary=view.summary,
             status=view.status.value,
             expires_at=view.expires_at.isoformat(),
         )

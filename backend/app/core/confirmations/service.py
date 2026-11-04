@@ -20,6 +20,8 @@ from app.shared.ids import new_id
 from app.shared.request_login import RequestLogin
 
 LIFETIME = timedelta(minutes=10)
+# The request body the person reads on the confirmation page is cut at this many characters.
+SUMMARY_LIMIT = 2000
 
 
 class ConfirmationRequired(ProblemError):
@@ -41,6 +43,9 @@ class ConfirmationStatus(StrEnum):
 class ConfirmationView:
     id: uuid.UUID
     operation: str
+    method: str
+    target: str
+    summary: str | None
     status: ConfirmationStatus
     expires_at: datetime
 
@@ -61,6 +66,16 @@ def args_digest(*, operation: str, method: str, target: str, body: bytes) -> str
         [operation, method, target, parsed], sort_keys=True, separators=(",", ":")
     )
     return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def request_summary(*, method: str, target: str, body: bytes) -> str:
+    """The request as the person reads it: the method, the target and the JSON body, cut short."""
+    try:
+        pretty = json.dumps(json.loads(body), indent=2, ensure_ascii=False) if body else ""
+    except json.JSONDecodeError:
+        pretty = ""
+    text = f"{method} {target}" + (f"\n{pretty}" if pretty else "")
+    return text[:SUMMARY_LIMIT]
 
 
 def status_of(row: Confirmation, now: datetime) -> ConfirmationStatus:
@@ -118,6 +133,7 @@ class ConfirmationService:
                 decided_at=None,
                 approved=None,
                 used_at=None,
+                request_summary=request_summary(method=method, target=target, body=body),
             )
             self._repo.add(row)
             await self._repo.commit()
@@ -173,6 +189,9 @@ class ConfirmationService:
         return ConfirmationView(
             id=row.id,
             operation=row.operation,
+            method=row.method,
+            target=row.target,
+            summary=row.request_summary,
             status=status_of(row, now),
             expires_at=row.expires_at,
         )

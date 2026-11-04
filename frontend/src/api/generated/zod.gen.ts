@@ -16,13 +16,52 @@ export const zAuditEventOut = z.object({
 });
 
 /**
+ * CliLoginCreated
+ *
+ * The new CLI login. `token` is shown once, and only its hash is kept.
+ */
+export const zCliLoginCreated = z.object({
+    created_at: z.iso.datetime(),
+    device: z.string(),
+    id: z.uuid(),
+    token: z.string()
+});
+
+/**
+ * CliLoginIn
+ *
+ * What the CLI sends after its browser returned the code: the PKCE verifier and the nonce.
+ */
+export const zCliLoginIn = z.object({
+    code: z.string().min(1).max(2048),
+    code_verifier: z.string().min(43).max(128),
+    device: z.string().min(1).max(120),
+    nonce: z.string().min(16).max(128),
+    redirect_uri: z.string().max(300)
+});
+
+/**
+ * CliLoginOut
+ */
+export const zCliLoginOut = z.object({
+    created_at: z.iso.datetime(),
+    device: z.string(),
+    id: z.uuid(),
+    last_used_at: z.iso.datetime().nullable(),
+    revoked_at: z.iso.datetime().nullable()
+});
+
+/**
  * ConfirmationOut
  */
 export const zConfirmationOut = z.object({
     expires_at: z.string(),
     id: z.uuid(),
+    method: z.string(),
     operation: z.string(),
-    status: z.string()
+    status: z.string(),
+    summary: z.string().nullable(),
+    target: z.string()
 });
 
 /**
@@ -95,6 +134,18 @@ export const zUploadedFileOut = z.object({
 });
 
 /**
+ * UsageTodayOut
+ */
+export const zUsageTodayOut = z.object({
+    completion_tokens: z.int(),
+    day: z.string(),
+    prompt_tokens: z.int(),
+    requests: z.int(),
+    tokens_limit: z.int(),
+    total_tokens: z.int()
+});
+
+/**
  * Body_files.file.upload
  */
 export const zUpload = z.object({
@@ -111,6 +162,36 @@ export const zAuditEventListQuery = z.object({
  * Successful Response
  */
 export const zAuditEventListResponse = z.array(zAuditEventOut);
+
+/**
+ * Response Users.Cli Login.List
+ *
+ * Successful Response
+ */
+export const zUsersCliLoginListResponse = z.array(zCliLoginOut);
+
+export const zUsersCliLoginCreateBody = zCliLoginIn;
+
+/**
+ * Successful Response
+ */
+export const zUsersCliLoginCreateResponse = zCliLoginCreated;
+
+export const zUsersCliLoginStartQuery = z.object({
+    redirect_uri: z.string().max(300),
+    state: z.string().min(16).max(128),
+    nonce: z.string().min(16).max(128),
+    code_challenge: z.string().min(43).max(128)
+});
+
+export const zUsersCliLoginRevokePath = z.object({
+    login_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zUsersCliLoginRevokeResponse = z.void();
 
 export const zConfirmationsRequestReadPath = z.object({
     confirmation_id: z.uuid()
@@ -139,9 +220,42 @@ export const zFilesFileUploadBody = zUpload;
  */
 export const zFilesFileUploadResponse = zUploadedFileOut;
 
+export const zFilesFileDeletePath = z.object({
+    sha256: z.string()
+});
+
+/**
+ * Successful Response
+ */
+export const zFilesFileDeleteResponse = z.void();
+
 export const zFilesFileReadPath = z.object({
     sha256: z.string()
 });
+
+/**
+ * Successful Response
+ */
+export const zGatewayUsageReadResponse = zUsageTodayOut;
+
+/**
+ * Body
+ */
+export const zGatewayModelCompleteBody = z.record(z.string(), z.unknown());
+
+/**
+ * Response Gateway.Model.Complete
+ *
+ * Successful Response
+ */
+export const zGatewayModelCompleteResponse = z.record(z.string(), z.unknown());
+
+/**
+ * Response Gateway.Model.List
+ *
+ * Successful Response
+ */
+export const zGatewayModelListResponse = z.record(z.string(), z.unknown());
 
 /**
  * Response Platform.Health.Read

@@ -1,0 +1,45 @@
+[project]
+name = "garden-cli"
+version = "0.1.0"
+description = "The garden command for people and agents: portal commands and the MCP server."
+requires-python = ">=3.12"
+# The runtime dependency stays small and pure Python, because the package is installed with
+# `uv tool install` (see README.md). Nothing here imports the backend.
+dependencies = [
+    "keyring==25.6.0",
+]
+
+[project.scripts]
+garden = "garden.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest==9.1.1",
+    "ruff==0.16.10",
+    "pyright==1.1.414",
+]
+
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/garden"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "ASYNC"]
+
+[tool.pyright]
+typeCheckingMode = "strict"
+pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv"
+include = ["src", "tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["-ra", "--strict-markers"]

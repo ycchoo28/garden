@@ -69,3 +69,21 @@ class SignInAttempt(Base):
     nonce: Mapped[str] = mapped_column(String(64))
     return_to: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class CliLogin(Base):
+    """A device's sign-in for the garden CLI and its MCP server. Only the token's SHA-256 is stored.
+
+    A CLI login holds its person's permissions minus the person-only ones. Revoking sets
+    `revoked_at`, so the row stays as a record of when the device could last act.
+    """
+
+    __tablename__ = "cli_login"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_id)
+    person_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.person.id", ondelete="CASCADE"))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    device: Mapped[str] = mapped_column(String(120))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

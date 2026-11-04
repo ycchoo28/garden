@@ -18,4 +18,5 @@ Only people hold `confirmations.decide`, and agents never do.
 
 - A retry with a changed request is refused, because the digest no longer matches.
 - Browser requests pass the gate without a confirmation.
-- The approval page at `/confirm/<id>` is not built yet, so a person approves through the decision API for now.
+- The approval page at `/confirm/<id>` shows the request, and the person approves or declines it there.
+- The decision API stays available for other clients, and it is not open to agents.

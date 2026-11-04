@@ -8,7 +8,7 @@ from fastapi.routing import APIRoute
 
 from app.core.users.service import CurrentPerson, UserService, get_user_service
 from app.shared.errors import Forbidden
-from app.shared.request_login import VIA_WEB, RequestLogin, current_request_login
+from app.shared.request_login import VIA_AGENT, VIA_WEB, RequestLogin, current_request_login
 
 SESSION_COOKIE = "garden_session"
 
@@ -16,16 +16,44 @@ SESSION_COOKIE = "garden_session"
 _PERMISSION_OF: dict[Callable[..., object], str] = {}
 
 
+def _bearer_token(request: Request) -> str | None:
+    scheme, _, token = request.headers.get("authorization", "").partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        return None
+    return token.strip()
+
+
 async def current_person(
     request: Request,
     service: Annotated[UserService, Depends(get_user_service)],
 ) -> CurrentPerson:
+    """The person behind the request. A CLI login's bearer token wins over the browser cookie.
+
+    Every request sets its own login here, so one request's sign-in never leaks into the next.
+    """
+    bearer = _bearer_token(request)
+    if bearer is not None:
+        agent_allowed = frozenset(
+            permission.name
+            for permission in request.app.state.permissions
+            if permission.agent_allowed
+        )
+        person, login = await service.current_cli_person(
+            bearer, request.app.state.roles, agent_allowed
+        )
+        _ = current_request_login.set(
+            RequestLogin(
+                via=VIA_AGENT,
+                device=login.device,
+                created_at=login.created_at,
+                cli_login_id=login.id,
+            )
+        )
+        return person
     person = await service.current_person(
         request.cookies.get(SESSION_COOKIE), request.app.state.roles
     )
-    # Agent logins set their own login first. A browser request only fills in the default.
-    if current_request_login.get() is None:
-        _ = current_request_login.set(RequestLogin(via=VIA_WEB))
+    _ = current_request_login.set(RequestLogin(via=VIA_WEB))
     return person
 
 

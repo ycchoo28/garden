@@ -14,7 +14,19 @@ ADMIN = "admin"
 ROLES: tuple[Role, ...] = (
     Role(
         EMPLOYEE,
-        frozenset({"users.self", "files.upload", "files.view", "confirmations.decide"}),
+        frozenset(
+            {
+                "users.self",
+                "files.upload",
+                "files.view",
+                "files.delete",
+                "cli_logins.view",
+                "cli_logins.revoke",
+                "confirmations.decide",
+                "gateway.model.use",
+                "gateway.usage.view",
+            }
+        ),
     ),
     Role(MANAGER, frozenset({"users.directory.view"})),
     Role(FINANCE, frozenset({"users.directory.view", "audit.view"})),
@@ -26,4 +38,7 @@ ROLES: tuple[Role, ...] = (
 PERMISSIONS: tuple[Permission, ...] = (
     Permission("users.self", agent_allowed=True),
     Permission("users.directory.view", agent_allowed=True),
+    Permission("cli_logins.view", agent_allowed=True),
+    # Person-only: a CLI login never holds it, so an agent cannot revoke the logins of its person.
+    Permission("cli_logins.revoke", agent_allowed=False),
 )
