@@ -41,6 +41,46 @@ export const zAuditEventOut = z.object({
 });
 
 /**
+ * BudgetLineOut
+ */
+export const zBudgetLineOut = z.object({
+    amount: z.string(),
+    category: z.string(),
+    created_at: z.iso.datetime(),
+    created_by: z.uuid(),
+    current: z.boolean(),
+    department_code: z.string(),
+    department_id: z.uuid(),
+    department_name: z.string(),
+    line_id: z.uuid(),
+    reason: z.string().nullable(),
+    version: z.int(),
+    year_month: z.string()
+});
+
+/**
+ * ClaimDecisionIn
+ */
+export const zClaimDecisionIn = z.object({
+    decision: z.enum(['approve', 'reject']),
+    expected_version: z.int().gte(1),
+    reason: z.string().max(500).nullish()
+});
+
+/**
+ * ClaimLineOut
+ */
+export const zClaimLineOut = z.object({
+    amount: z.string(),
+    category: z.string(),
+    description: z.string(),
+    id: z.uuid(),
+    receipt_sha256: z.string(),
+    receipt_url: z.string(),
+    spent_on: z.iso.date()
+});
+
+/**
  * ClaimSummaryOut
  */
 export const zClaimSummaryOut = z.object({
@@ -54,6 +94,13 @@ export const zClaimSummaryOut = z.object({
     title: z.string(),
     total: z.string(),
     version: z.int()
+});
+
+/**
+ * CloseIn
+ */
+export const zCloseIn = z.object({
+    reason: z.string().min(1).max(500)
 });
 
 /**
@@ -74,6 +121,13 @@ export const zCreateClaimIn = z.object({
 });
 
 /**
+ * DecisionIn
+ */
+export const zDecisionIn = z.object({
+    decision: z.enum(['approve', 'reject'])
+});
+
+/**
  * DecisionOut
  */
 export const zDecisionOut = z.object({
@@ -81,6 +135,15 @@ export const zDecisionOut = z.object({
     decided_by_name: z.string(),
     outcome: z.string(),
     reason: z.string().nullable()
+});
+
+/**
+ * DepartmentEntryOut
+ */
+export const zDepartmentEntryOut = z.object({
+    code: z.string(),
+    id: z.uuid(),
+    name: z.string()
 });
 
 /**
@@ -100,16 +163,22 @@ export const zFieldError = z.object({
 });
 
 /**
- * LineOut
+ * LineCreateIn
  */
-export const zLineOut = z.object({
-    amount: z.string(),
-    category: z.string(),
-    description: z.string(),
-    id: z.uuid(),
-    receipt_sha256: z.string(),
-    receipt_url: z.string(),
-    spent_on: z.iso.date()
+export const zLineCreateIn = z.object({
+    amount: z.string().max(24),
+    category: z.string().max(40),
+    department_id: z.uuid(),
+    year_month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/)
+});
+
+/**
+ * LineReplaceIn
+ */
+export const zLineReplaceIn = z.object({
+    amount: z.string().max(24),
+    reason: z.string().min(1).max(500),
+    version: z.int().gte(1)
 });
 
 /**
@@ -122,6 +191,16 @@ export const zMeOut = z.object({
     name: z.string(),
     permissions: z.array(z.string()),
     roles: z.array(z.string())
+});
+
+/**
+ * MonthOut
+ */
+export const zMonthOut = z.object({
+    closed_at: z.iso.datetime(),
+    closed_by: z.uuid(),
+    reason: z.string(),
+    year_month: z.string()
 });
 
 /**
@@ -146,6 +225,43 @@ export const zProblem = z.object({
     status: z.int(),
     title: z.string(),
     type: z.string()
+});
+
+/**
+ * RowIssueOut
+ */
+export const zRowIssueOut = z.object({
+    field: z.string(),
+    message: z.string(),
+    row: z.int(),
+    transaction_ref: z.string().nullish()
+});
+
+/**
+ * StatementOut
+ */
+export const zStatementOut = z.object({
+    id: z.uuid(),
+    imported_at: z.iso.datetime(),
+    imported_by: z.uuid(),
+    row_count: z.int(),
+    source_name: z.string(),
+    total_amount: z.string(),
+    void_reason: z.string().nullable(),
+    voided: z.boolean(),
+    voided_at: z.iso.datetime().nullable(),
+    voided_by: z.uuid().nullable()
+});
+
+/**
+ * StatementPreviewOut
+ */
+export const zStatementPreviewOut = z.object({
+    can_apply: z.boolean(),
+    duplicates: z.array(zRowIssueOut),
+    errors: z.array(zRowIssueOut),
+    rows_read: z.int(),
+    total_amount: z.string()
 });
 
 /**
@@ -177,7 +293,7 @@ export const zClaimDetailOut = z.object({
     actions: zActionsOut,
     claim: zClaimSummaryOut,
     history: z.array(zRunOut),
-    lines: z.array(zLineOut)
+    lines: z.array(zClaimLineOut)
 });
 
 /**
@@ -191,10 +307,31 @@ export const zUploadedFileOut = z.object({
 });
 
 /**
+ * VarianceOut
+ */
+export const zVarianceOut = z.object({
+    actual: z.string(),
+    budget: z.string().nullable(),
+    category: z.string(),
+    department_code: z.string(),
+    department_id: z.uuid(),
+    department_name: z.string(),
+    variance: z.string().nullable(),
+    year_month: z.string()
+});
+
+/**
  * VersionIn
  */
 export const zVersionIn = z.object({
     expected_version: z.int().gte(1)
+});
+
+/**
+ * VoidIn
+ */
+export const zVoidIn = z.object({
+    reason: z.string().min(1).max(500)
 });
 
 /**
@@ -206,19 +343,17 @@ export const zVoidLineIn = z.object({
 });
 
 /**
- * DecisionIn
+ * Body_spend.statement.import
  */
-export const zAppCoreConfirmationsApiDecisionIn = z.object({
-    decision: z.enum(['approve', 'reject'])
+export const zImport = z.object({
+    file: z.string()
 });
 
 /**
- * DecisionIn
+ * Body_spend.statement.preview
  */
-export const zAppModulesClaimsSchemasDecisionIn = z.object({
-    decision: z.enum(['approve', 'reject']),
-    expected_version: z.int().gte(1),
-    reason: z.string().max(500).nullish()
+export const zPreview = z.object({
+    file: z.string()
 });
 
 /**
@@ -238,6 +373,66 @@ export const zAuditEventListQuery = z.object({
  * Successful Response
  */
 export const zAuditEventListResponse = z.array(zAuditEventOut);
+
+/**
+ * Response Budgets.Category.List
+ *
+ * Successful Response
+ */
+export const zBudgetsCategoryListResponse = z.array(z.string());
+
+export const zBudgetsLineListQuery = z.object({
+    month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+    department_id: z.uuid().nullish()
+});
+
+/**
+ * Response Budgets.Line.List
+ *
+ * Successful Response
+ */
+export const zBudgetsLineListResponse = z.array(zBudgetLineOut);
+
+export const zBudgetsLineCreateBody = zLineCreateIn;
+
+/**
+ * Successful Response
+ */
+export const zBudgetsLineCreateResponse = zBudgetLineOut;
+
+export const zBudgetsLineReplaceBody = zLineReplaceIn;
+
+export const zBudgetsLineReplacePath = z.object({
+    line_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zBudgetsLineReplaceResponse = zBudgetLineOut;
+
+export const zBudgetsLineHistoryPath = z.object({
+    line_id: z.uuid()
+});
+
+/**
+ * Response Budgets.Line.History
+ *
+ * Successful Response
+ */
+export const zBudgetsLineHistoryResponse = z.array(zBudgetLineOut);
+
+export const zBudgetsVarianceReadQuery = z.object({
+    from: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+    to: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/)
+});
+
+/**
+ * Response Budgets.Variance.Read
+ *
+ * Successful Response
+ */
+export const zBudgetsVarianceReadResponse = z.array(zVarianceOut);
 
 /**
  * Response Claims.Claim.List
@@ -269,7 +464,7 @@ export const zClaimsClaimReadPath = z.object({
  */
 export const zClaimsClaimReadResponse = zClaimDetailOut;
 
-export const zClaimsClaimDecideBody = zAppModulesClaimsSchemasDecisionIn;
+export const zClaimsClaimDecideBody = zClaimDecisionIn;
 
 export const zClaimsClaimDecidePath = z.object({
     claim_id: z.uuid()
@@ -334,7 +529,7 @@ export const zConfirmationsRequestReadPath = z.object({
  */
 export const zConfirmationsRequestReadResponse = zConfirmationOut;
 
-export const zConfirmationsRequestDecideBody = zAppCoreConfirmationsApiDecisionIn;
+export const zConfirmationsRequestDecideBody = zDecisionIn;
 
 export const zConfirmationsRequestDecidePath = z.object({
     confirmation_id: z.uuid()
@@ -362,6 +557,63 @@ export const zFilesFileReadPath = z.object({
  * Successful Response
  */
 export const zPlatformHealthReadResponse = z.record(z.string(), z.string());
+
+/**
+ * Response Spend.Month.List
+ *
+ * Successful Response
+ */
+export const zSpendMonthListResponse = z.array(zMonthOut);
+
+export const zSpendMonthCloseBody = zCloseIn;
+
+export const zSpendMonthClosePath = z.object({
+    year_month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/)
+});
+
+/**
+ * Successful Response
+ */
+export const zSpendMonthCloseResponse = zMonthOut;
+
+/**
+ * Response Spend.Statement.List
+ *
+ * Successful Response
+ */
+export const zSpendStatementListResponse = z.array(zStatementOut);
+
+export const zSpendStatementImportBody = zImport;
+
+/**
+ * Successful Response
+ */
+export const zSpendStatementImportResponse = zStatementOut;
+
+export const zSpendStatementPreviewBody = zPreview;
+
+/**
+ * Successful Response
+ */
+export const zSpendStatementPreviewResponse = zStatementPreviewOut;
+
+export const zSpendStatementVoidBody = zVoidIn;
+
+export const zSpendStatementVoidPath = z.object({
+    statement_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zSpendStatementVoidResponse = zStatementOut;
+
+/**
+ * Response Users.Department.List
+ *
+ * Successful Response
+ */
+export const zUsersDepartmentListResponse = z.array(zDepartmentEntryOut);
 
 /**
  * Successful Response

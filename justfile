@@ -125,7 +125,9 @@ frontend-check:
 e2e: up
     #!/usr/bin/env bash
     set -euo pipefail
-    curl --fail --silent --show-error --retry 30 --retry-connrefused --retry-all-errors --retry-delay 1 "$GARDEN_OIDC_ISSUER/.well-known/openid-configuration" >/dev/null
+    curl --fail --silent --show-error --retry 30 --retry-all-errors --retry-delay 1 "$GARDEN_OIDC_ISSUER/.well-known/openid-configuration" >/dev/null
+    # The first sign-in page a fresh provider serves is slow, so warm the page the browser opens too.
+    curl --fail --silent --show-error --max-time 60 --retry 30 --retry-all-errors --retry-delay 1 "$GARDEN_OIDC_ISSUER/authorize?client_id=$GARDEN_OIDC_CLIENT_ID&response_type=code&redirect_uri=$GARDEN_PUBLIC_URL/auth/callback&scope=openid&state=warmup" >/dev/null
     cd frontend && bun run e2e
 
 # Regenerate the OpenAPI contract and the Hey API client from the backend.

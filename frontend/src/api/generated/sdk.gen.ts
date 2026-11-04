@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AuditEventListData, AuditEventListErrors, AuditEventListResponses, ClaimsClaimCreateData, ClaimsClaimCreateErrors, ClaimsClaimCreateResponses, ClaimsClaimDecideData, ClaimsClaimDecideErrors, ClaimsClaimDecideResponses, ClaimsClaimListData, ClaimsClaimListErrors, ClaimsClaimListResponses, ClaimsClaimReadData, ClaimsClaimReadErrors, ClaimsClaimReadResponses, ClaimsClaimSubmitData, ClaimsClaimSubmitErrors, ClaimsClaimSubmitResponses, ClaimsClaimWithdrawData, ClaimsClaimWithdrawErrors, ClaimsClaimWithdrawResponses, ClaimsDecisionQueueData, ClaimsDecisionQueueErrors, ClaimsDecisionQueueResponses, ClaimsLineAddData, ClaimsLineAddErrors, ClaimsLineAddResponses, ClaimsLineVoidData, ClaimsLineVoidErrors, ClaimsLineVoidResponses, ConfirmationsRequestDecideData, ConfirmationsRequestDecideErrors, ConfirmationsRequestDecideResponses, ConfirmationsRequestReadData, ConfirmationsRequestReadErrors, ConfirmationsRequestReadResponses, FilesFileReadData, FilesFileReadErrors, FilesFileReadResponses, FilesFileUploadData, FilesFileUploadErrors, FilesFileUploadResponses, PlatformHealthReadData, PlatformHealthReadErrors, PlatformHealthReadResponses, UsersDirectoryListData, UsersDirectoryListErrors, UsersDirectoryListResponses, UsersSelfReadData, UsersSelfReadErrors, UsersSelfReadResponses, UsersSessionEndData, UsersSessionEndErrors, UsersSessionEndResponses, UsersSessionFinishData, UsersSessionFinishErrors, UsersSessionFinishResponses, UsersSessionStartData, UsersSessionStartErrors, UsersSessionStartResponses } from './types.gen';
+import type { AuditEventListData, AuditEventListErrors, AuditEventListResponses, BudgetsCategoryListData, BudgetsCategoryListErrors, BudgetsCategoryListResponses, BudgetsLineCreateData, BudgetsLineCreateErrors, BudgetsLineCreateResponses, BudgetsLineHistoryData, BudgetsLineHistoryErrors, BudgetsLineHistoryResponses, BudgetsLineListData, BudgetsLineListErrors, BudgetsLineListResponses, BudgetsLineReplaceData, BudgetsLineReplaceErrors, BudgetsLineReplaceResponses, BudgetsVarianceReadData, BudgetsVarianceReadErrors, BudgetsVarianceReadResponses, ClaimsClaimCreateData, ClaimsClaimCreateErrors, ClaimsClaimCreateResponses, ClaimsClaimDecideData, ClaimsClaimDecideErrors, ClaimsClaimDecideResponses, ClaimsClaimListData, ClaimsClaimListErrors, ClaimsClaimListResponses, ClaimsClaimReadData, ClaimsClaimReadErrors, ClaimsClaimReadResponses, ClaimsClaimSubmitData, ClaimsClaimSubmitErrors, ClaimsClaimSubmitResponses, ClaimsClaimWithdrawData, ClaimsClaimWithdrawErrors, ClaimsClaimWithdrawResponses, ClaimsDecisionQueueData, ClaimsDecisionQueueErrors, ClaimsDecisionQueueResponses, ClaimsLineAddData, ClaimsLineAddErrors, ClaimsLineAddResponses, ClaimsLineVoidData, ClaimsLineVoidErrors, ClaimsLineVoidResponses, ConfirmationsRequestDecideData, ConfirmationsRequestDecideErrors, ConfirmationsRequestDecideResponses, ConfirmationsRequestReadData, ConfirmationsRequestReadErrors, ConfirmationsRequestReadResponses, FilesFileReadData, FilesFileReadErrors, FilesFileReadResponses, FilesFileUploadData, FilesFileUploadErrors, FilesFileUploadResponses, PlatformHealthReadData, PlatformHealthReadErrors, PlatformHealthReadResponses, SpendMonthCloseData, SpendMonthCloseErrors, SpendMonthCloseResponses, SpendMonthListData, SpendMonthListErrors, SpendMonthListResponses, SpendStatementImportData, SpendStatementImportErrors, SpendStatementImportResponses, SpendStatementListData, SpendStatementListErrors, SpendStatementListResponses, SpendStatementPreviewData, SpendStatementPreviewErrors, SpendStatementPreviewResponses, SpendStatementVoidData, SpendStatementVoidErrors, SpendStatementVoidResponses, UsersDepartmentListData, UsersDepartmentListErrors, UsersDepartmentListResponses, UsersDirectoryListData, UsersDirectoryListErrors, UsersDirectoryListResponses, UsersSelfReadData, UsersSelfReadErrors, UsersSelfReadResponses, UsersSessionEndData, UsersSessionEndErrors, UsersSessionEndResponses, UsersSessionFinishData, UsersSessionFinishErrors, UsersSessionFinishResponses, UsersSessionStartData, UsersSessionStartErrors, UsersSessionStartResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -24,6 +24,62 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
  * List the most recent saved changes, newest first.
  */
 export const auditEventList = <ThrowOnError extends boolean = false>(options?: Options<AuditEventListData, ThrowOnError>): RequestResult<AuditEventListResponses, AuditEventListErrors, ThrowOnError> => (options?.client ?? client).get<AuditEventListResponses, AuditEventListErrors, ThrowOnError>({ url: '/api/audit/events', ...options });
+
+/**
+ * List Categories
+ *
+ * List the spend categories that budget lines and card rows use.
+ */
+export const budgetsCategoryList = <ThrowOnError extends boolean = false>(options?: Options<BudgetsCategoryListData, ThrowOnError>): RequestResult<BudgetsCategoryListResponses, BudgetsCategoryListErrors, ThrowOnError> => (options?.client ?? client).get<BudgetsCategoryListResponses, BudgetsCategoryListErrors, ThrowOnError>({ url: '/api/budgets/categories', ...options });
+
+/**
+ * List Lines
+ *
+ * List the current budget lines for one month. Managers see only their own department.
+ */
+export const budgetsLineList = <ThrowOnError extends boolean = false>(options: Options<BudgetsLineListData, ThrowOnError>): RequestResult<BudgetsLineListResponses, BudgetsLineListErrors, ThrowOnError> => (options.client ?? client).get<BudgetsLineListResponses, BudgetsLineListErrors, ThrowOnError>({ url: '/api/budgets/lines', ...options });
+
+/**
+ * Create Line
+ *
+ * Create the budget for one department, month and category. Finance and admin only.
+ */
+export const budgetsLineCreate = <ThrowOnError extends boolean = false>(options: Options<BudgetsLineCreateData, ThrowOnError>): RequestResult<BudgetsLineCreateResponses, BudgetsLineCreateErrors, ThrowOnError> => (options.client ?? client).post<BudgetsLineCreateResponses, BudgetsLineCreateErrors, ThrowOnError>({
+    url: '/api/budgets/lines',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Replace Line
+ *
+ * Replace the amount of a budget line with a reason. The old version stays in the line's history. Send the version you read; a stale version returns 409. Finance and admin only.
+ */
+export const budgetsLineReplace = <ThrowOnError extends boolean = false>(options: Options<BudgetsLineReplaceData, ThrowOnError>): RequestResult<BudgetsLineReplaceResponses, BudgetsLineReplaceErrors, ThrowOnError> => (options.client ?? client).put<BudgetsLineReplaceResponses, BudgetsLineReplaceErrors, ThrowOnError>({
+    url: '/api/budgets/lines/{line_id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Read History
+ *
+ * List every version of a budget line, oldest first, with the reason for each replacement.
+ */
+export const budgetsLineHistory = <ThrowOnError extends boolean = false>(options: Options<BudgetsLineHistoryData, ThrowOnError>): RequestResult<BudgetsLineHistoryResponses, BudgetsLineHistoryErrors, ThrowOnError> => (options.client ?? client).get<BudgetsLineHistoryResponses, BudgetsLineHistoryErrors, ThrowOnError>({ url: '/api/budgets/lines/{line_id}/history', ...options });
+
+/**
+ * Read Variance
+ *
+ * Compare budget with actual spend by department, month and category for a range of months. Managers see only their own department.
+ */
+export const budgetsVarianceRead = <ThrowOnError extends boolean = false>(options: Options<BudgetsVarianceReadData, ThrowOnError>): RequestResult<BudgetsVarianceReadResponses, BudgetsVarianceReadErrors, ThrowOnError> => (options.client ?? client).get<BudgetsVarianceReadResponses, BudgetsVarianceReadErrors, ThrowOnError>({ url: '/api/budgets/variance', ...options });
 
 /**
  * List Claims
@@ -179,6 +235,85 @@ export const filesFileRead = <ThrowOnError extends boolean = false>(options: Opt
  * Say whether Garden is up. Needs no sign-in.
  */
 export const platformHealthRead = <ThrowOnError extends boolean = false>(options?: Options<PlatformHealthReadData, ThrowOnError>): RequestResult<PlatformHealthReadResponses, PlatformHealthReadErrors, ThrowOnError> => (options?.client ?? client).get<PlatformHealthReadResponses, PlatformHealthReadErrors, ThrowOnError>({ url: '/api/health', ...options });
+
+/**
+ * List Closed Months
+ *
+ * List closed months, newest first.
+ */
+export const spendMonthList = <ThrowOnError extends boolean = false>(options?: Options<SpendMonthListData, ThrowOnError>): RequestResult<SpendMonthListResponses, SpendMonthListErrors, ThrowOnError> => (options?.client ?? client).get<SpendMonthListResponses, SpendMonthListErrors, ThrowOnError>({ url: '/api/spend/months', ...options });
+
+/**
+ * Close Month
+ *
+ * Close a month with a reason. Afterwards no spend for that month can be imported or voided. An agent's request waits for the person's confirmation.
+ */
+export const spendMonthClose = <ThrowOnError extends boolean = false>(options: Options<SpendMonthCloseData, ThrowOnError>): RequestResult<SpendMonthCloseResponses, SpendMonthCloseErrors, ThrowOnError> => (options.client ?? client).post<SpendMonthCloseResponses, SpendMonthCloseErrors, ThrowOnError>({
+    url: '/api/spend/months/{year_month}/close',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * List Statements
+ *
+ * List imported card statements, newest first. Voided statements are included.
+ */
+export const spendStatementList = <ThrowOnError extends boolean = false>(options?: Options<SpendStatementListData, ThrowOnError>): RequestResult<SpendStatementListResponses, SpendStatementListErrors, ThrowOnError> => (options?.client ?? client).get<SpendStatementListResponses, SpendStatementListErrors, ThrowOnError>({ url: '/api/spend/statements', ...options });
+
+/**
+ * Import Statement
+ *
+ * Import a card statement CSV. Every row is saved, or none is when a row has an error or a duplicate.
+ */
+export const spendStatementImport = <ThrowOnError extends boolean = false>(options: Options<SpendStatementImportData, ThrowOnError>): RequestResult<SpendStatementImportResponses, SpendStatementImportErrors, ThrowOnError> => (options.client ?? client).post<SpendStatementImportResponses, SpendStatementImportErrors, ThrowOnError>({
+    ...formDataBodySerializer,
+    url: '/api/spend/statements',
+    ...options,
+    headers: {
+        'Content-Type': null,
+        ...options.headers
+    }
+});
+
+/**
+ * Preview Statement
+ *
+ * Check a card statement CSV without saving it. Lists every row error and duplicate.
+ */
+export const spendStatementPreview = <ThrowOnError extends boolean = false>(options: Options<SpendStatementPreviewData, ThrowOnError>): RequestResult<SpendStatementPreviewResponses, SpendStatementPreviewErrors, ThrowOnError> => (options.client ?? client).post<SpendStatementPreviewResponses, SpendStatementPreviewErrors, ThrowOnError>({
+    ...formDataBodySerializer,
+    url: '/api/spend/statements/preview',
+    ...options,
+    headers: {
+        'Content-Type': null,
+        ...options.headers
+    }
+});
+
+/**
+ * Void Statement
+ *
+ * Void an imported card statement with a reason. Its rows stop counting as spend but are kept. An agent's request waits for the person's confirmation.
+ */
+export const spendStatementVoid = <ThrowOnError extends boolean = false>(options: Options<SpendStatementVoidData, ThrowOnError>): RequestResult<SpendStatementVoidResponses, SpendStatementVoidErrors, ThrowOnError> => (options.client ?? client).post<SpendStatementVoidResponses, SpendStatementVoidErrors, ThrowOnError>({
+    url: '/api/spend/statements/{statement_id}/void',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * List Departments
+ *
+ * List the company's departments with their ids. Budgets and card statements use these ids.
+ */
+export const usersDepartmentList = <ThrowOnError extends boolean = false>(options?: Options<UsersDepartmentListData, ThrowOnError>): RequestResult<UsersDepartmentListResponses, UsersDepartmentListErrors, ThrowOnError> => (options?.client ?? client).get<UsersDepartmentListResponses, UsersDepartmentListErrors, ThrowOnError>({ url: '/api/users/departments', ...options });
 
 /**
  * Read Me

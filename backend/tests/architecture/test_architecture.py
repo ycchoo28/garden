@@ -27,7 +27,13 @@ PUBLIC_ROUTES = {
 }
 
 # Routes an agent may only call after the person approves, listed explicitly.
-CRITICAL_ROUTES: frozenset[str] = frozenset({"/api/claims/{claim_id}/withdraw"})
+CRITICAL_ROUTES: frozenset[str] = frozenset(
+    {
+        "/api/claims/{claim_id}/withdraw",
+        "/api/spend/statements/{statement_id}/void",
+        "/api/spend/months/{year_month}/close",
+    }
+)
 
 
 def _api_routes() -> list[APIRoute]:

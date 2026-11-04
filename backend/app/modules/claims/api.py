@@ -13,10 +13,10 @@ from app.core.confirmations import confirm_agent_action
 from app.core.users import CurrentPerson, require
 from app.modules.claims.schemas import (
     AddLineIn,
+    ClaimDecisionIn,
     ClaimDetailOut,
     ClaimSummaryOut,
     CreateClaimIn,
-    DecisionIn,
     VersionIn,
     VoidLineIn,
     outcome_of,
@@ -196,7 +196,7 @@ async def withdraw_claim(
 )
 async def decide_claim(
     claim_id: uuid.UUID,
-    body: DecisionIn,
+    body: ClaimDecisionIn,
     person: Annotated[CurrentPerson, require("claims.decide")],
     service: Annotated[ClaimsService, Depends(get_claims_service)],
 ) -> ClaimDetailOut:

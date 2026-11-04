@@ -34,7 +34,7 @@ class VoidLineIn(VersionIn):
     reason: str | None = Field(default=None, max_length=300)
 
 
-class DecisionIn(VersionIn):
+class ClaimDecisionIn(VersionIn):
     decision: Literal["approve", "reject"]
     reason: str | None = Field(default=None, max_length=500)
 
@@ -118,7 +118,7 @@ class ClaimSummaryOut(BaseModel):
         )
 
 
-class LineOut(BaseModel):
+class ClaimLineOut(BaseModel):
     id: uuid.UUID
     category: str
     spent_on: date
@@ -137,7 +137,7 @@ class ActionsOut(BaseModel):
 
 class ClaimDetailOut(BaseModel):
     claim: ClaimSummaryOut
-    lines: list[LineOut]
+    lines: list[ClaimLineOut]
     history: list[RunOut]
     actions: ActionsOut
 
@@ -146,7 +146,7 @@ class ClaimDetailOut(BaseModel):
         return cls(
             claim=ClaimSummaryOut.of(detail.summary),
             lines=[
-                LineOut(
+                ClaimLineOut(
                     id=line.id,
                     category=line.category,
                     spent_on=line.spent_on,
