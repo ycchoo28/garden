@@ -3,8 +3,8 @@
 import { queryOptions, type UseMutationOptions } from '@tanstack/vue-query';
 
 import { client } from '../client.gen';
-import { auditEventList, confirmationsRequestDecide, confirmationsRequestRead, filesFileRead, filesFileUpload, type Options, platformHealthRead, usersDirectoryList, usersSelfRead, usersSessionEnd, usersSessionFinish, usersSessionStart } from '../sdk.gen';
-import type { AuditEventListData, AuditEventListError, AuditEventListResponse, ConfirmationsRequestDecideData, ConfirmationsRequestDecideError, ConfirmationsRequestDecideResponse, ConfirmationsRequestReadData, ConfirmationsRequestReadError, ConfirmationsRequestReadResponse, FilesFileReadData, FilesFileReadError, FilesFileUploadData, FilesFileUploadError, FilesFileUploadResponse, PlatformHealthReadData, PlatformHealthReadError, PlatformHealthReadResponse, UsersDirectoryListData, UsersDirectoryListError, UsersDirectoryListResponse, UsersSelfReadData, UsersSelfReadError, UsersSelfReadResponse, UsersSessionEndData, UsersSessionEndError, UsersSessionEndResponse, UsersSessionFinishData, UsersSessionFinishError, UsersSessionStartData, UsersSessionStartError } from '../types.gen';
+import { auditEventList, claimsClaimCreate, claimsClaimDecide, claimsClaimList, claimsClaimRead, claimsClaimSubmit, claimsClaimWithdraw, claimsDecisionQueue, claimsLineAdd, claimsLineVoid, confirmationsRequestDecide, confirmationsRequestRead, filesFileRead, filesFileUpload, type Options, platformHealthRead, usersDirectoryList, usersSelfRead, usersSessionEnd, usersSessionFinish, usersSessionStart } from '../sdk.gen';
+import type { AuditEventListData, AuditEventListError, AuditEventListResponse, ClaimsClaimCreateData, ClaimsClaimCreateError, ClaimsClaimCreateResponse, ClaimsClaimDecideData, ClaimsClaimDecideError, ClaimsClaimDecideResponse, ClaimsClaimListData, ClaimsClaimListError, ClaimsClaimListResponse, ClaimsClaimReadData, ClaimsClaimReadError, ClaimsClaimReadResponse, ClaimsClaimSubmitData, ClaimsClaimSubmitError, ClaimsClaimSubmitResponse, ClaimsClaimWithdrawData, ClaimsClaimWithdrawError, ClaimsClaimWithdrawResponse, ClaimsDecisionQueueData, ClaimsDecisionQueueError, ClaimsDecisionQueueResponse, ClaimsLineAddData, ClaimsLineAddError, ClaimsLineAddResponse, ClaimsLineVoidData, ClaimsLineVoidError, ClaimsLineVoidResponse, ConfirmationsRequestDecideData, ConfirmationsRequestDecideError, ConfirmationsRequestDecideResponse, ConfirmationsRequestReadData, ConfirmationsRequestReadError, ConfirmationsRequestReadResponse, FilesFileReadData, FilesFileReadError, FilesFileUploadData, FilesFileUploadError, FilesFileUploadResponse, PlatformHealthReadData, PlatformHealthReadError, PlatformHealthReadResponse, UsersDirectoryListData, UsersDirectoryListError, UsersDirectoryListResponse, UsersSelfReadData, UsersSelfReadError, UsersSelfReadResponse, UsersSessionEndData, UsersSessionEndError, UsersSessionEndResponse, UsersSessionFinishData, UsersSessionFinishError, UsersSessionStartData, UsersSessionStartError } from '../types.gen';
 
 export type QueryKey<TOptions extends Options> = [
     Pick<TOptions, 'baseUrl' | 'body' | 'headers' | 'path' | 'query'> & {
@@ -58,6 +58,180 @@ export const auditEventListOptions = (options?: Options<AuditEventListData>) => 
     },
     queryKey: auditEventListQueryKey(options)
 });
+
+export const claimsClaimListQueryKey = (options?: Options<ClaimsClaimListData>) => createQueryKey('claimsClaimList', options);
+
+/**
+ * List Claims
+ *
+ * List the claims the caller may see: their own, and their department's if they manage it. Finance and admin see every claim.
+ */
+export const claimsClaimListOptions = (options?: Options<ClaimsClaimListData>) => queryOptions<ClaimsClaimListResponse, ClaimsClaimListError, ClaimsClaimListResponse, ReturnType<typeof claimsClaimListQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await claimsClaimList({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: claimsClaimListQueryKey(options)
+});
+
+/**
+ * Create Claim
+ *
+ * Create a draft claim. Add lines to it before you submit.
+ */
+export const claimsClaimCreateMutation = (options?: Partial<Options<ClaimsClaimCreateData>>): UseMutationOptions<ClaimsClaimCreateResponse, ClaimsClaimCreateError, Options<ClaimsClaimCreateData>> => {
+    const mutationOptions: UseMutationOptions<ClaimsClaimCreateResponse, ClaimsClaimCreateError, Options<ClaimsClaimCreateData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await claimsClaimCreate({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+export const claimsDecisionQueueQueryKey = (options?: Options<ClaimsDecisionQueueData>) => createQueryKey('claimsDecisionQueue', options);
+
+/**
+ * Approval Queue
+ *
+ * List the claims waiting for a decision that the caller may make. Person-only.
+ */
+export const claimsDecisionQueueOptions = (options?: Options<ClaimsDecisionQueueData>) => queryOptions<ClaimsDecisionQueueResponse, ClaimsDecisionQueueError, ClaimsDecisionQueueResponse, ReturnType<typeof claimsDecisionQueueQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await claimsDecisionQueue({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: claimsDecisionQueueQueryKey(options)
+});
+
+export const claimsClaimReadQueryKey = (options: Options<ClaimsClaimReadData>) => createQueryKey('claimsClaimRead', options);
+
+/**
+ * Read Claim
+ *
+ * Read one claim with its lines, receipts and decision history.
+ */
+export const claimsClaimReadOptions = (options: Options<ClaimsClaimReadData>) => queryOptions<ClaimsClaimReadResponse, ClaimsClaimReadError, ClaimsClaimReadResponse, ReturnType<typeof claimsClaimReadQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await claimsClaimRead({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: claimsClaimReadQueryKey(options)
+});
+
+/**
+ * Decide Claim
+ *
+ * Approve or reject the claim's current step. A rejection needs a reason. Person-only: an agent cannot approve or reject a claim.
+ */
+export const claimsClaimDecideMutation = (options?: Partial<Options<ClaimsClaimDecideData>>): UseMutationOptions<ClaimsClaimDecideResponse, ClaimsClaimDecideError, Options<ClaimsClaimDecideData>> => {
+    const mutationOptions: UseMutationOptions<ClaimsClaimDecideResponse, ClaimsClaimDecideError, Options<ClaimsClaimDecideData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await claimsClaimDecide({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+/**
+ * Add Line
+ *
+ * Add a categorised line to a draft or rejected claim. Attach the receipt file first, then pass its SHA-256 as receipt_sha256.
+ */
+export const claimsLineAddMutation = (options?: Partial<Options<ClaimsLineAddData>>): UseMutationOptions<ClaimsLineAddResponse, ClaimsLineAddError, Options<ClaimsLineAddData>> => {
+    const mutationOptions: UseMutationOptions<ClaimsLineAddResponse, ClaimsLineAddError, Options<ClaimsLineAddData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await claimsLineAdd({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+/**
+ * Void Line
+ *
+ * Void a line on a draft or rejected claim. The line stays in the history.
+ */
+export const claimsLineVoidMutation = (options?: Partial<Options<ClaimsLineVoidData>>): UseMutationOptions<ClaimsLineVoidResponse, ClaimsLineVoidError, Options<ClaimsLineVoidData>> => {
+    const mutationOptions: UseMutationOptions<ClaimsLineVoidResponse, ClaimsLineVoidError, Options<ClaimsLineVoidData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await claimsLineVoid({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+/**
+ * Submit Claim
+ *
+ * Certify and submit a claim for approval. Person-only: an agent cannot submit a claim.
+ */
+export const claimsClaimSubmitMutation = (options?: Partial<Options<ClaimsClaimSubmitData>>): UseMutationOptions<ClaimsClaimSubmitResponse, ClaimsClaimSubmitError, Options<ClaimsClaimSubmitData>> => {
+    const mutationOptions: UseMutationOptions<ClaimsClaimSubmitResponse, ClaimsClaimSubmitError, Options<ClaimsClaimSubmitData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await claimsClaimSubmit({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+/**
+ * Withdraw Claim
+ *
+ * Withdraw a submitted claim before anyone has decided it. The person confirms this first.
+ */
+export const claimsClaimWithdrawMutation = (options?: Partial<Options<ClaimsClaimWithdrawData>>): UseMutationOptions<ClaimsClaimWithdrawResponse, ClaimsClaimWithdrawError, Options<ClaimsClaimWithdrawData>> => {
+    const mutationOptions: UseMutationOptions<ClaimsClaimWithdrawResponse, ClaimsClaimWithdrawError, Options<ClaimsClaimWithdrawData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await claimsClaimWithdraw({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
 
 export const confirmationsRequestReadQueryKey = (options: Options<ConfirmationsRequestReadData>) => createQueryKey('confirmationsRequestRead', options);
 

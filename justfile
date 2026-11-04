@@ -125,7 +125,7 @@ frontend-check:
 e2e: up
     #!/usr/bin/env bash
     set -euo pipefail
-    curl --fail --silent --show-error --retry 30 --retry-connrefused --retry-delay 1 "$GARDEN_OIDC_ISSUER/.well-known/openid-configuration" >/dev/null
+    curl --fail --silent --show-error --retry 30 --retry-connrefused --retry-all-errors --retry-delay 1 "$GARDEN_OIDC_ISSUER/.well-known/openid-configuration" >/dev/null
     cd frontend && bun run e2e
 
 # Regenerate the OpenAPI contract and the Hey API client from the backend.

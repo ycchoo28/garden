@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AuditEventListData, AuditEventListErrors, AuditEventListResponses, ConfirmationsRequestDecideData, ConfirmationsRequestDecideErrors, ConfirmationsRequestDecideResponses, ConfirmationsRequestReadData, ConfirmationsRequestReadErrors, ConfirmationsRequestReadResponses, FilesFileReadData, FilesFileReadErrors, FilesFileReadResponses, FilesFileUploadData, FilesFileUploadErrors, FilesFileUploadResponses, PlatformHealthReadData, PlatformHealthReadErrors, PlatformHealthReadResponses, UsersDirectoryListData, UsersDirectoryListErrors, UsersDirectoryListResponses, UsersSelfReadData, UsersSelfReadErrors, UsersSelfReadResponses, UsersSessionEndData, UsersSessionEndErrors, UsersSessionEndResponses, UsersSessionFinishData, UsersSessionFinishErrors, UsersSessionFinishResponses, UsersSessionStartData, UsersSessionStartErrors, UsersSessionStartResponses } from './types.gen';
+import type { AuditEventListData, AuditEventListErrors, AuditEventListResponses, ClaimsClaimCreateData, ClaimsClaimCreateErrors, ClaimsClaimCreateResponses, ClaimsClaimDecideData, ClaimsClaimDecideErrors, ClaimsClaimDecideResponses, ClaimsClaimListData, ClaimsClaimListErrors, ClaimsClaimListResponses, ClaimsClaimReadData, ClaimsClaimReadErrors, ClaimsClaimReadResponses, ClaimsClaimSubmitData, ClaimsClaimSubmitErrors, ClaimsClaimSubmitResponses, ClaimsClaimWithdrawData, ClaimsClaimWithdrawErrors, ClaimsClaimWithdrawResponses, ClaimsDecisionQueueData, ClaimsDecisionQueueErrors, ClaimsDecisionQueueResponses, ClaimsLineAddData, ClaimsLineAddErrors, ClaimsLineAddResponses, ClaimsLineVoidData, ClaimsLineVoidErrors, ClaimsLineVoidResponses, ConfirmationsRequestDecideData, ConfirmationsRequestDecideErrors, ConfirmationsRequestDecideResponses, ConfirmationsRequestReadData, ConfirmationsRequestReadErrors, ConfirmationsRequestReadResponses, FilesFileReadData, FilesFileReadErrors, FilesFileReadResponses, FilesFileUploadData, FilesFileUploadErrors, FilesFileUploadResponses, PlatformHealthReadData, PlatformHealthReadErrors, PlatformHealthReadResponses, UsersDirectoryListData, UsersDirectoryListErrors, UsersDirectoryListResponses, UsersSelfReadData, UsersSelfReadErrors, UsersSelfReadResponses, UsersSessionEndData, UsersSessionEndErrors, UsersSessionEndResponses, UsersSessionFinishData, UsersSessionFinishErrors, UsersSessionFinishResponses, UsersSessionStartData, UsersSessionStartErrors, UsersSessionStartResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -24,6 +24,111 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
  * List the most recent saved changes, newest first.
  */
 export const auditEventList = <ThrowOnError extends boolean = false>(options?: Options<AuditEventListData, ThrowOnError>): RequestResult<AuditEventListResponses, AuditEventListErrors, ThrowOnError> => (options?.client ?? client).get<AuditEventListResponses, AuditEventListErrors, ThrowOnError>({ url: '/api/audit/events', ...options });
+
+/**
+ * List Claims
+ *
+ * List the claims the caller may see: their own, and their department's if they manage it. Finance and admin see every claim.
+ */
+export const claimsClaimList = <ThrowOnError extends boolean = false>(options?: Options<ClaimsClaimListData, ThrowOnError>): RequestResult<ClaimsClaimListResponses, ClaimsClaimListErrors, ThrowOnError> => (options?.client ?? client).get<ClaimsClaimListResponses, ClaimsClaimListErrors, ThrowOnError>({ url: '/api/claims', ...options });
+
+/**
+ * Create Claim
+ *
+ * Create a draft claim. Add lines to it before you submit.
+ */
+export const claimsClaimCreate = <ThrowOnError extends boolean = false>(options: Options<ClaimsClaimCreateData, ThrowOnError>): RequestResult<ClaimsClaimCreateResponses, ClaimsClaimCreateErrors, ThrowOnError> => (options.client ?? client).post<ClaimsClaimCreateResponses, ClaimsClaimCreateErrors, ThrowOnError>({
+    url: '/api/claims',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Approval Queue
+ *
+ * List the claims waiting for a decision that the caller may make. Person-only.
+ */
+export const claimsDecisionQueue = <ThrowOnError extends boolean = false>(options?: Options<ClaimsDecisionQueueData, ThrowOnError>): RequestResult<ClaimsDecisionQueueResponses, ClaimsDecisionQueueErrors, ThrowOnError> => (options?.client ?? client).get<ClaimsDecisionQueueResponses, ClaimsDecisionQueueErrors, ThrowOnError>({ url: '/api/claims/queue', ...options });
+
+/**
+ * Read Claim
+ *
+ * Read one claim with its lines, receipts and decision history.
+ */
+export const claimsClaimRead = <ThrowOnError extends boolean = false>(options: Options<ClaimsClaimReadData, ThrowOnError>): RequestResult<ClaimsClaimReadResponses, ClaimsClaimReadErrors, ThrowOnError> => (options.client ?? client).get<ClaimsClaimReadResponses, ClaimsClaimReadErrors, ThrowOnError>({ url: '/api/claims/{claim_id}', ...options });
+
+/**
+ * Decide Claim
+ *
+ * Approve or reject the claim's current step. A rejection needs a reason. Person-only: an agent cannot approve or reject a claim.
+ */
+export const claimsClaimDecide = <ThrowOnError extends boolean = false>(options: Options<ClaimsClaimDecideData, ThrowOnError>): RequestResult<ClaimsClaimDecideResponses, ClaimsClaimDecideErrors, ThrowOnError> => (options.client ?? client).post<ClaimsClaimDecideResponses, ClaimsClaimDecideErrors, ThrowOnError>({
+    url: '/api/claims/{claim_id}/decision',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Add Line
+ *
+ * Add a categorised line to a draft or rejected claim. Attach the receipt file first, then pass its SHA-256 as receipt_sha256.
+ */
+export const claimsLineAdd = <ThrowOnError extends boolean = false>(options: Options<ClaimsLineAddData, ThrowOnError>): RequestResult<ClaimsLineAddResponses, ClaimsLineAddErrors, ThrowOnError> => (options.client ?? client).post<ClaimsLineAddResponses, ClaimsLineAddErrors, ThrowOnError>({
+    url: '/api/claims/{claim_id}/lines',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Void Line
+ *
+ * Void a line on a draft or rejected claim. The line stays in the history.
+ */
+export const claimsLineVoid = <ThrowOnError extends boolean = false>(options: Options<ClaimsLineVoidData, ThrowOnError>): RequestResult<ClaimsLineVoidResponses, ClaimsLineVoidErrors, ThrowOnError> => (options.client ?? client).post<ClaimsLineVoidResponses, ClaimsLineVoidErrors, ThrowOnError>({
+    url: '/api/claims/{claim_id}/lines/{line_id}/void',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Submit Claim
+ *
+ * Certify and submit a claim for approval. Person-only: an agent cannot submit a claim.
+ */
+export const claimsClaimSubmit = <ThrowOnError extends boolean = false>(options: Options<ClaimsClaimSubmitData, ThrowOnError>): RequestResult<ClaimsClaimSubmitResponses, ClaimsClaimSubmitErrors, ThrowOnError> => (options.client ?? client).post<ClaimsClaimSubmitResponses, ClaimsClaimSubmitErrors, ThrowOnError>({
+    url: '/api/claims/{claim_id}/submit',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Withdraw Claim
+ *
+ * Withdraw a submitted claim before anyone has decided it. The person confirms this first.
+ */
+export const claimsClaimWithdraw = <ThrowOnError extends boolean = false>(options: Options<ClaimsClaimWithdrawData, ThrowOnError>): RequestResult<ClaimsClaimWithdrawResponses, ClaimsClaimWithdrawErrors, ThrowOnError> => (options.client ?? client).post<ClaimsClaimWithdrawResponses, ClaimsClaimWithdrawErrors, ThrowOnError>({
+    url: '/api/claims/{claim_id}/withdraw',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Read Confirmation

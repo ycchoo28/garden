@@ -14,13 +14,30 @@ ADMIN = "admin"
 ROLES: tuple[Role, ...] = (
     Role(
         EMPLOYEE,
-        frozenset({"users.self", "files.upload", "files.view", "confirmations.decide"}),
+        frozenset(
+            {
+                "users.self",
+                "files.upload",
+                "files.view",
+                "confirmations.decide",
+                "claims.view",
+                "claims.create",
+                "claims.submit",
+                "claims.withdraw",
+            }
+        ),
     ),
-    Role(MANAGER, frozenset({"users.directory.view"})),
-    Role(FINANCE, frozenset({"users.directory.view", "audit.view"})),
+    Role(
+        MANAGER,
+        frozenset({"users.directory.view", "files.view", "claims.decide"}),
+    ),
+    Role(
+        FINANCE,
+        frozenset({"users.directory.view", "audit.view", "files.view", "claims.decide"}),
+    ),
     # Knowledge permissions arrive with the knowledge module; until then this role grants nothing.
     Role(KNOWLEDGE_ADMIN, frozenset()),
-    Role(ADMIN, frozenset({"users.directory.view", "audit.view"})),
+    Role(ADMIN, frozenset({"users.directory.view", "audit.view", "files.view"})),
 )
 
 PERMISSIONS: tuple[Permission, ...] = (

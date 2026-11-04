@@ -5,7 +5,9 @@ import asyncio
 from sqlalchemy import select
 
 from app.config import get_settings
+from app.core.approvals.models import Flow, FlowStep
 from app.core.users.models import Department, Person, RoleGrant
+from app.modules.claims import CLAIM_FLOW_CODE, CLAIM_FLOW_NAME, CLAIM_FLOW_STEPS
 from app.shared.db import session_factory
 from app.shared.ids import new_id
 
@@ -62,6 +64,28 @@ async def seed() -> None:
                 )
                 if granted is None:
                     session.add(RoleGrant(id=new_id(), person_id=person.id, role=role))
+
+        # Approval flows are data, so the seed loads each one that is missing.
+        if await session.get(Flow, CLAIM_FLOW_CODE) is None:
+            session.add(Flow(code=CLAIM_FLOW_CODE, name=CLAIM_FLOW_NAME))
+            await session.flush()
+        for step in CLAIM_FLOW_STEPS:
+            existing = await session.scalar(
+                select(FlowStep).where(
+                    FlowStep.flow_code == CLAIM_FLOW_CODE, FlowStep.position == step.position
+                )
+            )
+            if existing is None:
+                session.add(
+                    FlowStep(
+                        id=new_id(),
+                        flow_code=CLAIM_FLOW_CODE,
+                        position=step.position,
+                        role=step.role,
+                        department_scoped=step.department_scoped,
+                        above=step.above,
+                    )
+                )
         await session.commit()
 
 

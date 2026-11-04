@@ -104,6 +104,12 @@ class FileService:
         _ = temporary.write_bytes(data)
         _ = os.replace(temporary, path)
 
+    async def exists(self, sha256: str) -> bool:
+        """Whether a file with this SHA-256 is stored. Other modules check receipts with this."""
+        if _SHA256.fullmatch(sha256) is None:
+            return False
+        return await self._repo.get(sha256) is not None
+
     async def read(self, sha256: str) -> tuple[StoredFile, bytes]:
         if _SHA256.fullmatch(sha256) is None:
             raise NotFound("No file has that identifier.")

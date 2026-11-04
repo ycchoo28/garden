@@ -3,10 +3,12 @@ import { useColorMode } from './colorMode';
 import { initials, type ShellPerson } from './person';
 import SkipLink from './SkipLink.vue';
 
-// The frame for a signed-in page: the brand, the person, sign-out and the colour choice. Pages fill the slot.
+// The frame for a signed-in page: the brand, the links the person may use, the person, sign-out and the
+// colour choice. Pages fill the slot.
 defineProps<{
   person?: ShellPerson;
   signingOut?: boolean;
+  links?: { to: string; label: string }[];
 }>();
 
 const emit = defineEmits<{
@@ -25,6 +27,21 @@ const { mode, toggle } = useColorMode();
         aria-hidden="true"
       >G</span>
       <span class="font-semibold">Garden</span>
+      <nav
+        v-if="links?.length"
+        aria-label="Main"
+        class="flex min-w-0 items-center gap-1 overflow-x-auto"
+      >
+        <RouterLink
+          v-for="link in links"
+          :key="link.to"
+          :to="link.to"
+          class="rounded-lg px-3 py-1.5 text-sm font-medium whitespace-nowrap text-muted hover:text-fg"
+          active-class="bg-primary-soft text-primary-fg"
+        >
+          {{ link.label }}
+        </RouterLink>
+      </nav>
       <div class="ml-auto flex min-w-0 items-center gap-3">
         <button
           type="button"

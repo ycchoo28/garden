@@ -8,7 +8,7 @@ from fastapi.routing import APIRoute
 
 from app.core.users.service import CurrentPerson, UserService, get_user_service
 from app.shared.errors import Forbidden
-from app.shared.request_login import VIA_WEB, RequestLogin, current_request_login
+from app.shared.request_login import VIA_AGENT, VIA_WEB, RequestLogin, current_request_login
 
 SESSION_COOKIE = "garden_session"
 
@@ -33,14 +33,24 @@ def require(permission: str) -> params.Depends:
     """Route dependency that refuses callers without `permission`."""
 
     async def check(
+        request: Request,
         person: Annotated[CurrentPerson, Depends(current_person)],
     ) -> CurrentPerson:
         if permission not in person.permissions:
             raise Forbidden(f"You need the {permission} permission for this.")
+        # A CLI login never holds a permission its declaration marks as person-only.
+        login = current_request_login.get()
+        if login is not None and login.via == VIA_AGENT and not _agent_allowed(request, permission):
+            raise Forbidden(f"Only a person can use {permission}. Ask the person to do this.")
         return person
 
     _PERMISSION_OF[check] = permission
     return Depends(check)
+
+
+def _agent_allowed(request: Request, permission: str) -> bool:
+    declared = [item for item in request.app.state.permissions if item.name == permission]
+    return bool(declared) and declared[0].agent_allowed
 
 
 def route_permission(route: APIRoute) -> str | None:

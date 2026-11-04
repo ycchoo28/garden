@@ -5,6 +5,58 @@ export type ClientOptions = {
 };
 
 /**
+ * ActionsOut
+ */
+export type ActionsOut = {
+    /**
+     * Can Decide
+     */
+    can_decide: boolean;
+    /**
+     * Can Edit
+     */
+    can_edit: boolean;
+    /**
+     * Can Submit
+     */
+    can_submit: boolean;
+    /**
+     * Can Withdraw
+     */
+    can_withdraw: boolean;
+};
+
+/**
+ * AddLineIn
+ */
+export type AddLineIn = {
+    /**
+     * Amount
+     */
+    amount: number | string;
+    /**
+     * Category
+     */
+    category: string;
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Expected Version
+     */
+    expected_version: number;
+    /**
+     * Receipt Sha256
+     */
+    receipt_sha256: string;
+    /**
+     * Spent On
+     */
+    spent_on: string;
+};
+
+/**
  * AuditEventOut
  */
 export type AuditEventOut = {
@@ -39,6 +91,68 @@ export type AuditEventOut = {
 };
 
 /**
+ * ClaimDetailOut
+ */
+export type ClaimDetailOut = {
+    actions: ActionsOut;
+    claim: ClaimSummaryOut;
+    /**
+     * History
+     */
+    history: Array<RunOut>;
+    /**
+     * Lines
+     */
+    lines: Array<LineOut>;
+};
+
+/**
+ * ClaimSummaryOut
+ */
+export type ClaimSummaryOut = {
+    /**
+     * Claimant Id
+     */
+    claimant_id: string;
+    /**
+     * Claimant Name
+     */
+    claimant_name: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Department Code
+     */
+    department_code: string;
+    /**
+     * Department Id
+     */
+    department_id: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Total
+     */
+    total: string;
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
  * ConfirmationOut
  */
 export type ConfirmationOut = {
@@ -61,13 +175,35 @@ export type ConfirmationOut = {
 };
 
 /**
- * DecisionIn
+ * CreateClaimIn
  */
-export type DecisionIn = {
+export type CreateClaimIn = {
     /**
-     * Decision
+     * Title
      */
-    decision: 'approve' | 'reject';
+    title: string;
+};
+
+/**
+ * DecisionOut
+ */
+export type DecisionOut = {
+    /**
+     * Decided At
+     */
+    decided_at: string;
+    /**
+     * Decided By Name
+     */
+    decided_by_name: string;
+    /**
+     * Outcome
+     */
+    outcome: string;
+    /**
+     * Reason
+     */
+    reason: string | null;
 };
 
 /**
@@ -96,6 +232,40 @@ export type FieldError = {
      * Message
      */
     message: string;
+};
+
+/**
+ * LineOut
+ */
+export type LineOut = {
+    /**
+     * Amount
+     */
+    amount: string;
+    /**
+     * Category
+     */
+    category: string;
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Receipt Sha256
+     */
+    receipt_sha256: string;
+    /**
+     * Receipt Url
+     */
+    receipt_url: string;
+    /**
+     * Spent On
+     */
+    spent_on: string;
 };
 
 /**
@@ -177,6 +347,55 @@ export type Problem = {
 };
 
 /**
+ * RunOut
+ */
+export type RunOut = {
+    /**
+     * Cancel Reason
+     */
+    cancel_reason: string | null;
+    /**
+     * Cancelled At
+     */
+    cancelled_at: string | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Started At
+     */
+    started_at: string;
+    /**
+     * Started By Name
+     */
+    started_by_name: string;
+    /**
+     * State
+     */
+    state: string;
+    /**
+     * Steps
+     */
+    steps: Array<StepOut>;
+};
+
+/**
+ * StepOut
+ */
+export type StepOut = {
+    decision: DecisionOut | null;
+    /**
+     * Position
+     */
+    position: number;
+    /**
+     * Role
+     */
+    role: string;
+};
+
+/**
  * UploadedFileOut
  */
 export type UploadedFileOut = {
@@ -196,6 +415,58 @@ export type UploadedFileOut = {
      * Url
      */
     url: string;
+};
+
+/**
+ * VersionIn
+ */
+export type VersionIn = {
+    /**
+     * Expected Version
+     */
+    expected_version: number;
+};
+
+/**
+ * VoidLineIn
+ */
+export type VoidLineIn = {
+    /**
+     * Expected Version
+     */
+    expected_version: number;
+    /**
+     * Reason
+     */
+    reason?: string | null;
+};
+
+/**
+ * DecisionIn
+ */
+export type AppCoreConfirmationsApiDecisionIn = {
+    /**
+     * Decision
+     */
+    decision: 'approve' | 'reject';
+};
+
+/**
+ * DecisionIn
+ */
+export type AppModulesClaimsSchemasDecisionIn = {
+    /**
+     * Decision
+     */
+    decision: 'approve' | 'reject';
+    /**
+     * Expected Version
+     */
+    expected_version: number;
+    /**
+     * Reason
+     */
+    reason?: string | null;
 };
 
 /**
@@ -244,6 +515,305 @@ export type AuditEventListResponses = {
 
 export type AuditEventListResponse = AuditEventListResponses[keyof AuditEventListResponses];
 
+export type ClaimsClaimListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/claims';
+};
+
+export type ClaimsClaimListErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type ClaimsClaimListError = ClaimsClaimListErrors[keyof ClaimsClaimListErrors];
+
+export type ClaimsClaimListResponses = {
+    /**
+     * Response Claims.Claim.List
+     *
+     * Successful Response
+     */
+    200: Array<ClaimSummaryOut>;
+};
+
+export type ClaimsClaimListResponse = ClaimsClaimListResponses[keyof ClaimsClaimListResponses];
+
+export type ClaimsClaimCreateData = {
+    body: CreateClaimIn;
+    path?: never;
+    query?: never;
+    url: '/api/claims';
+};
+
+export type ClaimsClaimCreateErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type ClaimsClaimCreateError = ClaimsClaimCreateErrors[keyof ClaimsClaimCreateErrors];
+
+export type ClaimsClaimCreateResponses = {
+    /**
+     * Successful Response
+     */
+    201: ClaimDetailOut;
+};
+
+export type ClaimsClaimCreateResponse = ClaimsClaimCreateResponses[keyof ClaimsClaimCreateResponses];
+
+export type ClaimsDecisionQueueData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/claims/queue';
+};
+
+export type ClaimsDecisionQueueErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type ClaimsDecisionQueueError = ClaimsDecisionQueueErrors[keyof ClaimsDecisionQueueErrors];
+
+export type ClaimsDecisionQueueResponses = {
+    /**
+     * Response Claims.Decision.Queue
+     *
+     * Successful Response
+     */
+    200: Array<ClaimSummaryOut>;
+};
+
+export type ClaimsDecisionQueueResponse = ClaimsDecisionQueueResponses[keyof ClaimsDecisionQueueResponses];
+
+export type ClaimsClaimReadData = {
+    body?: never;
+    path: {
+        /**
+         * Claim Id
+         */
+        claim_id: string;
+    };
+    query?: never;
+    url: '/api/claims/{claim_id}';
+};
+
+export type ClaimsClaimReadErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type ClaimsClaimReadError = ClaimsClaimReadErrors[keyof ClaimsClaimReadErrors];
+
+export type ClaimsClaimReadResponses = {
+    /**
+     * Successful Response
+     */
+    200: ClaimDetailOut;
+};
+
+export type ClaimsClaimReadResponse = ClaimsClaimReadResponses[keyof ClaimsClaimReadResponses];
+
+export type ClaimsClaimDecideData = {
+    body: AppModulesClaimsSchemasDecisionIn;
+    path: {
+        /**
+         * Claim Id
+         */
+        claim_id: string;
+    };
+    query?: never;
+    url: '/api/claims/{claim_id}/decision';
+};
+
+export type ClaimsClaimDecideErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type ClaimsClaimDecideError = ClaimsClaimDecideErrors[keyof ClaimsClaimDecideErrors];
+
+export type ClaimsClaimDecideResponses = {
+    /**
+     * Successful Response
+     */
+    200: ClaimDetailOut;
+};
+
+export type ClaimsClaimDecideResponse = ClaimsClaimDecideResponses[keyof ClaimsClaimDecideResponses];
+
+export type ClaimsLineAddData = {
+    body: AddLineIn;
+    path: {
+        /**
+         * Claim Id
+         */
+        claim_id: string;
+    };
+    query?: never;
+    url: '/api/claims/{claim_id}/lines';
+};
+
+export type ClaimsLineAddErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type ClaimsLineAddError = ClaimsLineAddErrors[keyof ClaimsLineAddErrors];
+
+export type ClaimsLineAddResponses = {
+    /**
+     * Successful Response
+     */
+    201: ClaimDetailOut;
+};
+
+export type ClaimsLineAddResponse = ClaimsLineAddResponses[keyof ClaimsLineAddResponses];
+
+export type ClaimsLineVoidData = {
+    body: VoidLineIn;
+    path: {
+        /**
+         * Claim Id
+         */
+        claim_id: string;
+        /**
+         * Line Id
+         */
+        line_id: string;
+    };
+    query?: never;
+    url: '/api/claims/{claim_id}/lines/{line_id}/void';
+};
+
+export type ClaimsLineVoidErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type ClaimsLineVoidError = ClaimsLineVoidErrors[keyof ClaimsLineVoidErrors];
+
+export type ClaimsLineVoidResponses = {
+    /**
+     * Successful Response
+     */
+    200: ClaimDetailOut;
+};
+
+export type ClaimsLineVoidResponse = ClaimsLineVoidResponses[keyof ClaimsLineVoidResponses];
+
+export type ClaimsClaimSubmitData = {
+    body: VersionIn;
+    path: {
+        /**
+         * Claim Id
+         */
+        claim_id: string;
+    };
+    query?: never;
+    url: '/api/claims/{claim_id}/submit';
+};
+
+export type ClaimsClaimSubmitErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type ClaimsClaimSubmitError = ClaimsClaimSubmitErrors[keyof ClaimsClaimSubmitErrors];
+
+export type ClaimsClaimSubmitResponses = {
+    /**
+     * Successful Response
+     */
+    200: ClaimDetailOut;
+};
+
+export type ClaimsClaimSubmitResponse = ClaimsClaimSubmitResponses[keyof ClaimsClaimSubmitResponses];
+
+export type ClaimsClaimWithdrawData = {
+    body: VersionIn;
+    path: {
+        /**
+         * Claim Id
+         */
+        claim_id: string;
+    };
+    query?: never;
+    url: '/api/claims/{claim_id}/withdraw';
+};
+
+export type ClaimsClaimWithdrawErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type ClaimsClaimWithdrawError = ClaimsClaimWithdrawErrors[keyof ClaimsClaimWithdrawErrors];
+
+export type ClaimsClaimWithdrawResponses = {
+    /**
+     * Successful Response
+     */
+    200: ClaimDetailOut;
+};
+
+export type ClaimsClaimWithdrawResponse = ClaimsClaimWithdrawResponses[keyof ClaimsClaimWithdrawResponses];
+
 export type ConfirmationsRequestReadData = {
     body?: never;
     path: {
@@ -279,7 +849,7 @@ export type ConfirmationsRequestReadResponses = {
 export type ConfirmationsRequestReadResponse = ConfirmationsRequestReadResponses[keyof ConfirmationsRequestReadResponses];
 
 export type ConfirmationsRequestDecideData = {
-    body: DecisionIn;
+    body: AppCoreConfirmationsApiDecisionIn;
     path: {
         /**
          * Confirmation Id

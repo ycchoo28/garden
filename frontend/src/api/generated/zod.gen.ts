@@ -3,6 +3,31 @@
 import * as z from 'zod';
 
 /**
+ * ActionsOut
+ */
+export const zActionsOut = z.object({
+    can_decide: z.boolean(),
+    can_edit: z.boolean(),
+    can_submit: z.boolean(),
+    can_withdraw: z.boolean()
+});
+
+/**
+ * AddLineIn
+ */
+export const zAddLineIn = z.object({
+    amount: z.union([
+        z.number().gt(0),
+        z.string()
+    ]),
+    category: z.string().min(1).max(40),
+    description: z.string().min(1).max(300),
+    expected_version: z.int().gte(1),
+    receipt_sha256: z.string().regex(/^[0-9a-f]{64}$/),
+    spent_on: z.iso.date()
+});
+
+/**
  * AuditEventOut
  */
 export const zAuditEventOut = z.object({
@@ -16,6 +41,22 @@ export const zAuditEventOut = z.object({
 });
 
 /**
+ * ClaimSummaryOut
+ */
+export const zClaimSummaryOut = z.object({
+    claimant_id: z.uuid(),
+    claimant_name: z.string(),
+    created_at: z.iso.datetime(),
+    department_code: z.string(),
+    department_id: z.uuid(),
+    id: z.uuid(),
+    status: z.string(),
+    title: z.string(),
+    total: z.string(),
+    version: z.int()
+});
+
+/**
  * ConfirmationOut
  */
 export const zConfirmationOut = z.object({
@@ -26,10 +67,20 @@ export const zConfirmationOut = z.object({
 });
 
 /**
- * DecisionIn
+ * CreateClaimIn
  */
-export const zDecisionIn = z.object({
-    decision: z.enum(['approve', 'reject'])
+export const zCreateClaimIn = z.object({
+    title: z.string().min(1).max(200)
+});
+
+/**
+ * DecisionOut
+ */
+export const zDecisionOut = z.object({
+    decided_at: z.iso.datetime(),
+    decided_by_name: z.string(),
+    outcome: z.string(),
+    reason: z.string().nullable()
 });
 
 /**
@@ -46,6 +97,19 @@ export const zDepartmentOut = z.object({
 export const zFieldError = z.object({
     field: z.string(),
     message: z.string()
+});
+
+/**
+ * LineOut
+ */
+export const zLineOut = z.object({
+    amount: z.string(),
+    category: z.string(),
+    description: z.string(),
+    id: z.uuid(),
+    receipt_sha256: z.string(),
+    receipt_url: z.string(),
+    spent_on: z.iso.date()
 });
 
 /**
@@ -85,6 +149,38 @@ export const zProblem = z.object({
 });
 
 /**
+ * StepOut
+ */
+export const zStepOut = z.object({
+    decision: zDecisionOut.nullable(),
+    position: z.int(),
+    role: z.string()
+});
+
+/**
+ * RunOut
+ */
+export const zRunOut = z.object({
+    cancel_reason: z.string().nullable(),
+    cancelled_at: z.iso.datetime().nullable(),
+    id: z.uuid(),
+    started_at: z.iso.datetime(),
+    started_by_name: z.string(),
+    state: z.string(),
+    steps: z.array(zStepOut)
+});
+
+/**
+ * ClaimDetailOut
+ */
+export const zClaimDetailOut = z.object({
+    actions: zActionsOut,
+    claim: zClaimSummaryOut,
+    history: z.array(zRunOut),
+    lines: z.array(zLineOut)
+});
+
+/**
  * UploadedFileOut
  */
 export const zUploadedFileOut = z.object({
@@ -92,6 +188,37 @@ export const zUploadedFileOut = z.object({
     sha256: z.string(),
     size_bytes: z.int(),
     url: z.string()
+});
+
+/**
+ * VersionIn
+ */
+export const zVersionIn = z.object({
+    expected_version: z.int().gte(1)
+});
+
+/**
+ * VoidLineIn
+ */
+export const zVoidLineIn = z.object({
+    expected_version: z.int().gte(1),
+    reason: z.string().max(300).nullish()
+});
+
+/**
+ * DecisionIn
+ */
+export const zAppCoreConfirmationsApiDecisionIn = z.object({
+    decision: z.enum(['approve', 'reject'])
+});
+
+/**
+ * DecisionIn
+ */
+export const zAppModulesClaimsSchemasDecisionIn = z.object({
+    decision: z.enum(['approve', 'reject']),
+    expected_version: z.int().gte(1),
+    reason: z.string().max(500).nullish()
 });
 
 /**
@@ -112,6 +239,92 @@ export const zAuditEventListQuery = z.object({
  */
 export const zAuditEventListResponse = z.array(zAuditEventOut);
 
+/**
+ * Response Claims.Claim.List
+ *
+ * Successful Response
+ */
+export const zClaimsClaimListResponse = z.array(zClaimSummaryOut);
+
+export const zClaimsClaimCreateBody = zCreateClaimIn;
+
+/**
+ * Successful Response
+ */
+export const zClaimsClaimCreateResponse = zClaimDetailOut;
+
+/**
+ * Response Claims.Decision.Queue
+ *
+ * Successful Response
+ */
+export const zClaimsDecisionQueueResponse = z.array(zClaimSummaryOut);
+
+export const zClaimsClaimReadPath = z.object({
+    claim_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zClaimsClaimReadResponse = zClaimDetailOut;
+
+export const zClaimsClaimDecideBody = zAppModulesClaimsSchemasDecisionIn;
+
+export const zClaimsClaimDecidePath = z.object({
+    claim_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zClaimsClaimDecideResponse = zClaimDetailOut;
+
+export const zClaimsLineAddBody = zAddLineIn;
+
+export const zClaimsLineAddPath = z.object({
+    claim_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zClaimsLineAddResponse = zClaimDetailOut;
+
+export const zClaimsLineVoidBody = zVoidLineIn;
+
+export const zClaimsLineVoidPath = z.object({
+    claim_id: z.uuid(),
+    line_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zClaimsLineVoidResponse = zClaimDetailOut;
+
+export const zClaimsClaimSubmitBody = zVersionIn;
+
+export const zClaimsClaimSubmitPath = z.object({
+    claim_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zClaimsClaimSubmitResponse = zClaimDetailOut;
+
+export const zClaimsClaimWithdrawBody = zVersionIn;
+
+export const zClaimsClaimWithdrawPath = z.object({
+    claim_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zClaimsClaimWithdrawResponse = zClaimDetailOut;
+
 export const zConfirmationsRequestReadPath = z.object({
     confirmation_id: z.uuid()
 });
@@ -121,7 +334,7 @@ export const zConfirmationsRequestReadPath = z.object({
  */
 export const zConfirmationsRequestReadResponse = zConfirmationOut;
 
-export const zConfirmationsRequestDecideBody = zDecisionIn;
+export const zConfirmationsRequestDecideBody = zAppCoreConfirmationsApiDecisionIn;
 
 export const zConfirmationsRequestDecidePath = z.object({
     confirmation_id: z.uuid()

@@ -1,6 +1,87 @@
 {
   "components": {
     "schemas": {
+      "ActionsOut": {
+        "properties": {
+          "can_decide": {
+            "title": "Can Decide",
+            "type": "boolean"
+          },
+          "can_edit": {
+            "title": "Can Edit",
+            "type": "boolean"
+          },
+          "can_submit": {
+            "title": "Can Submit",
+            "type": "boolean"
+          },
+          "can_withdraw": {
+            "title": "Can Withdraw",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "can_edit",
+          "can_submit",
+          "can_withdraw",
+          "can_decide"
+        ],
+        "title": "ActionsOut",
+        "type": "object"
+      },
+      "AddLineIn": {
+        "properties": {
+          "amount": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Amount"
+          },
+          "category": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Category",
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "receipt_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Receipt Sha256",
+            "type": "string"
+          },
+          "spent_on": {
+            "format": "date",
+            "title": "Spent On",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_version",
+          "category",
+          "spent_on",
+          "amount",
+          "description",
+          "receipt_sha256"
+        ],
+        "title": "AddLineIn",
+        "type": "object"
+      },
       "AuditEventOut": {
         "properties": {
           "acting_as_agent": {
@@ -44,6 +125,100 @@
         "title": "AuditEventOut",
         "type": "object"
       },
+      "ClaimDetailOut": {
+        "properties": {
+          "actions": {
+            "$ref": "#/components/schemas/ActionsOut"
+          },
+          "claim": {
+            "$ref": "#/components/schemas/ClaimSummaryOut"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/RunOut"
+            },
+            "title": "History",
+            "type": "array"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/LineOut"
+            },
+            "title": "Lines",
+            "type": "array"
+          }
+        },
+        "required": [
+          "claim",
+          "lines",
+          "history",
+          "actions"
+        ],
+        "title": "ClaimDetailOut",
+        "type": "object"
+      },
+      "ClaimSummaryOut": {
+        "properties": {
+          "claimant_id": {
+            "format": "uuid",
+            "title": "Claimant Id",
+            "type": "string"
+          },
+          "claimant_name": {
+            "title": "Claimant Name",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "department_code": {
+            "title": "Department Code",
+            "type": "string"
+          },
+          "department_id": {
+            "format": "uuid",
+            "title": "Department Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "claimant_id",
+          "claimant_name",
+          "department_id",
+          "department_code",
+          "status",
+          "total",
+          "version",
+          "created_at"
+        ],
+        "title": "ClaimSummaryOut",
+        "type": "object"
+      },
       "ConfirmationOut": {
         "properties": {
           "expires_at": {
@@ -73,21 +248,55 @@
         "title": "ConfirmationOut",
         "type": "object"
       },
-      "DecisionIn": {
+      "CreateClaimIn": {
         "properties": {
-          "decision": {
-            "enum": [
-              "approve",
-              "reject"
-            ],
-            "title": "Decision",
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title",
             "type": "string"
           }
         },
         "required": [
-          "decision"
+          "title"
         ],
-        "title": "DecisionIn",
+        "title": "CreateClaimIn",
+        "type": "object"
+      },
+      "DecisionOut": {
+        "properties": {
+          "decided_at": {
+            "format": "date-time",
+            "title": "Decided At",
+            "type": "string"
+          },
+          "decided_by_name": {
+            "title": "Decided By Name",
+            "type": "string"
+          },
+          "outcome": {
+            "title": "Outcome",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "outcome",
+          "decided_by_name",
+          "decided_at",
+          "reason"
+        ],
+        "title": "DecisionOut",
         "type": "object"
       },
       "DepartmentOut": {
@@ -124,6 +333,51 @@
           "message"
         ],
         "title": "FieldError",
+        "type": "object"
+      },
+      "LineOut": {
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "string"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "receipt_sha256": {
+            "title": "Receipt Sha256",
+            "type": "string"
+          },
+          "receipt_url": {
+            "title": "Receipt Url",
+            "type": "string"
+          },
+          "spent_on": {
+            "format": "date",
+            "title": "Spent On",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "category",
+          "spent_on",
+          "amount",
+          "description",
+          "receipt_sha256",
+          "receipt_url"
+        ],
+        "title": "LineOut",
         "type": "object"
       },
       "MeOut": {
@@ -252,6 +506,98 @@
         "title": "Problem",
         "type": "object"
       },
+      "RunOut": {
+        "properties": {
+          "cancel_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancel Reason"
+          },
+          "cancelled_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancelled At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "started_by_name": {
+            "title": "Started By Name",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/StepOut"
+            },
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "started_at",
+          "started_by_name",
+          "cancelled_at",
+          "cancel_reason",
+          "steps"
+        ],
+        "title": "RunOut",
+        "type": "object"
+      },
+      "StepOut": {
+        "properties": {
+          "decision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DecisionOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "position",
+          "role",
+          "decision"
+        ],
+        "title": "StepOut",
+        "type": "object"
+      },
       "UploadedFileOut": {
         "properties": {
           "content_type": {
@@ -278,6 +624,98 @@
           "url"
         ],
         "title": "UploadedFileOut",
+        "type": "object"
+      },
+      "VersionIn": {
+        "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "VersionIn",
+        "type": "object"
+      },
+      "VoidLineIn": {
+        "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "VoidLineIn",
+        "type": "object"
+      },
+      "app__core__confirmations__api__DecisionIn": {
+        "properties": {
+          "decision": {
+            "enum": [
+              "approve",
+              "reject"
+            ],
+            "title": "Decision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "title": "DecisionIn",
+        "type": "object"
+      },
+      "app__modules__claims__schemas__DecisionIn": {
+        "properties": {
+          "decision": {
+            "enum": [
+              "approve",
+              "reject"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "expected_version",
+          "decision"
+        ],
+        "title": "DecisionIn",
         "type": "object"
       },
       "upload": {
@@ -364,6 +802,577 @@
         }
       }
     },
+    "/api/claims": {
+      "get": {
+        "description": "List the claims the caller may see: their own, and their department's if they manage it. Finance and admin see every claim.",
+        "operationId": "claims.claim.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ClaimSummaryOut"
+                  },
+                  "title": "Response Claims.Claim.List",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "List Claims",
+        "tags": [
+          "claims"
+        ],
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": true
+        }
+      },
+      "post": {
+        "description": "Create a draft claim. Add lines to it before you submit.",
+        "operationId": "claims.claim.create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateClaimIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Create Claim",
+        "tags": [
+          "claims"
+        ],
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": true
+        }
+      }
+    },
+    "/api/claims/queue": {
+      "get": {
+        "description": "List the claims waiting for a decision that the caller may make. Person-only.",
+        "operationId": "claims.decision.queue",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ClaimSummaryOut"
+                  },
+                  "title": "Response Claims.Decision.Queue",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Approval Queue",
+        "tags": [
+          "claims"
+        ],
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": false
+        }
+      }
+    },
+    "/api/claims/{claim_id}": {
+      "get": {
+        "description": "Read one claim with its lines, receipts and decision history.",
+        "operationId": "claims.claim.read",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "claim_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Claim Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Read Claim",
+        "tags": [
+          "claims"
+        ],
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": true
+        }
+      }
+    },
+    "/api/claims/{claim_id}/decision": {
+      "post": {
+        "description": "Approve or reject the claim's current step. A rejection needs a reason. Person-only: an agent cannot approve or reject a claim.",
+        "operationId": "claims.claim.decide",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "claim_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Claim Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/app__modules__claims__schemas__DecisionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Decide Claim",
+        "tags": [
+          "claims"
+        ],
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": false
+        }
+      }
+    },
+    "/api/claims/{claim_id}/lines": {
+      "post": {
+        "description": "Add a categorised line to a draft or rejected claim. Attach the receipt file first, then pass its SHA-256 as receipt_sha256.",
+        "operationId": "claims.line.add",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "claim_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Claim Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddLineIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Add Line",
+        "tags": [
+          "claims"
+        ],
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": true
+        }
+      }
+    },
+    "/api/claims/{claim_id}/lines/{line_id}/void": {
+      "post": {
+        "description": "Void a line on a draft or rejected claim. The line stays in the history.",
+        "operationId": "claims.line.void",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "claim_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Claim Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "line_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Line Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoidLineIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Void Line",
+        "tags": [
+          "claims"
+        ],
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": true
+        }
+      }
+    },
+    "/api/claims/{claim_id}/submit": {
+      "post": {
+        "description": "Certify and submit a claim for approval. Person-only: an agent cannot submit a claim.",
+        "operationId": "claims.claim.submit",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "claim_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Claim Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Submit Claim",
+        "tags": [
+          "claims"
+        ],
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": false
+        }
+      }
+    },
+    "/api/claims/{claim_id}/withdraw": {
+      "post": {
+        "description": "Withdraw a submitted claim before anyone has decided it. The person confirms this first.",
+        "operationId": "claims.claim.withdraw",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "claim_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Claim Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Withdraw Claim",
+        "tags": [
+          "claims"
+        ],
+        "x-agent": {
+          "confirm": true,
+          "save": true,
+          "tool": true
+        }
+      }
+    },
     "/api/confirmations/{confirmation_id}": {
       "get": {
         "description": "Check whether the person has approved a confirmation.",
@@ -440,7 +1449,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DecisionIn"
+                "$ref": "#/components/schemas/app__core__confirmations__api__DecisionIn"
               }
             }
           },

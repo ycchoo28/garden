@@ -20,3 +20,5 @@ Records are numbered in the order they were made, and a later record may replace
 | [0013](0013-scaffold.md) | New modules come from one template that CI proves |
 | [0014](0014-local-only-runtime.md) | Everything runs on the developer's machine |
 | [0015](0015-single-currency.md) | One currency, USD, with no exchange rates |
+| [0016](0016-approval-flows-as-data.md) | Approval flows are rows, and runs copy their steps |
+| [0017](0017-separation-of-duties.md) | Nobody decides their own request, and nobody decides two steps of one run |
