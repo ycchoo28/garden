@@ -198,7 +198,7 @@ Run `just` with no arguments to list them.
 | `just quick` | Runs the fast checks: backend format, lint and types, import contracts, the agent package, frontend types, lint, unit tests and colour rules, the API contract, secrets, doc links and the deny-list. |
 | `just check` | Runs `just quick`, the backend and agent tests against Postgres, the browser tests, and the dependency audits. |
 | `just test` | Runs the backend and agent tests against a `*_test` database in Postgres. |
-| `just e2e` | Runs the browser tests. It needs Chromium and the fake sign-in provider. |
+| `just e2e` | Runs the browser tests against a fresh `garden_e2e` database. It needs Chromium and the fake sign-in provider. |
 | `just api` | Regenerates the OpenAPI contract and the frontend client. Never edit those files by hand. |
 | `just api-check` | Regenerates them and fails if that changes any file. |
 | `just new-module <name>` | Scaffolds a business module, registers it, and regenerates the contract and client. |

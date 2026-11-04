@@ -8,7 +8,8 @@ const EMBEDDING_URL = 'http://127.0.0.1:55084';
 
 // The browser tests run against the dev stack: Vite proxies /api and /auth to the API.
 // GARDEN_E2E_WEB_URL and GARDEN_E2E_API_URL move both (see e2e/urls.ts). The API reads the repo-root
-// .env, which points at the fake sign-in provider that `just up` starts.
+// .env, which points at the fake sign-in provider that `just up` starts. `just e2e` points the API and
+// the worker at a fresh database of their own through GARDEN_DATABASE_URL.
 export default defineConfig({
   testDir: 'e2e',
   fullyParallel: false,

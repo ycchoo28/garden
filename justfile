@@ -196,6 +196,12 @@ e2e: up
     curl --fail --silent --show-error --retry 30 --retry-all-errors --retry-delay 1 "$GARDEN_OIDC_ISSUER/.well-known/openid-configuration" >/dev/null
     # The first sign-in page a fresh provider serves is slow, so warm the page the browser opens too.
     curl --fail --silent --show-error --max-time 60 --retry 30 --retry-all-errors --retry-delay 1 "$GARDEN_OIDC_ISSUER/authorize?client_id=$GARDEN_OIDC_CLIENT_ID&response_type=code&redirect_uri=$GARDEN_PUBLIC_URL/auth/callback&scope=openid&state=warmup" >/dev/null
+    # The browser tests get a fresh database of their own, so they never leave rows in the dev database.
+    db="${GARDEN_E2E_DB:-garden_e2e}"
+    [[ "$db" == *_e2e ]] || { echo "GARDEN_E2E_DB must end in _e2e." >&2; exit 1; }
+    docker compose -f dev/compose.yaml exec -T postgres psql -U garden -d garden -v ON_ERROR_STOP=1 \
+        -c "drop database if exists \"$db\" with (force)" -c "create database \"$db\""
+    export GARDEN_DATABASE_URL="${GARDEN_DATABASE_URL%/*}/$db"
     cd frontend && bun run e2e
 
 # Regenerate the OpenAPI contract and the Hey API client from the backend.
