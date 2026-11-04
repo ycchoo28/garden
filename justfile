@@ -75,14 +75,52 @@ dev: seed
     (cd frontend && bun run dev --strictPort --port 55173) &
     wait
 
-# Delete the local Postgres volume and rebuild the database. Asks for confirmation first.
-reset:
+# Start the demo: migrate, load the Fernhill Studio demo data, then run the API, the worker and the web app until Ctrl+C.
+# Embeddings come from the real service when it answers, and from the fake one otherwise (scripts/demo-embeddings.sh).
+# GARDEN_DEMO_API_PORT and GARDEN_DEMO_WEB_PORT move the ports, for example to 56018 and 56118.
+demo: migrate
     #!/usr/bin/env bash
     set -euo pipefail
-    read -r -p "This deletes the local database volume. Type 'reset' to continue: " answer
+    trap 'kill 0' EXIT
+    api_default="{{api_url}}"
+    web_default="{{web_url}}"
+    api_port="${GARDEN_DEMO_API_PORT:-${api_default##*:}}"
+    web_port="${GARDEN_DEMO_WEB_PORT:-${web_default##*:}}"
+    for port in "$api_port" "$web_port"; do
+        if (echo > "/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
+            echo "Port $port is already in use. Stop that process, or set GARDEN_DEMO_API_PORT or GARDEN_DEMO_WEB_PORT." >&2
+            exit 1
+        fi
+    done
+    source scripts/demo-embeddings.sh
+    garden_select_embeddings
+    export GARDEN_PUBLIC_URL="http://localhost:$web_port"
+    (cd backend && uv run python -m app.demo_seed)
+    echo "Open http://localhost:$web_port and sign in as a seeded person, for example priya.nair@fernhill.example."
+    (cd backend && uv run uvicorn app.main:app --host 127.0.0.1 --port "$api_port") &
+    (cd backend && uv run python -m app.worker) &
+    (cd frontend && GARDEN_E2E_API_URL="http://127.0.0.1:$api_port" bun run dev --strictPort --port "$web_port") &
+    wait
+
+# Drop and recreate the dev database named in .env, then migrate and load the demo data again. Asks for confirmation first.
+reset: up
+    #!/usr/bin/env bash
+    set -euo pipefail
+    trap 'kill "${GARDEN_FAKE_EMBEDDER_PID:-}" 2>/dev/null || true' EXIT
+    read -r -p "This drops the dev database in .env and loads the demo data again. Type 'reset' to continue: " answer
     [ "$answer" = "reset" ] || { echo "aborted"; exit 1; }
-    docker compose -f dev/compose.yaml down -v
-    just seed
+    db="${GARDEN_DATABASE_URL##*/}"
+    if [[ ! "$db" =~ ^[A-Za-z0-9_]+$ ]] || [[ "$db" == *_test ]]; then
+        echo "Refusing to reset '$db'. Only the dev database in .env is reset, and it must not be a test database." >&2
+        exit 1
+    fi
+    docker compose -f dev/compose.yaml exec -T postgres psql -U garden -d postgres -v ON_ERROR_STOP=1 \
+        -c "drop database if exists \"$db\" with (force)" \
+        -c "create database \"$db\""
+    just migrate
+    source scripts/demo-embeddings.sh
+    garden_select_embeddings
+    (cd backend && uv run python -m app.demo_seed)
 
 # The fast checks that CI runs first: backend format and lint, frontend, API contract, secrets, doc links and the deny-list.
 quick: backend-check agent-check frontend-check api-check secrets-check docs-check deny-check
