@@ -22,5 +22,5 @@ The statement keeps the SHA-256 of the file, the row count and the total, so a l
 
 - Finance sees every problem in one pass, before anything changes.
 - A voided statement stops counting, and its transaction references may be imported again.
-- Approved claims are not yet counted as actual spend, because the claims module is outside this ticket.
+- Actual spend in this module counts card rows only. The budgets module adds approved claim lines, which it reads from the claims module.
 - The file is parsed again when it is applied, so the upload is read twice; files are capped at 1 MB and 5,000 rows.

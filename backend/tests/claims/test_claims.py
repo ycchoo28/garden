@@ -462,6 +462,31 @@ async def test_a_closed_month_refuses_new_lines_and_submission(
 
 
 @pytest.mark.asyncio
+async def test_a_month_closed_in_spend_refuses_claim_lines_for_it(
+    client: AsyncClient, identity: FakeIdentity
+) -> None:
+    await sign_in(client, identity, LENA)
+    closed = await client.post("/api/spend/months/2026-10/close", json={"reason": "Books sent"})
+    assert closed.status_code == 201, closed.text
+    await sign_in(client, identity, MARCUS)
+    claim = await new_claim(client)
+    refused = await client.post(
+        f"/api/claims/{claim['claim']['id']}/lines",
+        json={
+            "expected_version": claim["claim"]["version"],
+            "category": "travel",
+            "spent_on": "2026-10-02",
+            "amount": "10.00",
+            "description": "Closed month",
+            "receipt_sha256": await receipt(client),
+        },
+    )
+    assert refused.status_code == 422
+    assert "2026-10" in refused.text
+    _ = await add_line(client, claim, spent_on="2026-11-02")
+
+
+@pytest.mark.asyncio
 async def test_approved_spend_counts_only_approved_claims_by_department_month_and_category(
     client: AsyncClient, identity: FakeIdentity, app: FastAPI
 ) -> None:
@@ -472,7 +497,6 @@ async def test_approved_spend_counts_only_approved_claims_by_department_month_an
     from app.core.audit.repository import AuditRepository
     from app.core.files import FileService
     from app.core.files.repository import FileRepository
-    from app.modules.claims.ports import NoClosedMonths
     from app.modules.claims.repository import ClaimRepository
     from app.modules.claims.service import ClaimsService
     from app.shared.clock import get_clock
@@ -494,7 +518,7 @@ async def test_approved_spend_counts_only_approved_claims_by_department_month_an
         files = FileService(FileRepository(session), audit, clock, get_settings())
         approvals = ApprovalService(ApprovalRepository(session), clock)
         service = ClaimsService(
-            ClaimRepository(session), approvals, audit, files, NoClosedMonths(), clock
+            ClaimRepository(session), approvals, audit, files, ClosedMonthsFake(frozenset()), clock
         )
         rows = await service.approved_spend(from_month="2026-01", to_month="2026-12")
     assert len(rows) == 1

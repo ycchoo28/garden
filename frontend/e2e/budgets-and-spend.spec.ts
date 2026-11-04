@@ -44,7 +44,7 @@ test('a statement with a bad row cannot be saved, and a clean one can', async ({
 
   await input.setInputFiles({ name: 'good.csv', mimeType: 'text/csv', buffer: statementCsv('12.34') });
   await page.getByRole('button', { name: 'Check statement' }).click();
-  await expect(page.getByText('Every row passes')).toBeVisible();
+  await expect(page.getByText('Every row passes. You can save the whole statement.')).toBeVisible();
   await page.getByRole('button', { name: 'Save all rows' }).click();
   await expect(page.getByRole('status')).toContainText('Saved good.csv: 1 rows totalling 12.34 USD.');
 });

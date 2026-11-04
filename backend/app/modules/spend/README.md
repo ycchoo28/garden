@@ -5,12 +5,12 @@
 - Company card statements: each import, its rows, and whether it has been voided.
 - Closed months: a month that is closed can no longer change.
 - Schema: `spend`. Tables: `statement`, `statement_row`, `month_close`.
-- It does not own budgets, which are in `budgets`, or claims, which are not built yet.
+- It does not own budgets, which are in `budgets`, or claims, which are in `claims`.
 
 ## Interface
 
 Import from `app.modules.spend` only: `router`, `ROLES`, `PERMISSIONS`, `CATEGORIES`, `YEAR_MONTH_PATTERN`, `is_year_month`, `SpendService` and `get_spend_service`.
-`SpendService.is_month_closed(year_month)` says whether a month is closed.
+`SpendService.is_month_closed(year_month)` says whether a month is closed, and `SpendService.closed_months()` lists them. The claims module reads closed months this way.
 `SpendService.actual_spend(...)` returns actual spend per department, month and category from statements that are not voided.
 
 ## Key decisions

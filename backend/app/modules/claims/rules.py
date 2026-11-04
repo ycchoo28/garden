@@ -8,17 +8,10 @@ from datetime import date
 from enum import StrEnum
 
 from app.core.approvals import RunState
+from app.modules.spend import CATEGORIES as SPEND_CATEGORIES
 
-# The categories a line may use. The list is fixed, so spend reports stay comparable.
-CATEGORIES: tuple[str, ...] = (
-    "travel",
-    "meals",
-    "equipment",
-    "software",
-    "supplies",
-    "client",
-    "other",
-)
+# A line uses the spend categories, so claims and card spend count against the same budget lines.
+CATEGORIES: tuple[str, ...] = SPEND_CATEGORIES
 
 
 class ClaimStatus(StrEnum):

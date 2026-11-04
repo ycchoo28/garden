@@ -1,11 +1,14 @@
-"""Ports the claims module needs from modules that do not exist yet.
+"""Ports the claims module needs from other modules.
 
-The spend module will own closed months. Until it exists, the port answers that no month is closed,
-and tests put a fake in its place. The service depends on this port only, so swapping in the spend
-module changes one dependency and nothing else.
+The spend module owns closed months. The service depends on the port only, so tests can put a fake
+in its place.
 """
 
-from typing import Protocol
+from typing import Annotated, Protocol
+
+from fastapi import Depends
+
+from app.modules.spend import SpendService, get_spend_service
 
 
 class ClosedMonths(Protocol):
@@ -14,12 +17,18 @@ class ClosedMonths(Protocol):
         ...
 
 
-class NoClosedMonths:
-    """Stands in until the spend module can close months."""
+class SpendClosedMonths:
+    """Closed months as the spend module records them."""
+
+    def __init__(self, spend: SpendService) -> None:
+        self._spend = spend
 
     async def closed_among(self, months: frozenset[str]) -> frozenset[str]:
-        return frozenset()
+        closed = {close.year_month for close in await self._spend.closed_months()}
+        return months & closed
 
 
-def get_closed_months() -> ClosedMonths:
-    return NoClosedMonths()
+def get_closed_months(
+    spend: Annotated[SpendService, Depends(get_spend_service)],
+) -> ClosedMonths:
+    return SpendClosedMonths(spend)

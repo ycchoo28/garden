@@ -159,6 +159,5 @@ The terms are grouped by area, and the last section lists the words to avoid.
 | batch (for a statement import) | statement import | An import batch is a knowledge word, and statement imports have their own dry run. |
 | edit (for a budget line, claim or statement) | replace (budget line) or void (claim line, statement) | Business records are replaced or voided, never edited in place (ADR 0005). |
 | delete (for a claim, statement or budget line) | void (or replace) | Only stored files can be deleted, and voiding keeps the history. |
-| claim category (for a budget or a card row) | category | Budget and card rows use the spend list, and claim lines use their own list (see the README gaps). |
 | file (for a knowledge document) | document | A document is the knowledge item, and its batch file holds the uploaded bytes. |
 | endpoint (for an operation) | operation | An operation is a route's named contract entry, and the command and MCP server show it as a tool. |

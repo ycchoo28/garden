@@ -82,8 +82,13 @@ just demo     # starts Postgres and the fake sign-in provider, migrates, seeds F
 Open http://localhost:55173 and choose a seeded person.
 The fake sign-in page takes the person's email as the subject, so `marcus.lee@fernhill.example` signs in as Marcus Lee.
 
+`just demo` needs no model and no API key.
+It uses the local embedding server when `just embedding-up` is running, and otherwise starts the small fake embedding server that the tests use, and it prints which one it chose.
+The fake gives repeatable vectors, so search works but ranks by shared words rather than meaning.
+
 Use `just reset` to return to a clean seeded state.
-It asks you to type `reset`, then removes the local Postgres volume and seeds again.
+It asks you to type `reset`, then drops and recreates the dev database named in `.env`, migrates and loads the demo data again.
+It refuses a database whose name ends in `_test`.
 It does not remove the files in `var/files`, which are stored by their SHA-256, so they stay on disk.
 
 To run the browser tests as well, install Chromium once with `cd frontend && bunx playwright install chromium`.
@@ -130,7 +135,7 @@ Use a private window for each person, because each browser keeps one session.
    The agent cannot add a claim line either, because the receipt must be uploaded first and the command cannot upload files yet (see the gaps below).
    The person adds the line in the browser.
 4. **A gated month close (about 40 seconds).**
-   On a terminal as Lena Fischer, run:
+   On a terminal as Lena Fischer, close last month, which the demo seed leaves open (here 2026-10):
 
    ```sh
    garden spend month close --year-month 2026-10 --reason "October books final"
@@ -141,19 +146,18 @@ Use a private window for each person, because each browser keeps one session.
    The command then closes the month once, and `garden spend month list` shows it.
    If nobody approves within ten minutes, the close does not run.
 5. **Access-filtered policy search (about 40 seconds).**
-   Before this step, run `just models` and then `just embedding-up`, because the search calls the local embedding server.
-   As Marcus Lee, search for a term from the expense policy:
+   As Marcus Lee, search the expense policy:
 
    ```sh
-   garden knowledge search run --query "<a term from the expense policy>"
+   garden knowledge search run --query "receipts for claim lines"
    ```
 
-   Then search for a term that appears only in the finance procedures.
+   Then search for something that appears only in the finance procedures, such as `"month close procedure"`.
    Marcus Lee gets the expense policy and no finance procedure, because each collection's rules name the roles and departments that may read it.
    Lena Fischer, who holds `finance`, gets the finance procedure.
 
-Part of this demo relies on the demo seed: the claims in each state, the budgets, a year of card statements, and the two policy collections.
-The exact search terms and claim ids come from that seed.
+The demo seed adds twelve months of budget lines and card statements ending in the current month, with all but the last two months closed.
+It also adds claims in every status, including "Build farm hardware" waiting for the finance step, and ten policy documents in two collections.
 
 ## Plug the MCP server into Claude Code
 
@@ -188,7 +192,7 @@ Run `just` with no arguments to list them.
 | `just migrate` | Applies the Alembic migrations and creates the job queue tables when they are missing. |
 | `just seed` | Loads Fernhill Studio and the seeded people. It is safe to run again. |
 | `just dev` | Seeds, then runs the API with reload, the worker and the web app until Ctrl+C. |
-| `just reset` | Removes the local Postgres volume after you type `reset`, then seeds again. |
+| `just reset` | Drops and recreates the dev database after you type `reset`, then migrates and loads the demo data again. |
 | `just models` | Downloads the pinned bge-m3 model into `var/models` and checks its SHA-256. |
 | `just embedding-up` | Starts the local embedding server in Compose. It is not part of `just up`. |
 | `just quick` | Runs the fast checks: backend format, lint and types, import contracts, the agent package, frontend types, lint, unit tests and colour rules, the API contract, secrets, doc links and the deny-list. |
@@ -226,10 +230,6 @@ The fake sign-in provider accepts any subject, and the backend refuses it outsid
 
 - The `garden` command cannot send a file, so an agent cannot upload a receipt or import a card statement.
   The upload routes take multipart bodies, and the command only sends JSON.
-- A closed month does not yet stop claim changes.
-  Spend refuses imports and voids in a closed month, but the claims module still reads a stub for closed months.
-- Claim categories and budget categories are different lists.
-  A claim line in `client` or `supplies` never matches a budget line, so it appears in the variance report with no budget.
 - The model gateway forwards nothing until an upstream is configured, so the live agent chat is not part of the demo.
 
 ## Where to read next
