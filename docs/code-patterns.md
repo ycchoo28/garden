@@ -39,11 +39,14 @@ Permissions and roles live in the module's `permissions.py`.
 Every permission states `agent_allowed`, and there is no default.
 
 ```python
-PERMISSIONS = (Permission("audit.view", agent_allowed=True),)
-ROLES = (Role("finance", frozenset({"users.directory.view", "audit.view"})),)
+PERMISSIONS = (Permission("budgets.view", agent_allowed=True),)
+ROLES = (Role(FINANCE, frozenset({"budgets.view"})),)
 ```
 
-The app refuses to start when a role names a permission that no module declares.
+A business module grants its own permissions to the company's roles in its `ROLES`.
+Grants from different modules to the same role combine at startup.
+The role names come from the users core, and the app refuses to start when a module names any other role.
+The app also refuses to start when a role names a permission that no module declares.
 
 ## Errors
 

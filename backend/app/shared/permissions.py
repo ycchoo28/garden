@@ -22,6 +22,24 @@ class Permission:
     agent_allowed: bool
 
 
+class UnknownRoleError(RuntimeError):
+    """A module grants to a role the users core does not know. The app refuses to start."""
+
+
+def merge_roles(roles: Iterable[Role], known_names: Iterable[str]) -> tuple[Role, ...]:
+    """Combine the grants every module makes to the same role, so no module overwrites another.
+
+    A role name the users core does not know is refused, so a typo cannot grant nothing silently.
+    """
+    known = frozenset(known_names)
+    merged: dict[str, frozenset[str]] = {}
+    for role in roles:
+        if role.name not in known:
+            raise UnknownRoleError(f"Role {role.name} is not a role the users core knows.")
+        merged[role.name] = merged.get(role.name, frozenset()) | role.permissions
+    return tuple(Role(name, permissions) for name, permissions in merged.items())
+
+
 class UndeclaredPermissionError(RuntimeError):
     """A role grants a permission that no module declares. The app refuses to start."""
 

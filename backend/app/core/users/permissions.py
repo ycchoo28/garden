@@ -1,4 +1,4 @@
-"""The role catalogue. Roles grant permissions that modules declare; app startup checks every name.
+"""The role catalogue. Modules grant their permissions to these roles; startup checks every name.
 
 Roles are granted to people in the users schema. Each signed-in person also holds `employee`.
 """
@@ -8,21 +8,13 @@ from app.shared.permissions import Permission, Role
 EMPLOYEE = "employee"
 MANAGER = "manager"
 FINANCE = "finance"
+KNOWLEDGE_ADMIN = "knowledge_admin"
 ADMIN = "admin"
 
-# What finance and admin hold over budgets and card statements. The business modules declare them.
-# Role grants merge by name across modules, so the business grants are listed beside the others.
-FINANCE_BUDGET_AND_SPEND = frozenset(
-    {
-        "budgets.view",
-        "budgets.manage",
-        "spend.statement.view",
-        "spend.statement.import",
-        "spend.statement.void",
-        "spend.month.close",
-    }
-)
+# Every role a person can hold. A module may grant permissions only to these names.
+ROLE_NAMES: tuple[str, ...] = (EMPLOYEE, MANAGER, FINANCE, KNOWLEDGE_ADMIN, ADMIN)
 
+# What the core modules grant. Each business module grants its own permissions in its ROLES.
 ROLES: tuple[Role, ...] = (
     Role(
         EMPLOYEE,
@@ -37,25 +29,12 @@ ROLES: tuple[Role, ...] = (
                 "confirmations.decide",
                 "gateway.model.use",
                 "gateway.usage.view",
-                "claims.view",
-                "claims.create",
-                "claims.submit",
-                "claims.withdraw",
             }
         ),
     ),
-    Role(
-        MANAGER, frozenset({"users.directory.view", "files.view", "claims.decide", "budgets.view"})
-    ),
-    Role(
-        FINANCE,
-        frozenset({"users.directory.view", "audit.view", "files.view", "claims.decide"})
-        | FINANCE_BUDGET_AND_SPEND,
-    ),
-    Role(
-        ADMIN,
-        frozenset({"users.directory.view", "audit.view", "files.view"}) | FINANCE_BUDGET_AND_SPEND,
-    ),
+    Role(MANAGER, frozenset({"users.directory.view"})),
+    Role(FINANCE, frozenset({"users.directory.view", "audit.view"})),
+    Role(ADMIN, frozenset({"users.directory.view", "audit.view"})),
 )
 
 PERMISSIONS: tuple[Permission, ...] = (

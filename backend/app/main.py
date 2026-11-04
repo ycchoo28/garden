@@ -3,15 +3,23 @@
 from fastapi import FastAPI
 
 from app.composition import MODULES, InstalledModule
-from app.core.users import advertise_permissions
+from app.core.users import ROLE_NAMES, advertise_permissions
 from app.shared.contract import install_contract_headers
 from app.shared.errors import PROBLEM_RESPONSES, install_problem_handlers
 from app.shared.operations import op
-from app.shared.permissions import Permission, Role, check_roles_declare_permissions
+from app.shared.permissions import (
+    Permission,
+    Role,
+    check_roles_declare_permissions,
+    merge_roles,
+)
 
 
 def create_app(modules: tuple[InstalledModule, ...] = MODULES) -> FastAPI:
-    roles: tuple[Role, ...] = tuple(role for installed in modules for role in installed.roles)
+    # Each module grants its own permissions to the company's roles; grants to one role combine.
+    roles: tuple[Role, ...] = merge_roles(
+        (role for installed in modules for role in installed.roles), ROLE_NAMES
+    )
     permissions: tuple[Permission, ...] = tuple(
         permission for installed in modules for permission in installed.permissions
     )

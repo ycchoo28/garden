@@ -1,9 +1,19 @@
-"""Permissions of the spend module. The roles that grant them are in the users module."""
+"""Permissions of the spend module, and the roles it grants them to."""
 
+from app.core.users import ADMIN, FINANCE
 from app.shared.permissions import Permission, Role
 
-# Finance and admin hold these. Their grants sit with the other role grants in the users module.
-ROLES: tuple[Role, ...] = ()
+# Finance and admin hold every spend permission.
+_FINANCE_SPEND = frozenset(
+    {
+        "spend.statement.view",
+        "spend.statement.import",
+        "spend.statement.void",
+        "spend.month.close",
+    }
+)
+
+ROLES: tuple[Role, ...] = (Role(FINANCE, _FINANCE_SPEND), Role(ADMIN, _FINANCE_SPEND))
 
 # Every permission a role names must be declared here, or the app refuses to start.
 # Agents may hold all four. Void and month close also need the person's confirmation.
