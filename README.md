@@ -111,6 +111,7 @@ Each signed-in person also holds `employee`, which the table does not repeat.
 | Dev Admin | `dev.admin@fernhill.example` | Operations | admin, knowledge_admin | administration and a second knowledge approver |
 | Noor Haddad | `noor.haddad@fernhill.example` | Operations | knowledge_admin | knowledge batches |
 
+The fake sign-in page lists these people, so you sign in with one click and type nothing.
 Use a private window for each person, because each browser keeps one session.
 
 1. **Claim flow (about one minute).**
@@ -224,7 +225,8 @@ All of these bind to 127.0.0.1.
 | 55081 | The fake OpenID Connect provider. |
 | 55083 | The llama.cpp embedding server, when you run `just embedding-up`. |
 
-The fake sign-in provider accepts any subject, and the backend refuses it outside the `dev` environment.
+The fake sign-in provider shows a button for each seeded person, from `dev/oidc/login.html`, and the backend refuses it outside the `dev` environment.
+Add a button there when you add a person to the seed.
 
 ## Known gaps
 

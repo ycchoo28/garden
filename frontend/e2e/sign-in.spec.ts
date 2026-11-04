@@ -13,7 +13,7 @@ test('the signed-out page is shown to a visitor with no session', async ({ page 
 test('a visitor with no session is sent to the fake sign-in provider', async ({ page }) => {
   await page.goto('/');
   await page.waitForURL((url) => url.href.startsWith(OIDC_URL));
-  await expect(page.locator('input[name="username"]')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Dev Admin' })).toBeVisible();
 });
 
 test('a seeded person signs in and sees their name and permissions', async ({ page }) => {

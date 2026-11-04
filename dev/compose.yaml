@@ -25,6 +25,7 @@ services:
       JSON_CONFIG_PATH: /config/config.json
     volumes:
       - ./oidc/config.json:/config/config.json:ro
+      - ./oidc/login.html:/config/login.html:ro
     ports:
       - "127.0.0.1:${GARDEN_DEV_OIDC_PORT:-55081}:8080"
 

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in - Fernhill dev provider</title>
+  <style>
+    :root { color-scheme: light dark; --bg: #f6f5f1; --card: #fff; --ink: #1d2320; --muted: #5d6661; --line: #dcdcd4; --accent: #2f6b4f; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #151816; --card: #1e2320; --ink: #e8ebe8; --muted: #9aa39e; --line: #333a36; --accent: #7cc4a0; } }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, sans-serif; }
+    main { max-width: 640px; margin: 40px auto; padding: 0 16px; }
+    h1 { font-size: 1.4rem; margin: 0 0 4px; }
+    p { color: var(--muted); margin: 0 0 24px; }
+    h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 20px 0 8px; }
+    form { margin: 0 0 8px; }
+    button { width: 100%; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+    button:hover, button:focus-visible { border-color: var(--accent); outline: none; }
+    .name { font-weight: 600; }
+    .role { color: var(--muted); font-size: .9rem; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Sign in to Garden</h1>
+  <p>This is the local fake identity provider. Pick a seeded person to sign in as them.</p>
+
+  <h2>Design</h2>
+  <form method="post"><input type="hidden" name="username" value="marcus.lee@fernhill.example"><input type="hidden" name="claims" value='{"sub":"marcus.lee@fernhill.example","email":"marcus.lee@fernhill.example","name":"Marcus Lee"}'><button type="submit"><span class="name">Marcus Lee</span><span class="role">employee</span></button></form>
+  <form method="post"><input type="hidden" name="username" value="priya.nair@fernhill.example"><input type="hidden" name="claims" value='{"sub":"priya.nair@fernhill.example","email":"priya.nair@fernhill.example","name":"Priya Nair"}'><button type="submit"><span class="name">Priya Nair</span><span class="role">manager</span></button></form>
+
+  <h2>Engineering</h2>
+  <form method="post"><input type="hidden" name="username" value="ana.costa@fernhill.example"><input type="hidden" name="claims" value='{"sub":"ana.costa@fernhill.example","email":"ana.costa@fernhill.example","name":"Ana Costa"}'><button type="submit"><span class="name">Ana Costa</span><span class="role">manager</span></button></form>
+  <form method="post"><input type="hidden" name="username" value="tomas.berg@fernhill.example"><input type="hidden" name="claims" value='{"sub":"tomas.berg@fernhill.example","email":"tomas.berg@fernhill.example","name":"Tomas Berg"}'><button type="submit"><span class="name">Tomas Berg</span><span class="role">employee</span></button></form>
+
+  <h2>Marketing</h2>
+  <form method="post"><input type="hidden" name="username" value="mei.tan@fernhill.example"><input type="hidden" name="claims" value='{"sub":"mei.tan@fernhill.example","email":"mei.tan@fernhill.example","name":"Mei Tan"}'><button type="submit"><span class="name">Mei Tan</span><span class="role">manager</span></button></form>
+  <form method="post"><input type="hidden" name="username" value="sam.okafor@fernhill.example"><input type="hidden" name="claims" value='{"sub":"sam.okafor@fernhill.example","email":"sam.okafor@fernhill.example","name":"Sam Okafor"}'><button type="submit"><span class="name">Sam Okafor</span><span class="role">employee</span></button></form>
+
+  <h2>Operations</h2>
+  <form method="post"><input type="hidden" name="username" value="lena.fischer@fernhill.example"><input type="hidden" name="claims" value='{"sub":"lena.fischer@fernhill.example","email":"lena.fischer@fernhill.example","name":"Lena Fischer"}'><button type="submit"><span class="name">Lena Fischer</span><span class="role">finance</span></button></form>
+  <form method="post"><input type="hidden" name="username" value="dev.admin@fernhill.example"><input type="hidden" name="claims" value='{"sub":"dev.admin@fernhill.example","email":"dev.admin@fernhill.example","name":"Dev Admin"}'><button type="submit"><span class="name">Dev Admin</span><span class="role">admin, knowledge admin</span></button></form>
+  <form method="post"><input type="hidden" name="username" value="noor.haddad@fernhill.example"><input type="hidden" name="claims" value='{"sub":"noor.haddad@fernhill.example","email":"noor.haddad@fernhill.example","name":"Noor Haddad"}'><button type="submit"><span class="name">Noor Haddad</span><span class="role">knowledge admin</span></button></form>
+</main>
+</body>
+</html>
