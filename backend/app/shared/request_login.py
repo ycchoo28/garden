@@ -5,6 +5,7 @@ it when it records a save. Modules change nothing: every save made through a CLI
 the same way, with the login's device and creation time.
 """
 
+import uuid
 from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import datetime
@@ -19,6 +20,8 @@ class RequestLogin:
     via: str
     device: str | None = None
     created_at: datetime | None = None
+    # The CLI login's id, so the model gateway can count one login's requests on their own.
+    cli_login_id: uuid.UUID | None = None
     # Set when a CLI login's critical action ran under a confirmation the person approved in the
     # browser: the confirmation's id and when they approved it.
     confirmation_id: str | None = None

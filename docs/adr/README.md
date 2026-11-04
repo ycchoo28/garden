@@ -26,3 +26,6 @@ Records are numbered in the order they were made, and a later record may replace
 | [0019](0019-month-close.md) | Closing a month freezes its spend |
 | [0020](0020-pgvector-and-local-embeddings.md) | Vectors in pgvector, and embeddings from a local model |
 | [0021](0021-hybrid-search-with-rrf.md) | Hybrid search fused with reciprocal rank fusion |
+| [0022](0022-agent-login-permissions.md) | A CLI login holds the person's permissions minus the person-only ones |
+| [0023](0023-cli-discovery-and-mcp.md) | The command and its MCP server come from the published contract |
+| [0024](0024-model-gateway.md) | A model gateway with limits per login and per person, and counts only |

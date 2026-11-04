@@ -557,6 +557,131 @@
         "title": "ClaimSummaryOut",
         "type": "object"
       },
+      "CliLoginCreated": {
+        "description": "The new CLI login. `token` is shown once, and only its hash is kept.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "device": {
+            "title": "Device",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "device",
+          "created_at",
+          "token"
+        ],
+        "title": "CliLoginCreated",
+        "type": "object"
+      },
+      "CliLoginIn": {
+        "description": "What the CLI sends after its browser returned the code: the PKCE verifier and the nonce.",
+        "properties": {
+          "code": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          },
+          "code_verifier": {
+            "maxLength": 128,
+            "minLength": 43,
+            "title": "Code Verifier",
+            "type": "string"
+          },
+          "device": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Device",
+            "type": "string"
+          },
+          "nonce": {
+            "maxLength": 128,
+            "minLength": 16,
+            "title": "Nonce",
+            "type": "string"
+          },
+          "redirect_uri": {
+            "maxLength": 300,
+            "title": "Redirect Uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "code_verifier",
+          "redirect_uri",
+          "nonce",
+          "device"
+        ],
+        "title": "CliLoginIn",
+        "type": "object"
+      },
+      "CliLoginOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "device": {
+            "title": "Device",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          }
+        },
+        "required": [
+          "id",
+          "device",
+          "created_at",
+          "last_used_at",
+          "revoked_at"
+        ],
+        "title": "CliLoginOut",
+        "type": "object"
+      },
       "CloseIn": {
         "properties": {
           "reason": {
@@ -693,6 +818,10 @@
             "title": "Id",
             "type": "string"
           },
+          "method": {
+            "title": "Method",
+            "type": "string"
+          },
           "operation": {
             "title": "Operation",
             "type": "string"
@@ -700,11 +829,29 @@
           "status": {
             "title": "Status",
             "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
           }
         },
         "required": [
           "id",
           "operation",
+          "method",
+          "target",
+          "summary",
           "status",
           "expires_at"
         ],
@@ -1470,6 +1617,44 @@
           "url"
         ],
         "title": "UploadedFileOut",
+        "type": "object"
+      },
+      "UsageTodayOut": {
+        "properties": {
+          "completion_tokens": {
+            "title": "Completion Tokens",
+            "type": "integer"
+          },
+          "day": {
+            "title": "Day",
+            "type": "string"
+          },
+          "prompt_tokens": {
+            "title": "Prompt Tokens",
+            "type": "integer"
+          },
+          "requests": {
+            "title": "Requests",
+            "type": "integer"
+          },
+          "tokens_limit": {
+            "title": "Tokens Limit",
+            "type": "integer"
+          },
+          "total_tokens": {
+            "title": "Total Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "day",
+          "requests",
+          "prompt_tokens",
+          "completion_tokens",
+          "total_tokens",
+          "tokens_limit"
+        ],
+        "title": "UsageTodayOut",
         "type": "object"
       },
       "VarianceOut": {
@@ -2690,6 +2875,242 @@
         }
       }
     },
+    "/api/cli-logins": {
+      "get": {
+        "description": "List the caller's CLI logins, newest first, with their state.",
+        "operationId": "users.cli_login.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CliLoginOut"
+                  },
+                  "title": "Response Users.Cli Login.List",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "List Cli Logins",
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": true
+        }
+      },
+      "post": {
+        "description": "Finish a CLI login with the code the browser returned. The token is shown once.",
+        "operationId": "users.cli_login.create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CliLoginIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CliLoginCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Create Cli Login",
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": false
+        }
+      }
+    },
+    "/api/cli-logins/authorize": {
+      "get": {
+        "description": "Start a CLI login. Redirects the browser to the identity provider, which returns the code to a listener on this machine.",
+        "operationId": "users.cli_login.start",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "redirect_uri",
+            "required": true,
+            "schema": {
+              "maxLength": 300,
+              "title": "Redirect Uri",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "title": "State",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "nonce",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "title": "Nonce",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "code_challenge",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 43,
+              "title": "Code Challenge",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Start Cli Login",
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": false
+        }
+      }
+    },
+    "/api/cli-logins/{login_id}": {
+      "delete": {
+        "description": "Revoke one of the caller's CLI logins. Only a browser sign-in may do this.",
+        "operationId": "users.cli_login.revoke",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "login_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Login Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Revoke Cli Login",
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": false
+        }
+      }
+    },
     "/api/confirmations/{confirmation_id}": {
       "get": {
         "description": "Check whether the person has approved a confirmation.",
@@ -2867,6 +3288,52 @@
       }
     },
     "/api/files/{sha256}": {
+      "delete": {
+        "description": "Delete a file you first uploaded. The person must approve it in the browser first.",
+        "operationId": "files.file.delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sha256",
+            "required": true,
+            "schema": {
+              "title": "Sha256",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Delete File",
+        "x-agent": {
+          "confirm": true,
+          "save": true,
+          "tool": true
+        }
+      },
       "get": {
         "description": "Download a file by its SHA-256.",
         "operationId": "files.file.read",
@@ -2916,6 +3383,154 @@
           "confirm": false,
           "save": true,
           "tool": true
+        }
+      }
+    },
+    "/api/gateway/usage/today": {
+      "get": {
+        "description": "Read today's model requests and tokens for the signed-in person. Counts only.",
+        "operationId": "gateway.usage.read",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageTodayOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Usage Today",
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": true
+        }
+      }
+    },
+    "/api/gateway/v1/chat/completions": {
+      "post": {
+        "description": "Send an OpenAI-compatible chat completion to a model on the gateway allowlist.",
+        "operationId": "gateway.model.complete",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Gateway.Model.Complete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Chat Completions",
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": false
+        }
+      }
+    },
+    "/api/gateway/v1/models": {
+      "get": {
+        "description": "List the models the gateway forwards.",
+        "operationId": "gateway.model.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Gateway.Model.List",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "List Models",
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": false
         }
       }
     },

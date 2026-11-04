@@ -3,8 +3,8 @@
 import { queryOptions, type UseMutationOptions } from '@tanstack/vue-query';
 
 import { client } from '../client.gen';
-import { auditEventList, budgetsCategoryList, budgetsLineCreate, budgetsLineHistory, budgetsLineList, budgetsLineReplace, budgetsVarianceRead, claimsClaimCreate, claimsClaimDecide, claimsClaimList, claimsClaimRead, claimsClaimSubmit, claimsClaimWithdraw, claimsDecisionQueue, claimsLineAdd, claimsLineVoid, confirmationsRequestDecide, confirmationsRequestRead, filesFileRead, filesFileUpload, knowledgeBatchCreate, knowledgeBatchPrepare, knowledgeBatchPreview, knowledgeBatchRead, knowledgeBatchUpload, knowledgeCollectionCreate, knowledgeCollectionList, knowledgeCollectionRead, knowledgeStatusRead, type Options, platformHealthRead, spendMonthClose, spendMonthList, spendStatementImport, spendStatementList, spendStatementPreview, spendStatementVoid, usersDepartmentList, usersDirectoryList, usersSelfRead, usersSessionEnd, usersSessionFinish, usersSessionStart } from '../sdk.gen';
-import type { AuditEventListData, AuditEventListError, AuditEventListResponse, BudgetsCategoryListData, BudgetsCategoryListError, BudgetsCategoryListResponse, BudgetsLineCreateData, BudgetsLineCreateError, BudgetsLineCreateResponse, BudgetsLineHistoryData, BudgetsLineHistoryError, BudgetsLineHistoryResponse, BudgetsLineListData, BudgetsLineListError, BudgetsLineListResponse, BudgetsLineReplaceData, BudgetsLineReplaceError, BudgetsLineReplaceResponse, BudgetsVarianceReadData, BudgetsVarianceReadError, BudgetsVarianceReadResponse, ClaimsClaimCreateData, ClaimsClaimCreateError, ClaimsClaimCreateResponse, ClaimsClaimDecideData, ClaimsClaimDecideError, ClaimsClaimDecideResponse, ClaimsClaimListData, ClaimsClaimListError, ClaimsClaimListResponse, ClaimsClaimReadData, ClaimsClaimReadError, ClaimsClaimReadResponse, ClaimsClaimSubmitData, ClaimsClaimSubmitError, ClaimsClaimSubmitResponse, ClaimsClaimWithdrawData, ClaimsClaimWithdrawError, ClaimsClaimWithdrawResponse, ClaimsDecisionQueueData, ClaimsDecisionQueueError, ClaimsDecisionQueueResponse, ClaimsLineAddData, ClaimsLineAddError, ClaimsLineAddResponse, ClaimsLineVoidData, ClaimsLineVoidError, ClaimsLineVoidResponse, ConfirmationsRequestDecideData, ConfirmationsRequestDecideError, ConfirmationsRequestDecideResponse, ConfirmationsRequestReadData, ConfirmationsRequestReadError, ConfirmationsRequestReadResponse, FilesFileReadData, FilesFileReadError, FilesFileUploadData, FilesFileUploadError, FilesFileUploadResponse, KnowledgeBatchCreateData, KnowledgeBatchCreateError, KnowledgeBatchCreateResponse, KnowledgeBatchPrepareData, KnowledgeBatchPrepareError, KnowledgeBatchPrepareResponse, KnowledgeBatchPreviewData, KnowledgeBatchPreviewError, KnowledgeBatchPreviewResponse, KnowledgeBatchReadData, KnowledgeBatchReadError, KnowledgeBatchReadResponse, KnowledgeBatchUploadData, KnowledgeBatchUploadError, KnowledgeBatchUploadResponse, KnowledgeCollectionCreateData, KnowledgeCollectionCreateError, KnowledgeCollectionCreateResponse, KnowledgeCollectionListData, KnowledgeCollectionListError, KnowledgeCollectionListResponse, KnowledgeCollectionReadData, KnowledgeCollectionReadError, KnowledgeCollectionReadResponse, KnowledgeStatusReadData, KnowledgeStatusReadError, KnowledgeStatusReadResponse, PlatformHealthReadData, PlatformHealthReadError, PlatformHealthReadResponse, SpendMonthCloseData, SpendMonthCloseError, SpendMonthCloseResponse, SpendMonthListData, SpendMonthListError, SpendMonthListResponse, SpendStatementImportData, SpendStatementImportError, SpendStatementImportResponse, SpendStatementListData, SpendStatementListError, SpendStatementListResponse, SpendStatementPreviewData, SpendStatementPreviewError, SpendStatementPreviewResponse, SpendStatementVoidData, SpendStatementVoidError, SpendStatementVoidResponse, UsersDepartmentListData, UsersDepartmentListError, UsersDepartmentListResponse, UsersDirectoryListData, UsersDirectoryListError, UsersDirectoryListResponse, UsersSelfReadData, UsersSelfReadError, UsersSelfReadResponse, UsersSessionEndData, UsersSessionEndError, UsersSessionEndResponse, UsersSessionFinishData, UsersSessionFinishError, UsersSessionStartData, UsersSessionStartError } from '../types.gen';
+import { auditEventList, budgetsCategoryList, budgetsLineCreate, budgetsLineHistory, budgetsLineList, budgetsLineReplace, budgetsVarianceRead, claimsClaimCreate, claimsClaimDecide, claimsClaimList, claimsClaimRead, claimsClaimSubmit, claimsClaimWithdraw, claimsDecisionQueue, claimsLineAdd, claimsLineVoid, confirmationsRequestDecide, confirmationsRequestRead, filesFileDelete, filesFileRead, filesFileUpload, gatewayModelComplete, gatewayModelList, gatewayUsageRead, knowledgeBatchCreate, knowledgeBatchPrepare, knowledgeBatchPreview, knowledgeBatchRead, knowledgeBatchUpload, knowledgeCollectionCreate, knowledgeCollectionList, knowledgeCollectionRead, knowledgeStatusRead, type Options, platformHealthRead, spendMonthClose, spendMonthList, spendStatementImport, spendStatementList, spendStatementPreview, spendStatementVoid, usersCliLoginCreate, usersCliLoginList, usersCliLoginRevoke, usersCliLoginStart, usersDepartmentList, usersDirectoryList, usersSelfRead, usersSessionEnd, usersSessionFinish, usersSessionStart } from '../sdk.gen';
+import type { AuditEventListData, AuditEventListError, AuditEventListResponse, BudgetsCategoryListData, BudgetsCategoryListError, BudgetsCategoryListResponse, BudgetsLineCreateData, BudgetsLineCreateError, BudgetsLineCreateResponse, BudgetsLineHistoryData, BudgetsLineHistoryError, BudgetsLineHistoryResponse, BudgetsLineListData, BudgetsLineListError, BudgetsLineListResponse, BudgetsLineReplaceData, BudgetsLineReplaceError, BudgetsLineReplaceResponse, BudgetsVarianceReadData, BudgetsVarianceReadError, BudgetsVarianceReadResponse, ClaimsClaimCreateData, ClaimsClaimCreateError, ClaimsClaimCreateResponse, ClaimsClaimDecideData, ClaimsClaimDecideError, ClaimsClaimDecideResponse, ClaimsClaimListData, ClaimsClaimListError, ClaimsClaimListResponse, ClaimsClaimReadData, ClaimsClaimReadError, ClaimsClaimReadResponse, ClaimsClaimSubmitData, ClaimsClaimSubmitError, ClaimsClaimSubmitResponse, ClaimsClaimWithdrawData, ClaimsClaimWithdrawError, ClaimsClaimWithdrawResponse, ClaimsDecisionQueueData, ClaimsDecisionQueueError, ClaimsDecisionQueueResponse, ClaimsLineAddData, ClaimsLineAddError, ClaimsLineAddResponse, ClaimsLineVoidData, ClaimsLineVoidError, ClaimsLineVoidResponse, ConfirmationsRequestDecideData, ConfirmationsRequestDecideError, ConfirmationsRequestDecideResponse, ConfirmationsRequestReadData, ConfirmationsRequestReadError, ConfirmationsRequestReadResponse, FilesFileDeleteData, FilesFileDeleteError, FilesFileDeleteResponse, FilesFileReadData, FilesFileReadError, FilesFileUploadData, FilesFileUploadError, FilesFileUploadResponse, GatewayModelCompleteData, GatewayModelCompleteError, GatewayModelCompleteResponse, GatewayModelListData, GatewayModelListError, GatewayModelListResponse, GatewayUsageReadData, GatewayUsageReadError, GatewayUsageReadResponse, KnowledgeBatchCreateData, KnowledgeBatchCreateError, KnowledgeBatchCreateResponse, KnowledgeBatchPrepareData, KnowledgeBatchPrepareError, KnowledgeBatchPrepareResponse, KnowledgeBatchPreviewData, KnowledgeBatchPreviewError, KnowledgeBatchPreviewResponse, KnowledgeBatchReadData, KnowledgeBatchReadError, KnowledgeBatchReadResponse, KnowledgeBatchUploadData, KnowledgeBatchUploadError, KnowledgeBatchUploadResponse, KnowledgeCollectionCreateData, KnowledgeCollectionCreateError, KnowledgeCollectionCreateResponse, KnowledgeCollectionListData, KnowledgeCollectionListError, KnowledgeCollectionListResponse, KnowledgeCollectionReadData, KnowledgeCollectionReadError, KnowledgeCollectionReadResponse, KnowledgeStatusReadData, KnowledgeStatusReadError, KnowledgeStatusReadResponse, PlatformHealthReadData, PlatformHealthReadError, PlatformHealthReadResponse, SpendMonthCloseData, SpendMonthCloseError, SpendMonthCloseResponse, SpendMonthListData, SpendMonthListError, SpendMonthListResponse, SpendStatementImportData, SpendStatementImportError, SpendStatementImportResponse, SpendStatementListData, SpendStatementListError, SpendStatementListResponse, SpendStatementPreviewData, SpendStatementPreviewError, SpendStatementPreviewResponse, SpendStatementVoidData, SpendStatementVoidError, SpendStatementVoidResponse, UsersCliLoginCreateData, UsersCliLoginCreateError, UsersCliLoginCreateResponse, UsersCliLoginListData, UsersCliLoginListError, UsersCliLoginListResponse, UsersCliLoginRevokeData, UsersCliLoginRevokeError, UsersCliLoginRevokeResponse, UsersCliLoginStartData, UsersCliLoginStartError, UsersDepartmentListData, UsersDepartmentListError, UsersDepartmentListResponse, UsersDirectoryListData, UsersDirectoryListError, UsersDirectoryListResponse, UsersSelfReadData, UsersSelfReadError, UsersSelfReadResponse, UsersSessionEndData, UsersSessionEndError, UsersSessionEndResponse, UsersSessionFinishData, UsersSessionFinishError, UsersSessionStartData, UsersSessionStartError } from '../types.gen';
 
 export type QueryKey<TOptions extends Options> = [
     Pick<TOptions, 'baseUrl' | 'body' | 'headers' | 'path' | 'query'> & {
@@ -351,6 +351,84 @@ export const claimsClaimWithdrawMutation = (options?: Partial<Options<ClaimsClai
     return mutationOptions;
 };
 
+export const usersCliLoginListQueryKey = (options?: Options<UsersCliLoginListData>) => createQueryKey('usersCliLoginList', options);
+
+/**
+ * List Cli Logins
+ *
+ * List the caller's CLI logins, newest first, with their state.
+ */
+export const usersCliLoginListOptions = (options?: Options<UsersCliLoginListData>) => queryOptions<UsersCliLoginListResponse, UsersCliLoginListError, UsersCliLoginListResponse, ReturnType<typeof usersCliLoginListQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await usersCliLoginList({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: usersCliLoginListQueryKey(options)
+});
+
+/**
+ * Create Cli Login
+ *
+ * Finish a CLI login with the code the browser returned. The token is shown once.
+ */
+export const usersCliLoginCreateMutation = (options?: Partial<Options<UsersCliLoginCreateData>>): UseMutationOptions<UsersCliLoginCreateResponse, UsersCliLoginCreateError, Options<UsersCliLoginCreateData>> => {
+    const mutationOptions: UseMutationOptions<UsersCliLoginCreateResponse, UsersCliLoginCreateError, Options<UsersCliLoginCreateData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await usersCliLoginCreate({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+export const usersCliLoginStartQueryKey = (options: Options<UsersCliLoginStartData>) => createQueryKey('usersCliLoginStart', options);
+
+/**
+ * Start Cli Login
+ *
+ * Start a CLI login. Redirects the browser to the identity provider, which returns the code to a listener on this machine.
+ */
+export const usersCliLoginStartOptions = (options: Options<UsersCliLoginStartData>) => queryOptions<unknown, UsersCliLoginStartError, unknown, ReturnType<typeof usersCliLoginStartQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await usersCliLoginStart({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: usersCliLoginStartQueryKey(options)
+});
+
+/**
+ * Revoke Cli Login
+ *
+ * Revoke one of the caller's CLI logins. Only a browser sign-in may do this.
+ */
+export const usersCliLoginRevokeMutation = (options?: Partial<Options<UsersCliLoginRevokeData>>): UseMutationOptions<UsersCliLoginRevokeResponse, UsersCliLoginRevokeError, Options<UsersCliLoginRevokeData>> => {
+    const mutationOptions: UseMutationOptions<UsersCliLoginRevokeResponse, UsersCliLoginRevokeError, Options<UsersCliLoginRevokeData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await usersCliLoginRevoke({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
 export const confirmationsRequestReadQueryKey = (options: Options<ConfirmationsRequestReadData>) => createQueryKey('confirmationsRequestRead', options);
 
 /**
@@ -409,6 +487,25 @@ export const filesFileUploadMutation = (options?: Partial<Options<FilesFileUploa
     return mutationOptions;
 };
 
+/**
+ * Delete File
+ *
+ * Delete a file you first uploaded. The person must approve it in the browser first.
+ */
+export const filesFileDeleteMutation = (options?: Partial<Options<FilesFileDeleteData>>): UseMutationOptions<FilesFileDeleteResponse, FilesFileDeleteError, Options<FilesFileDeleteData>> => {
+    const mutationOptions: UseMutationOptions<FilesFileDeleteResponse, FilesFileDeleteError, Options<FilesFileDeleteData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await filesFileDelete({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
 export const filesFileReadQueryKey = (options: Options<FilesFileReadData>) => createQueryKey('filesFileRead', options);
 
 /**
@@ -427,6 +524,65 @@ export const filesFileReadOptions = (options: Options<FilesFileReadData>) => que
         return data;
     },
     queryKey: filesFileReadQueryKey(options)
+});
+
+export const gatewayUsageReadQueryKey = (options?: Options<GatewayUsageReadData>) => createQueryKey('gatewayUsageRead', options);
+
+/**
+ * Usage Today
+ *
+ * Read today's model requests and tokens for the signed-in person. Counts only.
+ */
+export const gatewayUsageReadOptions = (options?: Options<GatewayUsageReadData>) => queryOptions<GatewayUsageReadResponse, GatewayUsageReadError, GatewayUsageReadResponse, ReturnType<typeof gatewayUsageReadQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await gatewayUsageRead({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: gatewayUsageReadQueryKey(options)
+});
+
+/**
+ * Chat Completions
+ *
+ * Send an OpenAI-compatible chat completion to a model on the gateway allowlist.
+ */
+export const gatewayModelCompleteMutation = (options?: Partial<Options<GatewayModelCompleteData>>): UseMutationOptions<GatewayModelCompleteResponse, GatewayModelCompleteError, Options<GatewayModelCompleteData>> => {
+    const mutationOptions: UseMutationOptions<GatewayModelCompleteResponse, GatewayModelCompleteError, Options<GatewayModelCompleteData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await gatewayModelComplete({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+export const gatewayModelListQueryKey = (options?: Options<GatewayModelListData>) => createQueryKey('gatewayModelList', options);
+
+/**
+ * List Models
+ *
+ * List the models the gateway forwards.
+ */
+export const gatewayModelListOptions = (options?: Options<GatewayModelListData>) => queryOptions<GatewayModelListResponse, GatewayModelListError, GatewayModelListResponse, ReturnType<typeof gatewayModelListQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await gatewayModelList({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: gatewayModelListQueryKey(options)
 });
 
 export const platformHealthReadQueryKey = (options?: Options<PlatformHealthReadData>) => createQueryKey('platformHealthRead', options);

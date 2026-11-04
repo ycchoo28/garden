@@ -9,7 +9,14 @@ from fastapi import Depends
 from sqlalchemy import delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.users.models import Department, Person, RoleGrant, SignInAttempt, WebSession
+from app.core.users.models import (
+    CliLogin,
+    Department,
+    Person,
+    RoleGrant,
+    SignInAttempt,
+    WebSession,
+)
 from app.shared.db import get_session
 
 
@@ -86,6 +93,37 @@ class UserRepository:
     async def delete_web_session(self, token_hash: str) -> None:
         _ = await self._session.execute(
             delete(WebSession).where(WebSession.token_hash == token_hash)
+        )
+
+    def add_cli_login(self, row: CliLogin) -> None:
+        self._session.add(row)
+
+    async def cli_login_with_person(self, token_hash: str) -> tuple[CliLogin, Person] | None:
+        row = (
+            await self._session.execute(
+                select(CliLogin, Person)
+                .join(Person, Person.id == CliLogin.person_id)
+                .where(CliLogin.token_hash == token_hash)
+            )
+        ).first()
+        return None if row is None else (row[0], row[1])
+
+    async def cli_logins_of(self, person_id: uuid.UUID) -> Sequence[CliLogin]:
+        return (
+            await self._session.scalars(
+                select(CliLogin)
+                .where(CliLogin.person_id == person_id)
+                .order_by(CliLogin.created_at.desc())
+            )
+        ).all()
+
+    async def cli_login_of(self, person_id: uuid.UUID, login_id: uuid.UUID) -> CliLogin | None:
+        row = await self._session.get(CliLogin, login_id)
+        return row if row is not None and row.person_id == person_id else None
+
+    async def touch_cli_login(self, token_hash: str, seen_at: datetime) -> None:
+        _ = await self._session.execute(
+            update(CliLogin).where(CliLogin.token_hash == token_hash).values(last_used_at=seen_at)
         )
 
 

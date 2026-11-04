@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useQuery } from '@tanstack/vue-query';
 import { computed } from 'vue';
+import { RouterLink } from 'vue-router';
 
 import { usersSelfReadOptions } from '../../api/generated/@tanstack/vue-query.gen';
 import PageHeader from '../../shared/ui/PageHeader.vue';
@@ -40,6 +41,29 @@ const roles = computed(() => me.value?.roles ?? []);
           :key="role"
         >
           <span class="font-medium">{{ role }}</span>
+        </li>
+      </ul>
+    </SectionCard>
+    <SectionCard
+      title="Your tools"
+      description="Where you manage the garden command and the model gateway."
+    >
+      <ul class="space-y-2">
+        <li>
+          <RouterLink
+            class="font-medium text-primary underline-offset-4 hover:underline"
+            to="/cli-logins"
+          >
+            Command line sign-ins
+          </RouterLink>
+        </li>
+        <li>
+          <RouterLink
+            class="font-medium text-primary underline-offset-4 hover:underline"
+            to="/usage"
+          >
+            Model usage today
+          </RouterLink>
         </li>
       </ul>
     </SectionCard>

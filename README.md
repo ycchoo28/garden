@@ -31,6 +31,19 @@ The fake sign-in page takes the person's email as the subject, for example `dev.
 Every port is bound to 127.0.0.1.
 The API runs on 55000, the web app on 55173, the fake identity provider on 55081 and Postgres on 55432.
 
+## Use the garden command
+
+The `garden` command signs a device in as you, so an agent on that device can use the tools you may use.
+Run these from the repository root after `just setup`:
+
+```sh
+uv tool install ./agent   # install the command
+garden login              # open the sign-in link, then approve it in the browser
+garden tools              # list the tools you may use
+```
+
+Your signed-in devices are listed at http://localhost:55173/cli-logins, where you can revoke one.
+
 ## Check it
 
 - `just quick` runs the fast checks: backend format, lint, strict types and import contracts; frontend types, lint, unit tests and colour rules; the API contract; secrets; doc links; and the deny-list.

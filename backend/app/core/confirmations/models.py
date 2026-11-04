@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, MetaData, String
+from sqlalchemy import DateTime, MetaData, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from app.shared.db import NAMING_CONVENTION
@@ -34,3 +34,5 @@ class Confirmation(Base):
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     approved: Mapped[bool | None]
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # What the person reads before deciding: the method, the target and the request body as JSON.
+    request_summary: Mapped[str | None] = mapped_column(Text)

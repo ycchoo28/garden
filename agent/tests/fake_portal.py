@@ -1,0 +1,241 @@
+"""A fake portal for the CLI tests: the contract, the signed-in person, the confirmation gate,
+and the CLI login PKCE exchange. It answers the same headers and problems as the real portal."""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import json
+import threading
+from dataclasses import dataclass, field
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any
+from urllib.parse import parse_qs, urlsplit
+
+CONFIRMATION_HEADER = "x-garden-confirmation"
+GOOD_TOKEN = "good-token"
+EXPIRES_AT = "2099-01-01T00:00:00+00:00"
+
+
+def _b64url(raw: bytes) -> str:
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+
+
+@dataclass
+class FakePortal:
+    version: str = "v1"
+    min_cli: str = "0.1.0"
+    permissions: list[str] = field(default_factory=lambda: ["files.view", "files.delete"])
+    name: str = "Marcus Lee"
+    confirmations: dict[str, str] = field(default_factory=lambda: dict[str, str]())
+    retries: list[str] = field(default_factory=lambda: list[str]())
+    deleted: list[str] = field(default_factory=lambda: list[str]())
+    authorizations: dict[str, tuple[str, str]] = field(
+        default_factory=lambda: dict[str, tuple[str, str]]()
+    )
+    logins: list[dict[str, Any]] = field(default_factory=lambda: list[dict[str, Any]]())
+    url: str = ""
+    _server: ThreadingHTTPServer | None = None
+
+    def start(self) -> None:
+        portal = self
+
+        class Handler(_Handler):
+            fake = portal
+
+        self._server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        host, port = self._server.server_address[:2]
+        self.url = f"http://{host}:{port}"
+        threading.Thread(target=self._server.serve_forever, daemon=True).start()
+
+    def stop(self) -> None:
+        if self._server is not None:
+            self._server.shutdown()
+            self._server.server_close()
+
+    def decide(self, confirmation_id: str, status: str) -> None:
+        self.confirmations[confirmation_id] = status
+
+    def contract(self) -> dict[str, Any]:
+        item_params = [
+            {"name": "sha256", "in": "path", "required": True, "schema": {"type": "string"}}
+        ]
+        paths: dict[str, Any] = {
+            "/api/files/{sha256}": {
+                "get": {
+                    "operationId": "files.file.read",
+                    "description": "Download a file by its SHA-256.",
+                    "x-agent": {"confirm": False, "tool": True, "save": True},
+                    "x-permission": "files.view",
+                    "parameters": item_params,
+                },
+                "delete": {
+                    "operationId": "files.file.delete",
+                    "description": "Delete a file you first uploaded.",
+                    "x-agent": {"confirm": True, "tool": True, "save": True},
+                    "x-permission": "files.delete",
+                    "parameters": item_params,
+                },
+            },
+            "/api/gateway/v1/chat/completions": {
+                "post": {
+                    "operationId": "gateway.model.complete",
+                    "description": "Chat with a model.",
+                    "x-agent": {"confirm": False, "tool": False, "save": True},
+                    "x-permission": "gateway.model.use",
+                }
+            },
+        }
+        if self.version == "v2":
+            paths["/api/files"] = {
+                "get": {
+                    "operationId": "files.file.list",
+                    "description": "List files.",
+                    "x-agent": {"confirm": False, "tool": True, "save": True},
+                    "x-permission": "files.view",
+                }
+            }
+        return {"openapi": "3.1.0", "info": {"title": "garden", "version": "1"}, "paths": paths}
+
+
+class _Handler(BaseHTTPRequestHandler):
+    fake: FakePortal
+
+    def log_message(self, format: str, *args: Any) -> None:
+        return
+
+    def _send(
+        self,
+        status: int,
+        body: Any = None,
+        *,
+        headers: dict[str, str] | None = None,
+        problem: bool = False,
+    ) -> None:
+        raw = b"" if body is None else json.dumps(body).encode("utf-8")
+        self.send_response(status)
+        self.send_header(
+            "Content-Type", "application/problem+json" if problem else "application/json"
+        )
+        self.send_header("X-Garden-Contract-Version", self.fake.version)
+        self.send_header("X-Garden-Min-CLI-Version", self.fake.min_cli)
+        for name, value in (headers or {}).items():
+            self.send_header(name, value)
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def _problem(self, status: int, title: str, **extra: Any) -> None:
+        self._send(status, {"title": title, "status": status, **extra}, problem=True)
+
+    def _body(self) -> dict[str, Any]:
+        length = int(self.headers.get("Content-Length", "0") or 0)
+        raw = self.rfile.read(length) if length else b""
+        return json.loads(raw) if raw else {}
+
+    def _bearer_ok(self) -> bool:
+        return self.headers.get("Authorization") == f"Bearer {GOOD_TOKEN}"
+
+    def do_GET(self) -> None:
+        parts = urlsplit(self.path)
+        if parts.path == "/openapi.json":
+            self._send(200, self.fake.contract())
+            return
+        if parts.path == "/api/cli-logins/authorize":
+            self._authorize(parse_qs(parts.query))
+            return
+        if not self._bearer_ok():
+            self._problem(401, "Unauthorized")
+            return
+        if parts.path == "/api/users/me":
+            self._send(
+                200,
+                {
+                    "name": self.fake.name,
+                    "email": "marcus.lee@fernhill.example",
+                    "permissions": sorted(self.fake.permissions),
+                },
+            )
+            return
+        if parts.path.startswith("/api/confirmations/"):
+            confirmation_id = parts.path.rsplit("/", 1)[1]
+            status = self.fake.confirmations.get(confirmation_id, "pending")
+            self._send(200, {"id": confirmation_id, "status": status})
+            return
+        if parts.path.startswith("/api/files/"):
+            sha = parts.path.rsplit("/", 1)[1]
+            if "files.view" not in self.fake.permissions:
+                self._problem(403, "Forbidden")
+                return
+            self._send(200, {"sha256": sha})
+            return
+        self._problem(404, "Not Found")
+
+    def do_POST(self) -> None:
+        if urlsplit(self.path).path == "/api/cli-logins":
+            self._create_login(self._body())
+            return
+        self._problem(404, "Not Found")
+
+    def do_DELETE(self) -> None:
+        if not self._bearer_ok():
+            self._problem(401, "Unauthorized")
+            return
+        path = urlsplit(self.path).path
+        if not path.startswith("/api/files/"):
+            self._problem(404, "Not Found")
+            return
+        if "files.delete" not in self.fake.permissions:
+            self._problem(403, "Forbidden")
+            return
+        sha = path.rsplit("/", 1)[1]
+        presented = self.headers.get(CONFIRMATION_HEADER)
+        if presented is None:
+            confirmation_id = f"conf-{len(self.fake.confirmations) + 1}"
+            self.fake.confirmations[confirmation_id] = "pending"
+            self._problem(
+                428,
+                "Confirmation Required",
+                detail="The person must approve this action in the browser first.",
+                confirmation_id=confirmation_id,
+                confirmation_url=f"{self.fake.url}/confirm/{confirmation_id}",
+                expires_at=EXPIRES_AT,
+            )
+            return
+        self.fake.retries.append(presented)
+        if self.fake.confirmations.get(presented) != "approved":
+            self._problem(403, "Forbidden", detail="This confirmation is not approved.")
+            return
+        self.fake.confirmations[presented] = "used"
+        self.fake.deleted.append(sha)
+        self._send(204)
+
+    def _authorize(self, query: dict[str, list[str]]) -> None:
+        redirect_uri = query.get("redirect_uri", [""])[0]
+        if not redirect_uri.startswith("http://127.0.0.1:"):
+            self._problem(403, "Forbidden")
+            return
+        code = f"code-{len(self.fake.authorizations) + 1}"
+        challenge = query["code_challenge"][0]
+        nonce = query["nonce"][0]
+        self.fake.authorizations[code] = (challenge, nonce)
+        state = query["state"][0]
+        # The identity provider approves at once here, so the browser lands on the listener.
+        location = f"{redirect_uri}?code={code}&state={state}"
+        self._send(302, headers={"Location": location})
+
+    def _create_login(self, body: dict[str, Any]) -> None:
+        code = str(body.get("code", ""))
+        known = self.fake.authorizations.get(code)
+        if known is None:
+            self._problem(401, "Unauthorized", detail="The sign-in code is not valid.")
+            return
+        challenge, nonce = known
+        verifier = str(body.get("code_verifier", ""))
+        computed = _b64url(hashlib.sha256(verifier.encode("ascii")).digest())
+        if computed != challenge or body.get("nonce") != nonce:
+            self._problem(401, "Unauthorized", detail="The PKCE verifier or nonce does not match.")
+            return
+        del self.fake.authorizations[code]
+        self.fake.logins.append(body)
+        self._send(201, {"id": f"login-{len(self.fake.logins)}", "token": GOOD_TOKEN})

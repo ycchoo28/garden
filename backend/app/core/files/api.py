@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Response, UploadFile
 from pydantic import BaseModel
 
 from app.config import Settings, get_settings
+from app.core.confirmations import confirm_agent_action
 from app.core.files.service import FileService, get_file_service
 from app.core.users import CurrentPerson, require
 from app.shared.operations import op
@@ -58,3 +59,22 @@ async def read_file(
         media_type=stored.content_type,
         headers={"Content-Disposition": "attachment", "X-Content-Type-Options": "nosniff"},
     )
+
+
+@router.delete(
+    "/api/files/{sha256}",
+    status_code=204,
+    dependencies=[confirm_agent_action("files.file.delete")],
+    **op(
+        "files.file.delete",
+        "Delete a file you first uploaded. The person must approve it in the browser first.",
+        confirm=True,
+    ),
+)
+async def delete_file(
+    sha256: str,
+    person: Annotated[CurrentPerson, require("files.delete")],
+    service: Annotated[FileService, Depends(get_file_service)],
+) -> Response:
+    await service.delete(sha256=sha256, actor_id=person.id)
+    return Response(status_code=204)

@@ -2,9 +2,10 @@
 
 import base64
 import hashlib
+import re
 import secrets
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import timedelta
 from typing import Annotated
 
@@ -12,17 +13,20 @@ from fastapi import Depends
 
 from app.config import Settings, get_settings
 from app.core.users.identity import IdentityProvider, IdentityRejected
-from app.core.users.models import Person, SignInAttempt, WebSession
+from app.core.users.models import CliLogin, Person, SignInAttempt, WebSession
 from app.core.users.oidc import get_identity_provider
 from app.core.users.permissions import EMPLOYEE
 from app.core.users.repository import UserRepository, get_user_repository
 from app.core.users.scope import DataScope
 from app.shared.clock import Clock, get_clock
-from app.shared.errors import Forbidden, Unauthorized
+from app.shared.errors import Forbidden, NotFound, Unauthorized
+from app.shared.ids import new_id
 from app.shared.permissions import Role
 
 # A sign-in must finish within this time, or its link is refused and the person starts again.
 SIGN_IN_TIMEOUT = timedelta(minutes=10)
+# A CLI login sends the browser back to a listener on this machine only, never to another host.
+_LOOPBACK_CALLBACK = re.compile(r"http://127\.0\.0\.1:\d{1,5}/callback")
 
 
 def token_hash(token: str) -> str:
@@ -189,6 +193,84 @@ class UserService:
         """Every department. Budgets and card statements refer to departments by their id."""
         rows = await self._repo.departments()
         return [DepartmentView(id=row.id, code=row.code, name=row.name) for row in rows]
+
+    async def cli_login_authorize_url(
+        self, *, redirect_uri: str, state: str, nonce: str, code_challenge: str
+    ) -> str:
+        """Where the CLI's browser goes to approve its login. The CLI keeps the verifier itself."""
+        if _LOOPBACK_CALLBACK.fullmatch(redirect_uri) is None:
+            raise Forbidden("A CLI login returns only to a listener on this machine.")
+        return await self._identity.authorization_url(
+            redirect_uri=redirect_uri,
+            state=state,
+            nonce=nonce,
+            code_challenge=code_challenge,
+        )
+
+    async def create_cli_login(
+        self, *, code: str, code_verifier: str, redirect_uri: str, nonce: str, device: str
+    ) -> tuple[str, CliLogin]:
+        """Trade the approved code for a CLI login. The raw token is returned once."""
+        if _LOOPBACK_CALLBACK.fullmatch(redirect_uri) is None:
+            raise Forbidden("A CLI login returns only to a listener on this machine.")
+        now = self._clock.now()
+        try:
+            tokens = await self._identity.exchange_code(
+                code=code, code_verifier=code_verifier, redirect_uri=redirect_uri
+            )
+            claims = await self._identity.verify_id_token(tokens.id_token, nonce=nonce)
+        except IdentityRejected as error:
+            raise Unauthorized("The identity provider did not confirm this sign-in.") from error
+        person = await self._repo.person_by_subject(claims.subject)
+        if person is None or not person.is_active:
+            raise Forbidden("This account is not set up for Garden.")
+        raw_token = secrets.token_urlsafe(32)
+        row = CliLogin(
+            id=new_id(),
+            person_id=person.id,
+            token_hash=token_hash(raw_token),
+            device=device,
+            created_at=now,
+            last_used_at=None,
+            revoked_at=None,
+        )
+        self._repo.add_cli_login(row)
+        await self._repo.commit()
+        return raw_token, row
+
+    async def current_cli_person(
+        self,
+        raw_token: str,
+        roles: tuple[Role, ...],
+        agent_allowed: frozenset[str],
+    ) -> tuple[CurrentPerson, CliLogin]:
+        """The person behind a CLI login. The login holds only permissions an agent may hold."""
+        now = self._clock.now()
+        found = await self._repo.cli_login_with_person(token_hash(raw_token))
+        if found is None:
+            raise Unauthorized("Run garden login again. This CLI login is not recognised.")
+        login, person = found
+        if login.revoked_at is not None:
+            raise Unauthorized("This CLI login was revoked. Run garden login again.")
+        if not person.is_active:
+            raise Forbidden("This account is not set up for Garden.")
+        await self._repo.touch_cli_login(token_hash(raw_token), now)
+        await self._repo.commit()
+        assembled = await self._assemble(person, roles)
+        held = assembled.permissions & agent_allowed
+        return replace(assembled, permissions=frozenset(held)), login
+
+    async def list_cli_logins(self, person_id: uuid.UUID) -> list[CliLogin]:
+        return list(await self._repo.cli_logins_of(person_id))
+
+    async def revoke_cli_login(self, *, person_id: uuid.UUID, login_id: uuid.UUID) -> None:
+        """Only the person may revoke. A login that is already revoked stays revoked."""
+        login = await self._repo.cli_login_of(person_id, login_id)
+        if login is None:
+            raise NotFound("No CLI login has that identifier.")
+        if login.revoked_at is None:
+            login.revoked_at = self._clock.now()
+            await self._repo.commit()
 
     async def visible_people(self, caller: CurrentPerson) -> list[PersonView]:
         departments = None if caller.scope.all_departments else caller.scope.department_ids

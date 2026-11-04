@@ -8,8 +8,7 @@ from httpx import AsyncClient
 
 from app.core.confirmations import CONFIRMATION_HEADER
 from app.shared.money import format_money, parse_money
-from app.shared.request_login import VIA_AGENT, VIA_WEB, RequestLogin, current_request_login
-from tests.conftest import sign_in
+from tests.conftest import bearer, cli_sign_in, sign_in
 from tests.fakes import FakeIdentity
 
 HEADER = "transaction_ref,posted_on,department_code,category,merchant,amount_usd"
@@ -37,15 +36,6 @@ async def _import(client: AsyncClient, data: bytes, name: str = "sept.csv") -> d
     assert response.status_code == 201, response.text
     body: dict[str, object] = response.json()
     return body
-
-
-def _login(via: str) -> None:
-    _ = current_request_login.set(RequestLogin(via=via, device="laptop"))
-
-
-@pytest.fixture(autouse=True)
-def web_login() -> None:
-    _login(VIA_WEB)
 
 
 @pytest.mark.asyncio
@@ -199,21 +189,21 @@ async def test_agent_void_waits_for_the_person_to_approve(
 ) -> None:
     await sign_in(client, identity, "lena.fischer@fernhill.example")
     statement = await _import(client, statement_csv(*GOOD_ROWS))
+    agent = bearer(await cli_sign_in(client, identity, "lena.fischer@fernhill.example"))
     url = f"/api/spend/statements/{statement['id']}/void"
-    _login(VIA_AGENT)
-    challenge = await client.post(url, json={"reason": "Agent request"})
+    challenge = await client.post(url, json={"reason": "Agent request"}, headers=agent)
     assert challenge.status_code == 428, challenge.text
     confirmation_id = challenge.json()["confirmation_id"]
 
-    _login(VIA_WEB)
     approved = await client.post(
         f"/api/confirmations/{confirmation_id}/decision", json={"decision": "approve"}
     )
     assert approved.json()["status"] == "approved"
 
-    _login(VIA_AGENT)
     voided = await client.post(
-        url, json={"reason": "Agent request"}, headers={CONFIRMATION_HEADER: confirmation_id}
+        url,
+        json={"reason": "Agent request"},
+        headers={**agent, CONFIRMATION_HEADER: confirmation_id},
     )
     assert voided.status_code == 200, voided.text
     assert voided.json()["voided"] is True
@@ -224,19 +214,19 @@ async def test_agent_month_close_waits_for_the_person_to_approve(
     client: AsyncClient, identity: FakeIdentity
 ) -> None:
     await sign_in(client, identity, "lena.fischer@fernhill.example")
+    agent = bearer(await cli_sign_in(client, identity, "lena.fischer@fernhill.example"))
     url = "/api/spend/months/2026-08/close"
-    _login(VIA_AGENT)
-    challenge = await client.post(url, json={"reason": "Agent request"})
+    challenge = await client.post(url, json={"reason": "Agent request"}, headers=agent)
     assert challenge.status_code == 428
     confirmation_id = challenge.json()["confirmation_id"]
 
-    _login(VIA_WEB)
     await client.post(
         f"/api/confirmations/{confirmation_id}/decision", json={"decision": "approve"}
     )
-    _login(VIA_AGENT)
     closed = await client.post(
-        url, json={"reason": "Agent request"}, headers={CONFIRMATION_HEADER: confirmation_id}
+        url,
+        json={"reason": "Agent request"},
+        headers={**agent, CONFIRMATION_HEADER: confirmation_id},
     )
     assert closed.status_code == 201, closed.text
 

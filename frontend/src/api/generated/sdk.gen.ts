@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AuditEventListData, AuditEventListErrors, AuditEventListResponses, BudgetsCategoryListData, BudgetsCategoryListErrors, BudgetsCategoryListResponses, BudgetsLineCreateData, BudgetsLineCreateErrors, BudgetsLineCreateResponses, BudgetsLineHistoryData, BudgetsLineHistoryErrors, BudgetsLineHistoryResponses, BudgetsLineListData, BudgetsLineListErrors, BudgetsLineListResponses, BudgetsLineReplaceData, BudgetsLineReplaceErrors, BudgetsLineReplaceResponses, BudgetsVarianceReadData, BudgetsVarianceReadErrors, BudgetsVarianceReadResponses, ClaimsClaimCreateData, ClaimsClaimCreateErrors, ClaimsClaimCreateResponses, ClaimsClaimDecideData, ClaimsClaimDecideErrors, ClaimsClaimDecideResponses, ClaimsClaimListData, ClaimsClaimListErrors, ClaimsClaimListResponses, ClaimsClaimReadData, ClaimsClaimReadErrors, ClaimsClaimReadResponses, ClaimsClaimSubmitData, ClaimsClaimSubmitErrors, ClaimsClaimSubmitResponses, ClaimsClaimWithdrawData, ClaimsClaimWithdrawErrors, ClaimsClaimWithdrawResponses, ClaimsDecisionQueueData, ClaimsDecisionQueueErrors, ClaimsDecisionQueueResponses, ClaimsLineAddData, ClaimsLineAddErrors, ClaimsLineAddResponses, ClaimsLineVoidData, ClaimsLineVoidErrors, ClaimsLineVoidResponses, ConfirmationsRequestDecideData, ConfirmationsRequestDecideErrors, ConfirmationsRequestDecideResponses, ConfirmationsRequestReadData, ConfirmationsRequestReadErrors, ConfirmationsRequestReadResponses, FilesFileReadData, FilesFileReadErrors, FilesFileReadResponses, FilesFileUploadData, FilesFileUploadErrors, FilesFileUploadResponses, KnowledgeBatchCreateData, KnowledgeBatchCreateErrors, KnowledgeBatchCreateResponses, KnowledgeBatchPrepareData, KnowledgeBatchPrepareErrors, KnowledgeBatchPrepareResponses, KnowledgeBatchPreviewData, KnowledgeBatchPreviewErrors, KnowledgeBatchPreviewResponses, KnowledgeBatchReadData, KnowledgeBatchReadErrors, KnowledgeBatchReadResponses, KnowledgeBatchUploadData, KnowledgeBatchUploadErrors, KnowledgeBatchUploadResponses, KnowledgeCollectionCreateData, KnowledgeCollectionCreateErrors, KnowledgeCollectionCreateResponses, KnowledgeCollectionListData, KnowledgeCollectionListErrors, KnowledgeCollectionListResponses, KnowledgeCollectionReadData, KnowledgeCollectionReadErrors, KnowledgeCollectionReadResponses, KnowledgeStatusReadData, KnowledgeStatusReadErrors, KnowledgeStatusReadResponses, PlatformHealthReadData, PlatformHealthReadErrors, PlatformHealthReadResponses, SpendMonthCloseData, SpendMonthCloseErrors, SpendMonthCloseResponses, SpendMonthListData, SpendMonthListErrors, SpendMonthListResponses, SpendStatementImportData, SpendStatementImportErrors, SpendStatementImportResponses, SpendStatementListData, SpendStatementListErrors, SpendStatementListResponses, SpendStatementPreviewData, SpendStatementPreviewErrors, SpendStatementPreviewResponses, SpendStatementVoidData, SpendStatementVoidErrors, SpendStatementVoidResponses, UsersDepartmentListData, UsersDepartmentListErrors, UsersDepartmentListResponses, UsersDirectoryListData, UsersDirectoryListErrors, UsersDirectoryListResponses, UsersSelfReadData, UsersSelfReadErrors, UsersSelfReadResponses, UsersSessionEndData, UsersSessionEndErrors, UsersSessionEndResponses, UsersSessionFinishData, UsersSessionFinishErrors, UsersSessionFinishResponses, UsersSessionStartData, UsersSessionStartErrors, UsersSessionStartResponses } from './types.gen';
+import type { AuditEventListData, AuditEventListErrors, AuditEventListResponses, BudgetsCategoryListData, BudgetsCategoryListErrors, BudgetsCategoryListResponses, BudgetsLineCreateData, BudgetsLineCreateErrors, BudgetsLineCreateResponses, BudgetsLineHistoryData, BudgetsLineHistoryErrors, BudgetsLineHistoryResponses, BudgetsLineListData, BudgetsLineListErrors, BudgetsLineListResponses, BudgetsLineReplaceData, BudgetsLineReplaceErrors, BudgetsLineReplaceResponses, BudgetsVarianceReadData, BudgetsVarianceReadErrors, BudgetsVarianceReadResponses, ClaimsClaimCreateData, ClaimsClaimCreateErrors, ClaimsClaimCreateResponses, ClaimsClaimDecideData, ClaimsClaimDecideErrors, ClaimsClaimDecideResponses, ClaimsClaimListData, ClaimsClaimListErrors, ClaimsClaimListResponses, ClaimsClaimReadData, ClaimsClaimReadErrors, ClaimsClaimReadResponses, ClaimsClaimSubmitData, ClaimsClaimSubmitErrors, ClaimsClaimSubmitResponses, ClaimsClaimWithdrawData, ClaimsClaimWithdrawErrors, ClaimsClaimWithdrawResponses, ClaimsDecisionQueueData, ClaimsDecisionQueueErrors, ClaimsDecisionQueueResponses, ClaimsLineAddData, ClaimsLineAddErrors, ClaimsLineAddResponses, ClaimsLineVoidData, ClaimsLineVoidErrors, ClaimsLineVoidResponses, ConfirmationsRequestDecideData, ConfirmationsRequestDecideErrors, ConfirmationsRequestDecideResponses, ConfirmationsRequestReadData, ConfirmationsRequestReadErrors, ConfirmationsRequestReadResponses, FilesFileDeleteData, FilesFileDeleteErrors, FilesFileDeleteResponses, FilesFileReadData, FilesFileReadErrors, FilesFileReadResponses, FilesFileUploadData, FilesFileUploadErrors, FilesFileUploadResponses, GatewayModelCompleteData, GatewayModelCompleteErrors, GatewayModelCompleteResponses, GatewayModelListData, GatewayModelListErrors, GatewayModelListResponses, GatewayUsageReadData, GatewayUsageReadErrors, GatewayUsageReadResponses, KnowledgeBatchCreateData, KnowledgeBatchCreateErrors, KnowledgeBatchCreateResponses, KnowledgeBatchPrepareData, KnowledgeBatchPrepareErrors, KnowledgeBatchPrepareResponses, KnowledgeBatchPreviewData, KnowledgeBatchPreviewErrors, KnowledgeBatchPreviewResponses, KnowledgeBatchReadData, KnowledgeBatchReadErrors, KnowledgeBatchReadResponses, KnowledgeBatchUploadData, KnowledgeBatchUploadErrors, KnowledgeBatchUploadResponses, KnowledgeCollectionCreateData, KnowledgeCollectionCreateErrors, KnowledgeCollectionCreateResponses, KnowledgeCollectionListData, KnowledgeCollectionListErrors, KnowledgeCollectionListResponses, KnowledgeCollectionReadData, KnowledgeCollectionReadErrors, KnowledgeCollectionReadResponses, KnowledgeStatusReadData, KnowledgeStatusReadErrors, KnowledgeStatusReadResponses, PlatformHealthReadData, PlatformHealthReadErrors, PlatformHealthReadResponses, SpendMonthCloseData, SpendMonthCloseErrors, SpendMonthCloseResponses, SpendMonthListData, SpendMonthListErrors, SpendMonthListResponses, SpendStatementImportData, SpendStatementImportErrors, SpendStatementImportResponses, SpendStatementListData, SpendStatementListErrors, SpendStatementListResponses, SpendStatementPreviewData, SpendStatementPreviewErrors, SpendStatementPreviewResponses, SpendStatementVoidData, SpendStatementVoidErrors, SpendStatementVoidResponses, UsersCliLoginCreateData, UsersCliLoginCreateErrors, UsersCliLoginCreateResponses, UsersCliLoginListData, UsersCliLoginListErrors, UsersCliLoginListResponses, UsersCliLoginRevokeData, UsersCliLoginRevokeErrors, UsersCliLoginRevokeResponses, UsersCliLoginStartData, UsersCliLoginStartErrors, UsersCliLoginStartResponses, UsersDepartmentListData, UsersDepartmentListErrors, UsersDepartmentListResponses, UsersDirectoryListData, UsersDirectoryListErrors, UsersDirectoryListResponses, UsersSelfReadData, UsersSelfReadErrors, UsersSelfReadResponses, UsersSessionEndData, UsersSessionEndErrors, UsersSessionEndResponses, UsersSessionFinishData, UsersSessionFinishErrors, UsersSessionFinishResponses, UsersSessionStartData, UsersSessionStartErrors, UsersSessionStartResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -187,6 +187,41 @@ export const claimsClaimWithdraw = <ThrowOnError extends boolean = false>(option
 });
 
 /**
+ * List Cli Logins
+ *
+ * List the caller's CLI logins, newest first, with their state.
+ */
+export const usersCliLoginList = <ThrowOnError extends boolean = false>(options?: Options<UsersCliLoginListData, ThrowOnError>): RequestResult<UsersCliLoginListResponses, UsersCliLoginListErrors, ThrowOnError> => (options?.client ?? client).get<UsersCliLoginListResponses, UsersCliLoginListErrors, ThrowOnError>({ url: '/api/cli-logins', ...options });
+
+/**
+ * Create Cli Login
+ *
+ * Finish a CLI login with the code the browser returned. The token is shown once.
+ */
+export const usersCliLoginCreate = <ThrowOnError extends boolean = false>(options: Options<UsersCliLoginCreateData, ThrowOnError>): RequestResult<UsersCliLoginCreateResponses, UsersCliLoginCreateErrors, ThrowOnError> => (options.client ?? client).post<UsersCliLoginCreateResponses, UsersCliLoginCreateErrors, ThrowOnError>({
+    url: '/api/cli-logins',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Start Cli Login
+ *
+ * Start a CLI login. Redirects the browser to the identity provider, which returns the code to a listener on this machine.
+ */
+export const usersCliLoginStart = <ThrowOnError extends boolean = false>(options: Options<UsersCliLoginStartData, ThrowOnError>): RequestResult<UsersCliLoginStartResponses, UsersCliLoginStartErrors, ThrowOnError> => (options.client ?? client).get<UsersCliLoginStartResponses, UsersCliLoginStartErrors, ThrowOnError>({ url: '/api/cli-logins/authorize', ...options });
+
+/**
+ * Revoke Cli Login
+ *
+ * Revoke one of the caller's CLI logins. Only a browser sign-in may do this.
+ */
+export const usersCliLoginRevoke = <ThrowOnError extends boolean = false>(options: Options<UsersCliLoginRevokeData, ThrowOnError>): RequestResult<UsersCliLoginRevokeResponses, UsersCliLoginRevokeErrors, ThrowOnError> => (options.client ?? client).delete<UsersCliLoginRevokeResponses, UsersCliLoginRevokeErrors, ThrowOnError>({ url: '/api/cli-logins/{login_id}', ...options });
+
+/**
  * Read Confirmation
  *
  * Check whether the person has approved a confirmation.
@@ -223,11 +258,46 @@ export const filesFileUpload = <ThrowOnError extends boolean = false>(options: O
 });
 
 /**
+ * Delete File
+ *
+ * Delete a file you first uploaded. The person must approve it in the browser first.
+ */
+export const filesFileDelete = <ThrowOnError extends boolean = false>(options: Options<FilesFileDeleteData, ThrowOnError>): RequestResult<FilesFileDeleteResponses, FilesFileDeleteErrors, ThrowOnError> => (options.client ?? client).delete<FilesFileDeleteResponses, FilesFileDeleteErrors, ThrowOnError>({ url: '/api/files/{sha256}', ...options });
+
+/**
  * Read File
  *
  * Download a file by its SHA-256.
  */
 export const filesFileRead = <ThrowOnError extends boolean = false>(options: Options<FilesFileReadData, ThrowOnError>): RequestResult<FilesFileReadResponses, FilesFileReadErrors, ThrowOnError> => (options.client ?? client).get<FilesFileReadResponses, FilesFileReadErrors, ThrowOnError>({ url: '/api/files/{sha256}', ...options });
+
+/**
+ * Usage Today
+ *
+ * Read today's model requests and tokens for the signed-in person. Counts only.
+ */
+export const gatewayUsageRead = <ThrowOnError extends boolean = false>(options?: Options<GatewayUsageReadData, ThrowOnError>): RequestResult<GatewayUsageReadResponses, GatewayUsageReadErrors, ThrowOnError> => (options?.client ?? client).get<GatewayUsageReadResponses, GatewayUsageReadErrors, ThrowOnError>({ url: '/api/gateway/usage/today', ...options });
+
+/**
+ * Chat Completions
+ *
+ * Send an OpenAI-compatible chat completion to a model on the gateway allowlist.
+ */
+export const gatewayModelComplete = <ThrowOnError extends boolean = false>(options: Options<GatewayModelCompleteData, ThrowOnError>): RequestResult<GatewayModelCompleteResponses, GatewayModelCompleteErrors, ThrowOnError> => (options.client ?? client).post<GatewayModelCompleteResponses, GatewayModelCompleteErrors, ThrowOnError>({
+    url: '/api/gateway/v1/chat/completions',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * List Models
+ *
+ * List the models the gateway forwards.
+ */
+export const gatewayModelList = <ThrowOnError extends boolean = false>(options?: Options<GatewayModelListData, ThrowOnError>): RequestResult<GatewayModelListResponses, GatewayModelListErrors, ThrowOnError> => (options?.client ?? client).get<GatewayModelListResponses, GatewayModelListErrors, ThrowOnError>({ url: '/api/gateway/v1/models', ...options });
 
 /**
  * Health

@@ -31,7 +31,12 @@ ROLES: tuple[Role, ...] = (
                 "users.self",
                 "files.upload",
                 "files.view",
+                "files.delete",
+                "cli_logins.view",
+                "cli_logins.revoke",
                 "confirmations.decide",
+                "gateway.model.use",
+                "gateway.usage.view",
                 "claims.view",
                 "claims.create",
                 "claims.submit",
@@ -56,4 +61,7 @@ ROLES: tuple[Role, ...] = (
 PERMISSIONS: tuple[Permission, ...] = (
     Permission("users.self", agent_allowed=True),
     Permission("users.directory.view", agent_allowed=True),
+    Permission("cli_logins.view", agent_allowed=True),
+    # Person-only: a CLI login never holds it, so an agent cannot revoke the logins of its person.
+    Permission("cli_logins.revoke", agent_allowed=False),
 )

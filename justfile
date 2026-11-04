@@ -8,12 +8,13 @@ web_url := "http://127.0.0.1:55173"
 default:
     @just --list
 
-# Create .env from the example if it is missing, then install backend and frontend dependencies.
+# Create .env from the example if it is missing, then install backend, agent and frontend dependencies.
 setup:
     #!/usr/bin/env bash
     set -euo pipefail
     [ -f .env ] || cp .env.example .env
     cd backend && uv sync
+    cd ../agent && uv sync
     cd ../frontend && bun install --frozen-lockfile
 
 # Start Postgres and the fake sign-in provider in Docker Compose and wait until they are healthy.
@@ -87,7 +88,7 @@ reset:
     just seed
 
 # The fast checks that CI runs first: backend format and lint, frontend, API contract, secrets, doc links and the deny-list.
-quick: backend-check frontend-check api-check secrets-check docs-check deny-check
+quick: backend-check agent-check frontend-check api-check secrets-check docs-check deny-check
 
 # Run every local check, quick ones first: then tests against Postgres, browser tests and dependency audits.
 check: quick test e2e backend-audit frontend-audit
@@ -123,6 +124,12 @@ backend-check:
     cd backend && uv run pyright
     cd backend && uv run lint-imports
 
+# The garden CLI package: format, lint and strict types.
+agent-check:
+    cd agent && uv run ruff format --check .
+    cd agent && uv run ruff check .
+    cd agent && uv run pyright
+
 # Backend tests against the real Postgres in Compose, in a separate *_test database.
 # CI runs this against the Postgres that `just up` starts in the same job.
 # Set GARDEN_TEST_DB to use another test database (its name must end in _test), for example when worktrees run tests in parallel.
@@ -137,6 +144,7 @@ test:
     fi
     export GARDEN_DATABASE_URL="${GARDEN_DATABASE_URL%/*}/$db"
     cd backend && uv run pytest
+    cd ../agent && uv run pytest
 
 # Frontend type check (vue-tsc, strict), lint with module-boundary rules, unit tests, and no raw colours outside the tokens.
 frontend-check:

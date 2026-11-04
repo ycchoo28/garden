@@ -359,6 +359,84 @@ export type ClaimSummaryOut = {
 };
 
 /**
+ * CliLoginCreated
+ *
+ * The new CLI login. `token` is shown once, and only its hash is kept.
+ */
+export type CliLoginCreated = {
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Device
+     */
+    device: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Token
+     */
+    token: string;
+};
+
+/**
+ * CliLoginIn
+ *
+ * What the CLI sends after its browser returned the code: the PKCE verifier and the nonce.
+ */
+export type CliLoginIn = {
+    /**
+     * Code
+     */
+    code: string;
+    /**
+     * Code Verifier
+     */
+    code_verifier: string;
+    /**
+     * Device
+     */
+    device: string;
+    /**
+     * Nonce
+     */
+    nonce: string;
+    /**
+     * Redirect Uri
+     */
+    redirect_uri: string;
+};
+
+/**
+ * CliLoginOut
+ */
+export type CliLoginOut = {
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Device
+     */
+    device: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Last Used At
+     */
+    last_used_at: string | null;
+    /**
+     * Revoked At
+     */
+    revoked_at: string | null;
+};
+
+/**
  * CloseIn
  */
 export type CloseIn = {
@@ -453,6 +531,10 @@ export type ConfirmationOut = {
      */
     id: string;
     /**
+     * Method
+     */
+    method: string;
+    /**
      * Operation
      */
     operation: string;
@@ -460,6 +542,14 @@ export type ConfirmationOut = {
      * Status
      */
     status: string;
+    /**
+     * Summary
+     */
+    summary: string | null;
+    /**
+     * Target
+     */
+    target: string;
 };
 
 /**
@@ -953,6 +1043,36 @@ export type UploadedFileOut = {
      * Url
      */
     url: string;
+};
+
+/**
+ * UsageTodayOut
+ */
+export type UsageTodayOut = {
+    /**
+     * Completion Tokens
+     */
+    completion_tokens: number;
+    /**
+     * Day
+     */
+    day: string;
+    /**
+     * Prompt Tokens
+     */
+    prompt_tokens: number;
+    /**
+     * Requests
+     */
+    requests: number;
+    /**
+     * Tokens Limit
+     */
+    tokens_limit: number;
+    /**
+     * Total Tokens
+     */
+    total_tokens: number;
 };
 
 /**
@@ -1616,6 +1736,144 @@ export type ClaimsClaimWithdrawResponses = {
 
 export type ClaimsClaimWithdrawResponse = ClaimsClaimWithdrawResponses[keyof ClaimsClaimWithdrawResponses];
 
+export type UsersCliLoginListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/cli-logins';
+};
+
+export type UsersCliLoginListErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type UsersCliLoginListError = UsersCliLoginListErrors[keyof UsersCliLoginListErrors];
+
+export type UsersCliLoginListResponses = {
+    /**
+     * Response Users.Cli Login.List
+     *
+     * Successful Response
+     */
+    200: Array<CliLoginOut>;
+};
+
+export type UsersCliLoginListResponse = UsersCliLoginListResponses[keyof UsersCliLoginListResponses];
+
+export type UsersCliLoginCreateData = {
+    body: CliLoginIn;
+    path?: never;
+    query?: never;
+    url: '/api/cli-logins';
+};
+
+export type UsersCliLoginCreateErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type UsersCliLoginCreateError = UsersCliLoginCreateErrors[keyof UsersCliLoginCreateErrors];
+
+export type UsersCliLoginCreateResponses = {
+    /**
+     * Successful Response
+     */
+    201: CliLoginCreated;
+};
+
+export type UsersCliLoginCreateResponse = UsersCliLoginCreateResponses[keyof UsersCliLoginCreateResponses];
+
+export type UsersCliLoginStartData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Redirect Uri
+         */
+        redirect_uri: string;
+        /**
+         * State
+         */
+        state: string;
+        /**
+         * Nonce
+         */
+        nonce: string;
+        /**
+         * Code Challenge
+         */
+        code_challenge: string;
+    };
+    url: '/api/cli-logins/authorize';
+};
+
+export type UsersCliLoginStartErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type UsersCliLoginStartError = UsersCliLoginStartErrors[keyof UsersCliLoginStartErrors];
+
+export type UsersCliLoginStartResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type UsersCliLoginRevokeData = {
+    body?: never;
+    path: {
+        /**
+         * Login Id
+         */
+        login_id: string;
+    };
+    query?: never;
+    url: '/api/cli-logins/{login_id}';
+};
+
+export type UsersCliLoginRevokeErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type UsersCliLoginRevokeError = UsersCliLoginRevokeErrors[keyof UsersCliLoginRevokeErrors];
+
+export type UsersCliLoginRevokeResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type UsersCliLoginRevokeResponse = UsersCliLoginRevokeResponses[keyof UsersCliLoginRevokeResponses];
+
 export type ConfirmationsRequestReadData = {
     body?: never;
     path: {
@@ -1713,6 +1971,40 @@ export type FilesFileUploadResponses = {
 
 export type FilesFileUploadResponse = FilesFileUploadResponses[keyof FilesFileUploadResponses];
 
+export type FilesFileDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Sha256
+         */
+        sha256: string;
+    };
+    query?: never;
+    url: '/api/files/{sha256}';
+};
+
+export type FilesFileDeleteErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type FilesFileDeleteError = FilesFileDeleteErrors[keyof FilesFileDeleteErrors];
+
+export type FilesFileDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type FilesFileDeleteResponse = FilesFileDeleteResponses[keyof FilesFileDeleteResponses];
+
 export type FilesFileReadData = {
     body?: never;
     path: {
@@ -1744,6 +2036,106 @@ export type FilesFileReadResponses = {
      */
     200: unknown;
 };
+
+export type GatewayUsageReadData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/gateway/usage/today';
+};
+
+export type GatewayUsageReadErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type GatewayUsageReadError = GatewayUsageReadErrors[keyof GatewayUsageReadErrors];
+
+export type GatewayUsageReadResponses = {
+    /**
+     * Successful Response
+     */
+    200: UsageTodayOut;
+};
+
+export type GatewayUsageReadResponse = GatewayUsageReadResponses[keyof GatewayUsageReadResponses];
+
+export type GatewayModelCompleteData = {
+    /**
+     * Body
+     */
+    body: {
+        [key: string]: unknown;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/gateway/v1/chat/completions';
+};
+
+export type GatewayModelCompleteErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type GatewayModelCompleteError = GatewayModelCompleteErrors[keyof GatewayModelCompleteErrors];
+
+export type GatewayModelCompleteResponses = {
+    /**
+     * Response Gateway.Model.Complete
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type GatewayModelCompleteResponse = GatewayModelCompleteResponses[keyof GatewayModelCompleteResponses];
+
+export type GatewayModelListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/gateway/v1/models';
+};
+
+export type GatewayModelListErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type GatewayModelListError = GatewayModelListErrors[keyof GatewayModelListErrors];
+
+export type GatewayModelListResponses = {
+    /**
+     * Response Gateway.Model.List
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type GatewayModelListResponse = GatewayModelListResponses[keyof GatewayModelListResponses];
 
 export type PlatformHealthReadData = {
     body?: never;
