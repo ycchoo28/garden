@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AuditEventListData, AuditEventListErrors, AuditEventListResponses, BudgetsCategoryListData, BudgetsCategoryListErrors, BudgetsCategoryListResponses, BudgetsLineCreateData, BudgetsLineCreateErrors, BudgetsLineCreateResponses, BudgetsLineHistoryData, BudgetsLineHistoryErrors, BudgetsLineHistoryResponses, BudgetsLineListData, BudgetsLineListErrors, BudgetsLineListResponses, BudgetsLineReplaceData, BudgetsLineReplaceErrors, BudgetsLineReplaceResponses, BudgetsVarianceReadData, BudgetsVarianceReadErrors, BudgetsVarianceReadResponses, ClaimsClaimCreateData, ClaimsClaimCreateErrors, ClaimsClaimCreateResponses, ClaimsClaimDecideData, ClaimsClaimDecideErrors, ClaimsClaimDecideResponses, ClaimsClaimListData, ClaimsClaimListErrors, ClaimsClaimListResponses, ClaimsClaimReadData, ClaimsClaimReadErrors, ClaimsClaimReadResponses, ClaimsClaimSubmitData, ClaimsClaimSubmitErrors, ClaimsClaimSubmitResponses, ClaimsClaimWithdrawData, ClaimsClaimWithdrawErrors, ClaimsClaimWithdrawResponses, ClaimsDecisionQueueData, ClaimsDecisionQueueErrors, ClaimsDecisionQueueResponses, ClaimsLineAddData, ClaimsLineAddErrors, ClaimsLineAddResponses, ClaimsLineVoidData, ClaimsLineVoidErrors, ClaimsLineVoidResponses, ConfirmationsRequestDecideData, ConfirmationsRequestDecideErrors, ConfirmationsRequestDecideResponses, ConfirmationsRequestReadData, ConfirmationsRequestReadErrors, ConfirmationsRequestReadResponses, FilesFileDeleteData, FilesFileDeleteErrors, FilesFileDeleteResponses, FilesFileReadData, FilesFileReadErrors, FilesFileReadResponses, FilesFileUploadData, FilesFileUploadErrors, FilesFileUploadResponses, GatewayModelCompleteData, GatewayModelCompleteErrors, GatewayModelCompleteResponses, GatewayModelListData, GatewayModelListErrors, GatewayModelListResponses, GatewayUsageReadData, GatewayUsageReadErrors, GatewayUsageReadResponses, KnowledgeBatchCreateData, KnowledgeBatchCreateErrors, KnowledgeBatchCreateResponses, KnowledgeBatchPrepareData, KnowledgeBatchPrepareErrors, KnowledgeBatchPrepareResponses, KnowledgeBatchPreviewData, KnowledgeBatchPreviewErrors, KnowledgeBatchPreviewResponses, KnowledgeBatchReadData, KnowledgeBatchReadErrors, KnowledgeBatchReadResponses, KnowledgeBatchUploadData, KnowledgeBatchUploadErrors, KnowledgeBatchUploadResponses, KnowledgeCollectionCreateData, KnowledgeCollectionCreateErrors, KnowledgeCollectionCreateResponses, KnowledgeCollectionListData, KnowledgeCollectionListErrors, KnowledgeCollectionListResponses, KnowledgeCollectionReadData, KnowledgeCollectionReadErrors, KnowledgeCollectionReadResponses, KnowledgeStatusReadData, KnowledgeStatusReadErrors, KnowledgeStatusReadResponses, PlatformHealthReadData, PlatformHealthReadErrors, PlatformHealthReadResponses, SpendMonthCloseData, SpendMonthCloseErrors, SpendMonthCloseResponses, SpendMonthListData, SpendMonthListErrors, SpendMonthListResponses, SpendStatementImportData, SpendStatementImportErrors, SpendStatementImportResponses, SpendStatementListData, SpendStatementListErrors, SpendStatementListResponses, SpendStatementPreviewData, SpendStatementPreviewErrors, SpendStatementPreviewResponses, SpendStatementVoidData, SpendStatementVoidErrors, SpendStatementVoidResponses, UsersCliLoginCreateData, UsersCliLoginCreateErrors, UsersCliLoginCreateResponses, UsersCliLoginListData, UsersCliLoginListErrors, UsersCliLoginListResponses, UsersCliLoginRevokeData, UsersCliLoginRevokeErrors, UsersCliLoginRevokeResponses, UsersCliLoginStartData, UsersCliLoginStartErrors, UsersCliLoginStartResponses, UsersDepartmentListData, UsersDepartmentListErrors, UsersDepartmentListResponses, UsersDirectoryListData, UsersDirectoryListErrors, UsersDirectoryListResponses, UsersSelfReadData, UsersSelfReadErrors, UsersSelfReadResponses, UsersSessionEndData, UsersSessionEndErrors, UsersSessionEndResponses, UsersSessionFinishData, UsersSessionFinishErrors, UsersSessionFinishResponses, UsersSessionStartData, UsersSessionStartErrors, UsersSessionStartResponses } from './types.gen';
+import type { AuditEventListData, AuditEventListErrors, AuditEventListResponses, BudgetsCategoryListData, BudgetsCategoryListErrors, BudgetsCategoryListResponses, BudgetsLineCreateData, BudgetsLineCreateErrors, BudgetsLineCreateResponses, BudgetsLineHistoryData, BudgetsLineHistoryErrors, BudgetsLineHistoryResponses, BudgetsLineListData, BudgetsLineListErrors, BudgetsLineListResponses, BudgetsLineReplaceData, BudgetsLineReplaceErrors, BudgetsLineReplaceResponses, BudgetsVarianceReadData, BudgetsVarianceReadErrors, BudgetsVarianceReadResponses, ClaimsClaimCreateData, ClaimsClaimCreateErrors, ClaimsClaimCreateResponses, ClaimsClaimDecideData, ClaimsClaimDecideErrors, ClaimsClaimDecideResponses, ClaimsClaimListData, ClaimsClaimListErrors, ClaimsClaimListResponses, ClaimsClaimReadData, ClaimsClaimReadErrors, ClaimsClaimReadResponses, ClaimsClaimSubmitData, ClaimsClaimSubmitErrors, ClaimsClaimSubmitResponses, ClaimsClaimWithdrawData, ClaimsClaimWithdrawErrors, ClaimsClaimWithdrawResponses, ClaimsDecisionQueueData, ClaimsDecisionQueueErrors, ClaimsDecisionQueueResponses, ClaimsLineAddData, ClaimsLineAddErrors, ClaimsLineAddResponses, ClaimsLineVoidData, ClaimsLineVoidErrors, ClaimsLineVoidResponses, ConfirmationsRequestDecideData, ConfirmationsRequestDecideErrors, ConfirmationsRequestDecideResponses, ConfirmationsRequestReadData, ConfirmationsRequestReadErrors, ConfirmationsRequestReadResponses, FilesFileDeleteData, FilesFileDeleteErrors, FilesFileDeleteResponses, FilesFileReadData, FilesFileReadErrors, FilesFileReadResponses, FilesFileUploadData, FilesFileUploadErrors, FilesFileUploadResponses, GatewayModelCompleteData, GatewayModelCompleteErrors, GatewayModelCompleteResponses, GatewayModelListData, GatewayModelListErrors, GatewayModelListResponses, GatewayUsageReadData, GatewayUsageReadErrors, GatewayUsageReadResponses, KnowledgeBatchApproveData, KnowledgeBatchApproveErrors, KnowledgeBatchApproveResponses, KnowledgeBatchCancelData, KnowledgeBatchCancelErrors, KnowledgeBatchCancelResponses, KnowledgeBatchCreateData, KnowledgeBatchCreateErrors, KnowledgeBatchCreateResponses, KnowledgeBatchListData, KnowledgeBatchListErrors, KnowledgeBatchListResponses, KnowledgeBatchPrepareData, KnowledgeBatchPrepareErrors, KnowledgeBatchPrepareResponses, KnowledgeBatchPreviewData, KnowledgeBatchPreviewErrors, KnowledgeBatchPreviewResponses, KnowledgeBatchReadData, KnowledgeBatchReadErrors, KnowledgeBatchReadResponses, KnowledgeBatchRejectData, KnowledgeBatchRejectErrors, KnowledgeBatchRejectResponses, KnowledgeBatchSubmitData, KnowledgeBatchSubmitErrors, KnowledgeBatchSubmitResponses, KnowledgeBatchUndoData, KnowledgeBatchUndoErrors, KnowledgeBatchUndoResponses, KnowledgeBatchUploadData, KnowledgeBatchUploadErrors, KnowledgeBatchUploadResponses, KnowledgeCollectionCreateData, KnowledgeCollectionCreateErrors, KnowledgeCollectionCreateResponses, KnowledgeCollectionListData, KnowledgeCollectionListErrors, KnowledgeCollectionListResponses, KnowledgeCollectionReadData, KnowledgeCollectionReadErrors, KnowledgeCollectionReadResponses, KnowledgeDocumentEraseData, KnowledgeDocumentEraseErrors, KnowledgeDocumentEraseResponses, KnowledgeSearchLogListData, KnowledgeSearchLogListErrors, KnowledgeSearchLogListResponses, KnowledgeSearchRunData, KnowledgeSearchRunErrors, KnowledgeSearchRunResponses, KnowledgeStatusReadData, KnowledgeStatusReadErrors, KnowledgeStatusReadResponses, PlatformHealthReadData, PlatformHealthReadErrors, PlatformHealthReadResponses, SpendMonthCloseData, SpendMonthCloseErrors, SpendMonthCloseResponses, SpendMonthListData, SpendMonthListErrors, SpendMonthListResponses, SpendStatementImportData, SpendStatementImportErrors, SpendStatementImportResponses, SpendStatementListData, SpendStatementListErrors, SpendStatementListResponses, SpendStatementPreviewData, SpendStatementPreviewErrors, SpendStatementPreviewResponses, SpendStatementVoidData, SpendStatementVoidErrors, SpendStatementVoidResponses, UsersCliLoginCreateData, UsersCliLoginCreateErrors, UsersCliLoginCreateResponses, UsersCliLoginListData, UsersCliLoginListErrors, UsersCliLoginListResponses, UsersCliLoginRevokeData, UsersCliLoginRevokeErrors, UsersCliLoginRevokeResponses, UsersCliLoginStartData, UsersCliLoginStartErrors, UsersCliLoginStartResponses, UsersDepartmentListData, UsersDepartmentListErrors, UsersDepartmentListResponses, UsersDirectoryListData, UsersDirectoryListErrors, UsersDirectoryListResponses, UsersSelfReadData, UsersSelfReadErrors, UsersSelfReadResponses, UsersSessionEndData, UsersSessionEndErrors, UsersSessionEndResponses, UsersSessionFinishData, UsersSessionFinishErrors, UsersSessionFinishResponses, UsersSessionStartData, UsersSessionStartErrors, UsersSessionStartResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -307,11 +307,46 @@ export const gatewayModelList = <ThrowOnError extends boolean = false>(options?:
 export const platformHealthRead = <ThrowOnError extends boolean = false>(options?: Options<PlatformHealthReadData, ThrowOnError>): RequestResult<PlatformHealthReadResponses, PlatformHealthReadErrors, ThrowOnError> => (options?.client ?? client).get<PlatformHealthReadResponses, PlatformHealthReadErrors, ThrowOnError>({ url: '/api/health', ...options });
 
 /**
+ * List Batches
+ *
+ * List import batches, newest first, optionally for one collection or one state.
+ */
+export const knowledgeBatchList = <ThrowOnError extends boolean = false>(options?: Options<KnowledgeBatchListData, ThrowOnError>): RequestResult<KnowledgeBatchListResponses, KnowledgeBatchListErrors, ThrowOnError> => (options?.client ?? client).get<KnowledgeBatchListResponses, KnowledgeBatchListErrors, ThrowOnError>({ url: '/api/knowledge/batches', ...options });
+
+/**
  * Read Batch
  *
  * Read an import batch, its files and its preparation report.
  */
 export const knowledgeBatchRead = <ThrowOnError extends boolean = false>(options: Options<KnowledgeBatchReadData, ThrowOnError>): RequestResult<KnowledgeBatchReadResponses, KnowledgeBatchReadErrors, ThrowOnError> => (options.client ?? client).get<KnowledgeBatchReadResponses, KnowledgeBatchReadErrors, ThrowOnError>({ url: '/api/knowledge/batches/{batch_id}', ...options });
+
+/**
+ * Approve Batch
+ *
+ * Approve a batch waiting for approval, which applies it live. Only a person may do this.
+ */
+export const knowledgeBatchApprove = <ThrowOnError extends boolean = false>(options: Options<KnowledgeBatchApproveData, ThrowOnError>): RequestResult<KnowledgeBatchApproveResponses, KnowledgeBatchApproveErrors, ThrowOnError> => (options.client ?? client).post<KnowledgeBatchApproveResponses, KnowledgeBatchApproveErrors, ThrowOnError>({
+    url: '/api/knowledge/batches/{batch_id}/approve',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Cancel Batch
+ *
+ * Cancel a batch that is still open. A request waiting for approval is withdrawn too.
+ */
+export const knowledgeBatchCancel = <ThrowOnError extends boolean = false>(options: Options<KnowledgeBatchCancelData, ThrowOnError>): RequestResult<KnowledgeBatchCancelResponses, KnowledgeBatchCancelErrors, ThrowOnError> => (options.client ?? client).post<KnowledgeBatchCancelResponses, KnowledgeBatchCancelErrors, ThrowOnError>({
+    url: '/api/knowledge/batches/{batch_id}/cancel',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Upload File
@@ -348,6 +383,34 @@ export const knowledgeBatchPreview = <ThrowOnError extends boolean = false>(opti
         ...options.headers
     }
 });
+
+/**
+ * Reject Batch
+ *
+ * Reject a batch waiting for approval, with a reason. Only a person may do this.
+ */
+export const knowledgeBatchReject = <ThrowOnError extends boolean = false>(options: Options<KnowledgeBatchRejectData, ThrowOnError>): RequestResult<KnowledgeBatchRejectResponses, KnowledgeBatchRejectErrors, ThrowOnError> => (options.client ?? client).post<KnowledgeBatchRejectResponses, KnowledgeBatchRejectErrors, ThrowOnError>({
+    url: '/api/knowledge/batches/{batch_id}/reject',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Submit Batch
+ *
+ * Ask for approval to apply a prepared batch. The staged result is fixed from this point.
+ */
+export const knowledgeBatchSubmit = <ThrowOnError extends boolean = false>(options: Options<KnowledgeBatchSubmitData, ThrowOnError>): RequestResult<KnowledgeBatchSubmitResponses, KnowledgeBatchSubmitErrors, ThrowOnError> => (options.client ?? client).post<KnowledgeBatchSubmitResponses, KnowledgeBatchSubmitErrors, ThrowOnError>({ url: '/api/knowledge/batches/{batch_id}/submit', ...options });
+
+/**
+ * Undo Batch
+ *
+ * Undo an applied batch, restoring the live documents and access rules it replaced. The person confirms this first.
+ */
+export const knowledgeBatchUndo = <ThrowOnError extends boolean = false>(options: Options<KnowledgeBatchUndoData, ThrowOnError>): RequestResult<KnowledgeBatchUndoResponses, KnowledgeBatchUndoErrors, ThrowOnError> => (options.client ?? client).post<KnowledgeBatchUndoResponses, KnowledgeBatchUndoErrors, ThrowOnError>({ url: '/api/knowledge/batches/{batch_id}/undo', ...options });
 
 /**
  * List Collections
@@ -390,6 +453,41 @@ export const knowledgeBatchCreate = <ThrowOnError extends boolean = false>(optio
         ...options.headers
     }
 });
+
+/**
+ * Erase Document
+ *
+ * Erase a document from every batch of a collection, from search and from file storage. Only a person may do this, with a reason.
+ */
+export const knowledgeDocumentErase = <ThrowOnError extends boolean = false>(options: Options<KnowledgeDocumentEraseData, ThrowOnError>): RequestResult<KnowledgeDocumentEraseResponses, KnowledgeDocumentEraseErrors, ThrowOnError> => (options.client ?? client).post<KnowledgeDocumentEraseResponses, KnowledgeDocumentEraseErrors, ThrowOnError>({
+    url: '/api/knowledge/collections/{collection_id}/documents/erase',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Search
+ *
+ * Search the knowledge the caller may read, as it is live now or was live at a past moment. Each result names its source document and section.
+ */
+export const knowledgeSearchRun = <ThrowOnError extends boolean = false>(options: Options<KnowledgeSearchRunData, ThrowOnError>): RequestResult<KnowledgeSearchRunResponses, KnowledgeSearchRunErrors, ThrowOnError> => (options.client ?? client).post<KnowledgeSearchRunResponses, KnowledgeSearchRunErrors, ThrowOnError>({
+    url: '/api/knowledge/search',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Search Log
+ *
+ * Read who searched for what and which chunks they got back. Only a person may read it.
+ */
+export const knowledgeSearchLogList = <ThrowOnError extends boolean = false>(options?: Options<KnowledgeSearchLogListData, ThrowOnError>): RequestResult<KnowledgeSearchLogListResponses, KnowledgeSearchLogListErrors, ThrowOnError> => (options?.client ?? client).get<KnowledgeSearchLogListResponses, KnowledgeSearchLogListErrors, ThrowOnError>({ url: '/api/knowledge/search-log', ...options });
 
 /**
  * Read Status

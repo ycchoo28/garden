@@ -1,26 +1,38 @@
 <script setup lang="ts">
-import { useQuery } from '@tanstack/vue-query';
-import { computed } from 'vue';
-import { RouterView, useRoute } from 'vue-router';
+import { useQuery } from "@tanstack/vue-query";
+import { computed } from "vue";
+import { RouterView, useRoute } from "vue-router";
 
-import { usersSelfReadOptions } from './api/generated/@tanstack/vue-query.gen';
-import { useSignOut } from './modules/users';
-import AppShell from './shared/ui/AppShell.vue';
-import BareLayout from './shared/ui/BareLayout.vue';
+import { usersSelfReadOptions } from "./api/generated/@tanstack/vue-query.gen";
+import { useSignOut } from "./modules/users";
+import AppShell from "./shared/ui/AppShell.vue";
+import BareLayout from "./shared/ui/BareLayout.vue";
 
 const route = useRoute();
-const bare = computed(() => route.meta.layout === 'bare');
+const bare = computed(() => route.meta.layout === "bare");
 
-const { data: me } = useQuery({ ...usersSelfReadOptions(), enabled: computed(() => !bare.value) });
-const person = computed(() => (me.value ? { name: me.value.name, email: me.value.email } : undefined));
+const { data: me } = useQuery({
+  ...usersSelfReadOptions(),
+  enabled: computed(() => !bare.value),
+});
+const person = computed(() =>
+  me.value ? { name: me.value.name, email: me.value.email } : undefined,
+);
 
 // A link shows only when the person holds the permission it leads to. The server checks every request anyway.
 const links = computed(() => {
   const permissions = me.value?.permissions ?? [];
   const items: { to: string; label: string }[] = [];
-  if (permissions.includes('claims.view')) items.push({ to: '/claims', label: 'Claims' });
-  if (permissions.includes('claims.decide')) items.push({ to: '/approvals', label: 'Approvals' });
-  if (permissions.includes('budgets.view')) items.push({ to: '/budgets/variance', label: 'Variance' });
+  if (permissions.includes("claims.view"))
+    items.push({ to: "/claims", label: "Claims" });
+  if (permissions.includes("claims.decide"))
+    items.push({ to: "/approvals", label: "Approvals" });
+  if (permissions.includes("budgets.view"))
+    items.push({ to: "/budgets/variance", label: "Variance" });
+  if (permissions.includes("knowledge.search"))
+    items.push({ to: "/search", label: "Search" });
+  if (permissions.includes("knowledge.search_log.read"))
+    items.push({ to: "/search-log", label: "Search log" });
   return items;
 });
 

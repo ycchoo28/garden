@@ -1,13 +1,21 @@
 """Idempotent development data: Fernhill Studio departments and personas. Run `just seed`."""
 
 import asyncio
+from collections.abc import Sequence
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.core.approvals.models import Flow, FlowStep
 from app.core.users.models import Department, Person, RoleGrant
-from app.modules.claims import CLAIM_FLOW_CODE, CLAIM_FLOW_NAME, CLAIM_FLOW_STEPS
+from app.modules.claims import CLAIM_FLOW_CODE, CLAIM_FLOW_NAME, CLAIM_FLOW_STEPS, FlowStepSeed
+from app.modules.knowledge import (
+    KNOWLEDGE_FLOW_CODE,
+    KNOWLEDGE_FLOW_NAME,
+    KNOWLEDGE_FLOW_STEPS,
+    KnowledgeFlowStep,
+)
 from app.shared.db import session_factory
 from app.shared.ids import new_id
 
@@ -20,7 +28,8 @@ DEPARTMENTS: tuple[tuple[str, str], ...] = (
 
 # The subject is the email, which is also the `sub` that the fake sign-in provider issues.
 PERSONAS: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
-    ("dev.admin@fernhill.example", "Dev Admin", "operations", ("admin",)),
+    # A second knowledge administrator, so a batch has an approver other than its starter.
+    ("dev.admin@fernhill.example", "Dev Admin", "operations", ("admin", "knowledge_admin")),
     ("priya.nair@fernhill.example", "Priya Nair", "design", ("manager",)),
     ("marcus.lee@fernhill.example", "Marcus Lee", "design", ()),
     ("ana.costa@fernhill.example", "Ana Costa", "engineering", ("manager",)),
@@ -66,27 +75,35 @@ async def seed() -> None:
                     session.add(RoleGrant(id=new_id(), person_id=person.id, role=role))
 
         # Approval flows are data, so the seed loads each one that is missing.
-        if await session.get(Flow, CLAIM_FLOW_CODE) is None:
-            session.add(Flow(code=CLAIM_FLOW_CODE, name=CLAIM_FLOW_NAME))
-            await session.flush()
-        for step in CLAIM_FLOW_STEPS:
-            existing = await session.scalar(
-                select(FlowStep).where(
-                    FlowStep.flow_code == CLAIM_FLOW_CODE, FlowStep.position == step.position
+        await _load_flow(session, CLAIM_FLOW_CODE, CLAIM_FLOW_NAME, CLAIM_FLOW_STEPS)
+        await _load_flow(session, KNOWLEDGE_FLOW_CODE, KNOWLEDGE_FLOW_NAME, KNOWLEDGE_FLOW_STEPS)
+        await session.commit()
+
+
+async def _load_flow(
+    session: AsyncSession,
+    code: str,
+    name: str,
+    steps: Sequence[FlowStepSeed | KnowledgeFlowStep],
+) -> None:
+    if await session.get(Flow, code) is None:
+        session.add(Flow(code=code, name=name))
+        await session.flush()
+    for step in steps:
+        existing = await session.scalar(
+            select(FlowStep).where(FlowStep.flow_code == code, FlowStep.position == step.position)
+        )
+        if existing is None:
+            session.add(
+                FlowStep(
+                    id=new_id(),
+                    flow_code=code,
+                    position=step.position,
+                    role=step.role,
+                    department_scoped=step.department_scoped,
+                    above=step.above,
                 )
             )
-            if existing is None:
-                session.add(
-                    FlowStep(
-                        id=new_id(),
-                        flow_code=CLAIM_FLOW_CODE,
-                        position=step.position,
-                        role=step.role,
-                        department_scoped=step.department_scoped,
-                        above=step.above,
-                    )
-                )
-        await session.commit()
 
 
 if __name__ == "__main__":

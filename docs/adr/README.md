@@ -29,3 +29,4 @@ Records are numbered in the order they were made, and a later record may replace
 | [0022](0022-agent-login-permissions.md) | A CLI login holds the person's permissions minus the person-only ones |
 | [0023](0023-cli-discovery-and-mcp.md) | The command and its MCP server come from the published contract |
 | [0024](0024-model-gateway.md) | A model gateway with limits per login and per person, and counts only |
+| [0025](0025-batch-approval-and-undo.md) | A batch goes live only after approval, and undo restores the spans |

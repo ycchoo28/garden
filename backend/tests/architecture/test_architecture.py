@@ -36,6 +36,7 @@ CRITICAL_ROUTES: frozenset[str] = frozenset(
         "/api/spend/statements/{statement_id}/void",
         "/api/spend/months/{year_month}/close",
         "/api/files/{sha256}",
+        "/api/knowledge/batches/{batch_id}/undo",
     }
 )
 

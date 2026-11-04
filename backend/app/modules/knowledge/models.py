@@ -15,6 +15,7 @@ from sqlalchemy import (
     MetaData,
     String,
     Text,
+    Uuid,
     func,
     text,
 )
@@ -85,6 +86,19 @@ class ImportBatch(Base):
     created_by: Mapped[uuid.UUID]
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     prepared_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Access rules the batch sets on its collection when applied. None leaves the rules as they are.
+    access_rules: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
+    # The rules the collection had before this batch replaced them, kept so undo can restore them.
+    previous_access_rules: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
+    risk: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default=text("'[]'::jsonb"))
+    # The digest of the staged result when approval was asked for. Apply refuses a changed result.
+    staged_digest: Mapped[str | None] = mapped_column(String(64))
+    # The approval run in the approvals schema. It is referenced by id only, across schemas.
+    approval_run_id: Mapped[uuid.UUID | None]
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    applied_by: Mapped[uuid.UUID | None]
+    undone_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    undone_by: Mapped[uuid.UUID | None]
 
 
 class BatchFile(Base):
@@ -159,3 +173,46 @@ class Chunk(Base):
         TSVECTOR,
         Computed("to_tsvector('simple', context_prefix || ' ' || body)", persisted=True),
     )
+
+
+class ChunkRange(Base):
+    """A span of time in which a chunk is live. A chunk may have several spans: undo reopens it.
+
+    A span with no `live_to` is live now. A batch that closes a document sets `live_to` and
+    `closed_by_batch_id` on that document's open spans. Undo closes the spans the batch opened and
+    opens new ones for the chunks it closed. Search as of a moment reads the spans that cover it.
+    """
+
+    __tablename__ = "chunk_range"
+    __table_args__ = (Index("ix_chunk_range_chunk_id", "chunk_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_id)
+    chunk_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("knowledge.chunk.id", ondelete="CASCADE")
+    )
+    live_from: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    live_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    opened_by_batch_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("knowledge.import_batch.id", ondelete="CASCADE")
+    )
+    closed_by_batch_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("knowledge.import_batch.id", ondelete="CASCADE")
+    )
+
+
+class SearchLog(Base):
+    """One live or as-of search: who asked, what, and which chunks it returned."""
+
+    __tablename__ = "search_log"
+    __table_args__ = (Index("ix_search_log_searched_at", "searched_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_id)
+    person_id: Mapped[uuid.UUID]
+    person_name: Mapped[str] = mapped_column(String(200))
+    acting_as_agent: Mapped[bool] = mapped_column(Boolean)
+    query: Mapped[str] = mapped_column(Text)
+    as_of: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    chunk_ids: Mapped[list[uuid.UUID]] = mapped_column(
+        ARRAY(Uuid(as_uuid=True)), default=list, server_default=text("ARRAY[]::uuid[]")
+    )
+    searched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

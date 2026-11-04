@@ -3,11 +3,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import { computed, ref } from 'vue';
 
 import {
+  knowledgeBatchApproveMutation,
+  knowledgeBatchCancelMutation,
   knowledgeBatchPrepareMutation,
   knowledgeBatchPreviewMutation,
   knowledgeBatchReadOptions,
   knowledgeBatchReadQueryKey,
+  knowledgeBatchRejectMutation,
+  knowledgeBatchSubmitMutation,
+  knowledgeBatchUndoMutation,
   knowledgeBatchUploadMutation,
+  usersSelfReadOptions,
 } from '../../api/generated/@tanstack/vue-query.gen';
 import { problemMessage } from '../../shared/problem';
 import PageHeader from '../../shared/ui/PageHeader.vue';
@@ -82,6 +88,78 @@ const preview = useMutation({
 function runPreview() {
   actionError.value = null;
   preview.mutate({ path: { batch_id: props.batchId }, body: { query: query.value.trim(), limit: 5 } });
+}
+
+// The server checks every action again. The page shows only the actions the person may take.
+const me = useQuery(usersSelfReadOptions());
+const permissions = computed(() => me.data.value?.permissions ?? []);
+const canSubmit = computed(() => permissions.value.includes('knowledge.batch.submit'));
+const canDecide = computed(() => permissions.value.includes('knowledge.batch.decide'));
+const canCancel = computed(() => permissions.value.includes('knowledge.batch.cancel'));
+const canUndo = computed(() => permissions.value.includes('knowledge.batch.undo'));
+
+const removedDocuments = computed(() => (batch.value?.report.removed_documents as string[] | undefined) ?? []);
+const decisionReason = ref('');
+
+const onActionError = (failure: unknown) => {
+  actionError.value = problemMessage(failure);
+};
+
+const submit = useMutation({
+  ...knowledgeBatchSubmitMutation(),
+  onSuccess: refreshBatch,
+  onError: onActionError,
+});
+const approve = useMutation({
+  ...knowledgeBatchApproveMutation(),
+  onSuccess: async () => {
+    decisionReason.value = '';
+    await refreshBatch();
+  },
+  onError: onActionError,
+});
+const reject = useMutation({
+  ...knowledgeBatchRejectMutation(),
+  onSuccess: async () => {
+    decisionReason.value = '';
+    await refreshBatch();
+  },
+  onError: onActionError,
+});
+const cancel = useMutation({
+  ...knowledgeBatchCancelMutation(),
+  onSuccess: refreshBatch,
+  onError: onActionError,
+});
+const undo = useMutation({
+  ...knowledgeBatchUndoMutation(),
+  onSuccess: refreshBatch,
+  onError: onActionError,
+});
+
+function submitBatch() {
+  actionError.value = null;
+  submit.mutate({ path: { batch_id: props.batchId } });
+}
+
+function approveBatch() {
+  actionError.value = null;
+  approve.mutate({ path: { batch_id: props.batchId }, body: { reason: decisionReason.value.trim() || null } });
+}
+
+function rejectBatch() {
+  actionError.value = null;
+  reject.mutate({ path: { batch_id: props.batchId }, body: { reason: decisionReason.value.trim() } });
+}
+
+function cancelBatch() {
+  actionError.value = null;
+  cancel.mutate({ path: { batch_id: props.batchId }, body: { reason: decisionReason.value.trim() || null } });
+}
+
+function undoBatch() {
+  actionError.value = null;
+  undo.mutate({ path: { batch_id: props.batchId } });
 }
 </script>
 
@@ -205,6 +283,150 @@ function runPreview() {
       >
         {{ actionError }}
       </p>
+    </SectionCard>
+
+    <SectionCard
+      v-if="batch.state !== 'uploaded' && batch.state !== 'preparing' && batch.state !== 'failed'"
+      title="Review and approval"
+      description="A batch goes live only after a person other than the one who asked approves the staged result."
+      class="lg:col-span-2"
+    >
+      <div class="space-y-4">
+        <p class="text-sm">
+          <span class="font-medium">Risk:</span>
+          <span v-if="batch.risk.length"> {{ batch.risk.join(', ').replace(/_/g, ' ') }}</span>
+          <span
+            v-else
+            class="text-muted"
+          > none</span>
+        </p>
+
+        <div v-if="removedDocuments.length">
+          <p class="text-sm font-medium">
+            {{ removedDocuments.length }} document(s) will close when this batch applies:
+          </p>
+          <ul class="mt-1 list-disc pl-5 text-sm text-muted">
+            <li
+              v-for="name in removedDocuments"
+              :key="name"
+            >
+              {{ name }}
+            </li>
+          </ul>
+        </div>
+
+        <div>
+          <p class="text-sm font-medium">
+            Access rules
+          </p>
+          <ul
+            v-if="batch.access_rules?.length"
+            class="mt-1 space-y-1 text-sm text-muted"
+          >
+            <li
+              v-for="rule in batch.access_rules"
+              :key="rule.role + rule.department_codes.join(',')"
+            >
+              {{ rule.role }} ·
+              {{ rule.all_departments ? 'all departments' : rule.department_codes.join(', ') || 'no departments' }}
+            </li>
+          </ul>
+          <p
+            v-else
+            class="mt-1 text-sm text-muted"
+          >
+            No access rules set.
+          </p>
+        </div>
+
+        <div
+          v-if="batch.state === 'awaiting_approval' && canDecide"
+          class="space-y-3"
+        >
+          <label class="block space-y-1">
+            <span class="text-sm font-medium">Reason (required to reject)</span>
+            <input
+              v-model="decisionReason"
+              name="decision_reason"
+              maxlength="500"
+              class="w-full rounded-lg border border-line bg-surface px-3 py-2"
+            >
+          </label>
+          <div class="flex flex-wrap gap-3">
+            <button
+              type="button"
+              class="rounded-lg bg-primary px-4 py-2 font-semibold text-primary-contrast"
+              :disabled="approve.isPending.value"
+              @click="approveBatch"
+            >
+              Approve and apply
+            </button>
+            <button
+              type="button"
+              class="rounded-lg border border-line px-4 py-2 text-sm font-medium"
+              :disabled="reject.isPending.value || !decisionReason.trim()"
+              @click="rejectBatch"
+            >
+              Reject
+            </button>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap gap-3">
+          <button
+            v-if="batch.state === 'prepared' && canSubmit"
+            type="button"
+            class="rounded-lg bg-primary px-4 py-2 font-semibold text-primary-contrast"
+            :disabled="submit.isPending.value"
+            @click="submitBatch"
+          >
+            Ask for approval
+          </button>
+          <button
+            v-if="['uploaded', 'prepared', 'awaiting_approval'].includes(batch.state) && canCancel"
+            type="button"
+            class="rounded-lg border border-line px-4 py-2 text-sm font-medium"
+            :disabled="cancel.isPending.value"
+            @click="cancelBatch"
+          >
+            Cancel batch
+          </button>
+          <button
+            v-if="batch.state === 'applied' && canUndo"
+            type="button"
+            class="rounded-lg border border-line px-4 py-2 text-sm font-medium"
+            :disabled="undo.isPending.value"
+            @click="undoBatch"
+          >
+            Undo applied batch
+          </button>
+        </div>
+
+        <p
+          v-if="batch.state === 'applied'"
+          class="text-sm text-muted"
+        >
+          Applied {{ batch.applied_at }}. Readers now see this content.
+        </p>
+        <p
+          v-if="batch.state === 'undone'"
+          class="text-sm text-muted"
+        >
+          Undone {{ batch.undone_at }}. The live content is back to what it was before.
+        </p>
+        <p
+          v-if="batch.state === 'rejected'"
+          class="text-sm text-muted"
+        >
+          Rejected. Nothing went live.
+        </p>
+        <p
+          v-if="batch.state === 'cancelled'"
+          class="text-sm text-muted"
+        >
+          Cancelled. Nothing went live.
+        </p>
+      </div>
     </SectionCard>
 
     <SectionCard
