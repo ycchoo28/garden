@@ -56,6 +56,13 @@ class CurrentPerson:
 
 
 @dataclass(frozen=True)
+class DepartmentView:
+    id: uuid.UUID
+    code: str
+    name: str
+
+
+@dataclass(frozen=True)
 class PersonView:
     id: uuid.UUID
     name: str
@@ -177,6 +184,11 @@ class UserService:
             permissions=frozenset(permissions),
             scope=DataScope.for_roles(held, department.id),
         )
+
+    async def departments(self) -> list[DepartmentView]:
+        """Every department. Budgets and card statements refer to departments by their id."""
+        rows = await self._repo.departments()
+        return [DepartmentView(id=row.id, code=row.code, name=row.name) for row in rows]
 
     async def visible_people(self, caller: CurrentPerson) -> list[PersonView]:
         departments = None if caller.scope.all_departments else caller.scope.department_ids

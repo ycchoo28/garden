@@ -7,7 +7,7 @@ from fastapi.responses import RedirectResponse
 
 from app.config import Settings, get_settings
 from app.core.users.access import SESSION_COOKIE, require
-from app.core.users.schemas import MeOut, PersonOut
+from app.core.users.schemas import DepartmentEntryOut, MeOut, PersonOut
 from app.core.users.service import CurrentPerson, UserService, get_user_service
 from app.shared.operations import op
 
@@ -100,3 +100,21 @@ async def list_people(
     service: Annotated[UserService, Depends(get_user_service)],
 ) -> list[PersonOut]:
     return [PersonOut.of(view) for view in await service.visible_people(person)]
+
+
+@router.get(
+    "/api/users/departments",
+    response_model=list[DepartmentEntryOut],
+    **op(
+        "users.department.list",
+        "List the company's departments with their ids. Budgets and card statements use these ids.",
+    ),
+)
+async def list_departments(
+    _person: Annotated[CurrentPerson, require("users.directory.view")],
+    service: Annotated[UserService, Depends(get_user_service)],
+) -> list[DepartmentEntryOut]:
+    return [
+        DepartmentEntryOut(id=view.id, code=view.code, name=view.name)
+        for view in await service.departments()
+    ]

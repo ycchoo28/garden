@@ -3,8 +3,8 @@
 import { queryOptions, type UseMutationOptions } from '@tanstack/vue-query';
 
 import { client } from '../client.gen';
-import { auditEventList, confirmationsRequestDecide, confirmationsRequestRead, filesFileRead, filesFileUpload, type Options, platformHealthRead, usersDirectoryList, usersSelfRead, usersSessionEnd, usersSessionFinish, usersSessionStart } from '../sdk.gen';
-import type { AuditEventListData, AuditEventListError, AuditEventListResponse, ConfirmationsRequestDecideData, ConfirmationsRequestDecideError, ConfirmationsRequestDecideResponse, ConfirmationsRequestReadData, ConfirmationsRequestReadError, ConfirmationsRequestReadResponse, FilesFileReadData, FilesFileReadError, FilesFileUploadData, FilesFileUploadError, FilesFileUploadResponse, PlatformHealthReadData, PlatformHealthReadError, PlatformHealthReadResponse, UsersDirectoryListData, UsersDirectoryListError, UsersDirectoryListResponse, UsersSelfReadData, UsersSelfReadError, UsersSelfReadResponse, UsersSessionEndData, UsersSessionEndError, UsersSessionEndResponse, UsersSessionFinishData, UsersSessionFinishError, UsersSessionStartData, UsersSessionStartError } from '../types.gen';
+import { auditEventList, budgetsCategoryList, budgetsLineCreate, budgetsLineHistory, budgetsLineList, budgetsLineReplace, budgetsVarianceRead, confirmationsRequestDecide, confirmationsRequestRead, filesFileRead, filesFileUpload, type Options, platformHealthRead, spendMonthClose, spendMonthList, spendStatementImport, spendStatementList, spendStatementPreview, spendStatementVoid, usersDepartmentList, usersDirectoryList, usersSelfRead, usersSessionEnd, usersSessionFinish, usersSessionStart } from '../sdk.gen';
+import type { AuditEventListData, AuditEventListError, AuditEventListResponse, BudgetsCategoryListData, BudgetsCategoryListError, BudgetsCategoryListResponse, BudgetsLineCreateData, BudgetsLineCreateError, BudgetsLineCreateResponse, BudgetsLineHistoryData, BudgetsLineHistoryError, BudgetsLineHistoryResponse, BudgetsLineListData, BudgetsLineListError, BudgetsLineListResponse, BudgetsLineReplaceData, BudgetsLineReplaceError, BudgetsLineReplaceResponse, BudgetsVarianceReadData, BudgetsVarianceReadError, BudgetsVarianceReadResponse, ConfirmationsRequestDecideData, ConfirmationsRequestDecideError, ConfirmationsRequestDecideResponse, ConfirmationsRequestReadData, ConfirmationsRequestReadError, ConfirmationsRequestReadResponse, FilesFileReadData, FilesFileReadError, FilesFileUploadData, FilesFileUploadError, FilesFileUploadResponse, PlatformHealthReadData, PlatformHealthReadError, PlatformHealthReadResponse, SpendMonthCloseData, SpendMonthCloseError, SpendMonthCloseResponse, SpendMonthListData, SpendMonthListError, SpendMonthListResponse, SpendStatementImportData, SpendStatementImportError, SpendStatementImportResponse, SpendStatementListData, SpendStatementListError, SpendStatementListResponse, SpendStatementPreviewData, SpendStatementPreviewError, SpendStatementPreviewResponse, SpendStatementVoidData, SpendStatementVoidError, SpendStatementVoidResponse, UsersDepartmentListData, UsersDepartmentListError, UsersDepartmentListResponse, UsersDirectoryListData, UsersDirectoryListError, UsersDirectoryListResponse, UsersSelfReadData, UsersSelfReadError, UsersSelfReadResponse, UsersSessionEndData, UsersSessionEndError, UsersSessionEndResponse, UsersSessionFinishData, UsersSessionFinishError, UsersSessionStartData, UsersSessionStartError } from '../types.gen';
 
 export type QueryKey<TOptions extends Options> = [
     Pick<TOptions, 'baseUrl' | 'body' | 'headers' | 'path' | 'query'> & {
@@ -57,6 +57,124 @@ export const auditEventListOptions = (options?: Options<AuditEventListData>) => 
         return data;
     },
     queryKey: auditEventListQueryKey(options)
+});
+
+export const budgetsCategoryListQueryKey = (options?: Options<BudgetsCategoryListData>) => createQueryKey('budgetsCategoryList', options);
+
+/**
+ * List Categories
+ *
+ * List the spend categories that budget lines and card rows use.
+ */
+export const budgetsCategoryListOptions = (options?: Options<BudgetsCategoryListData>) => queryOptions<BudgetsCategoryListResponse, BudgetsCategoryListError, BudgetsCategoryListResponse, ReturnType<typeof budgetsCategoryListQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await budgetsCategoryList({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: budgetsCategoryListQueryKey(options)
+});
+
+export const budgetsLineListQueryKey = (options: Options<BudgetsLineListData>) => createQueryKey('budgetsLineList', options);
+
+/**
+ * List Lines
+ *
+ * List the current budget lines for one month. Managers see only their own department.
+ */
+export const budgetsLineListOptions = (options: Options<BudgetsLineListData>) => queryOptions<BudgetsLineListResponse, BudgetsLineListError, BudgetsLineListResponse, ReturnType<typeof budgetsLineListQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await budgetsLineList({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: budgetsLineListQueryKey(options)
+});
+
+/**
+ * Create Line
+ *
+ * Create the budget for one department, month and category. Finance and admin only.
+ */
+export const budgetsLineCreateMutation = (options?: Partial<Options<BudgetsLineCreateData>>): UseMutationOptions<BudgetsLineCreateResponse, BudgetsLineCreateError, Options<BudgetsLineCreateData>> => {
+    const mutationOptions: UseMutationOptions<BudgetsLineCreateResponse, BudgetsLineCreateError, Options<BudgetsLineCreateData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await budgetsLineCreate({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+/**
+ * Replace Line
+ *
+ * Replace the amount of a budget line with a reason. The old version stays in the line's history. Send the version you read; a stale version returns 409. Finance and admin only.
+ */
+export const budgetsLineReplaceMutation = (options?: Partial<Options<BudgetsLineReplaceData>>): UseMutationOptions<BudgetsLineReplaceResponse, BudgetsLineReplaceError, Options<BudgetsLineReplaceData>> => {
+    const mutationOptions: UseMutationOptions<BudgetsLineReplaceResponse, BudgetsLineReplaceError, Options<BudgetsLineReplaceData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await budgetsLineReplace({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+export const budgetsLineHistoryQueryKey = (options: Options<BudgetsLineHistoryData>) => createQueryKey('budgetsLineHistory', options);
+
+/**
+ * Read History
+ *
+ * List every version of a budget line, oldest first, with the reason for each replacement.
+ */
+export const budgetsLineHistoryOptions = (options: Options<BudgetsLineHistoryData>) => queryOptions<BudgetsLineHistoryResponse, BudgetsLineHistoryError, BudgetsLineHistoryResponse, ReturnType<typeof budgetsLineHistoryQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await budgetsLineHistory({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: budgetsLineHistoryQueryKey(options)
+});
+
+export const budgetsVarianceReadQueryKey = (options: Options<BudgetsVarianceReadData>) => createQueryKey('budgetsVarianceRead', options);
+
+/**
+ * Read Variance
+ *
+ * Compare budget with actual spend by department, month and category for a range of months. Managers see only their own department.
+ */
+export const budgetsVarianceReadOptions = (options: Options<BudgetsVarianceReadData>) => queryOptions<BudgetsVarianceReadResponse, BudgetsVarianceReadError, BudgetsVarianceReadResponse, ReturnType<typeof budgetsVarianceReadQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await budgetsVarianceRead({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: budgetsVarianceReadQueryKey(options)
 });
 
 export const confirmationsRequestReadQueryKey = (options: Options<ConfirmationsRequestReadData>) => createQueryKey('confirmationsRequestRead', options);
@@ -155,6 +273,142 @@ export const platformHealthReadOptions = (options?: Options<PlatformHealthReadDa
         return data;
     },
     queryKey: platformHealthReadQueryKey(options)
+});
+
+export const spendMonthListQueryKey = (options?: Options<SpendMonthListData>) => createQueryKey('spendMonthList', options);
+
+/**
+ * List Closed Months
+ *
+ * List closed months, newest first.
+ */
+export const spendMonthListOptions = (options?: Options<SpendMonthListData>) => queryOptions<SpendMonthListResponse, SpendMonthListError, SpendMonthListResponse, ReturnType<typeof spendMonthListQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await spendMonthList({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: spendMonthListQueryKey(options)
+});
+
+/**
+ * Close Month
+ *
+ * Close a month with a reason. Afterwards no spend for that month can be imported or voided. An agent's request waits for the person's confirmation.
+ */
+export const spendMonthCloseMutation = (options?: Partial<Options<SpendMonthCloseData>>): UseMutationOptions<SpendMonthCloseResponse, SpendMonthCloseError, Options<SpendMonthCloseData>> => {
+    const mutationOptions: UseMutationOptions<SpendMonthCloseResponse, SpendMonthCloseError, Options<SpendMonthCloseData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await spendMonthClose({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+export const spendStatementListQueryKey = (options?: Options<SpendStatementListData>) => createQueryKey('spendStatementList', options);
+
+/**
+ * List Statements
+ *
+ * List imported card statements, newest first. Voided statements are included.
+ */
+export const spendStatementListOptions = (options?: Options<SpendStatementListData>) => queryOptions<SpendStatementListResponse, SpendStatementListError, SpendStatementListResponse, ReturnType<typeof spendStatementListQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await spendStatementList({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: spendStatementListQueryKey(options)
+});
+
+/**
+ * Import Statement
+ *
+ * Import a card statement CSV. Every row is saved, or none is when a row has an error or a duplicate.
+ */
+export const spendStatementImportMutation = (options?: Partial<Options<SpendStatementImportData>>): UseMutationOptions<SpendStatementImportResponse, SpendStatementImportError, Options<SpendStatementImportData>> => {
+    const mutationOptions: UseMutationOptions<SpendStatementImportResponse, SpendStatementImportError, Options<SpendStatementImportData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await spendStatementImport({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+/**
+ * Preview Statement
+ *
+ * Check a card statement CSV without saving it. Lists every row error and duplicate.
+ */
+export const spendStatementPreviewMutation = (options?: Partial<Options<SpendStatementPreviewData>>): UseMutationOptions<SpendStatementPreviewResponse, SpendStatementPreviewError, Options<SpendStatementPreviewData>> => {
+    const mutationOptions: UseMutationOptions<SpendStatementPreviewResponse, SpendStatementPreviewError, Options<SpendStatementPreviewData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await spendStatementPreview({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+/**
+ * Void Statement
+ *
+ * Void an imported card statement with a reason. Its rows stop counting as spend but are kept. An agent's request waits for the person's confirmation.
+ */
+export const spendStatementVoidMutation = (options?: Partial<Options<SpendStatementVoidData>>): UseMutationOptions<SpendStatementVoidResponse, SpendStatementVoidError, Options<SpendStatementVoidData>> => {
+    const mutationOptions: UseMutationOptions<SpendStatementVoidResponse, SpendStatementVoidError, Options<SpendStatementVoidData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await spendStatementVoid({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+export const usersDepartmentListQueryKey = (options?: Options<UsersDepartmentListData>) => createQueryKey('usersDepartmentList', options);
+
+/**
+ * List Departments
+ *
+ * List the company's departments with their ids. Budgets and card statements use these ids.
+ */
+export const usersDepartmentListOptions = (options?: Options<UsersDepartmentListData>) => queryOptions<UsersDepartmentListResponse, UsersDepartmentListError, UsersDepartmentListResponse, ReturnType<typeof usersDepartmentListQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await usersDepartmentList({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: usersDepartmentListQueryKey(options)
 });
 
 export const usersSelfReadQueryKey = (options?: Options<UsersSelfReadData>) => createQueryKey('usersSelfRead', options);

@@ -26,6 +26,9 @@ class UserRepository:
     async def department_by_id(self, department_id: uuid.UUID) -> Department | None:
         return await self._session.get(Department, department_id)
 
+    async def departments(self) -> Sequence[Department]:
+        return (await self._session.scalars(select(Department).order_by(Department.code))).all()
+
     async def role_names(self, person_id: uuid.UUID) -> frozenset[str]:
         names = await self._session.scalars(
             select(RoleGrant.role).where(RoleGrant.person_id == person_id)

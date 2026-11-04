@@ -12,6 +12,12 @@ class DepartmentOut(BaseModel):
     name: str
 
 
+class DepartmentEntryOut(BaseModel):
+    id: uuid.UUID
+    code: str
+    name: str
+
+
 class MeOut(BaseModel):
     id: uuid.UUID
     name: str

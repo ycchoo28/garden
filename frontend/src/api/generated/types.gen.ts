@@ -39,6 +39,16 @@ export type AuditEventOut = {
 };
 
 /**
+ * CloseIn
+ */
+export type CloseIn = {
+    /**
+     * Reason
+     */
+    reason: string;
+};
+
+/**
  * ConfirmationOut
  */
 export type ConfirmationOut = {
@@ -71,6 +81,24 @@ export type DecisionIn = {
 };
 
 /**
+ * DepartmentEntryOut
+ */
+export type DepartmentEntryOut = {
+    /**
+     * Code
+     */
+    code: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
  * DepartmentOut
  */
 export type DepartmentOut = {
@@ -99,6 +127,100 @@ export type FieldError = {
 };
 
 /**
+ * LineCreateIn
+ */
+export type LineCreateIn = {
+    /**
+     * Amount
+     */
+    amount: string;
+    /**
+     * Category
+     */
+    category: string;
+    /**
+     * Department Id
+     */
+    department_id: string;
+    /**
+     * Year Month
+     */
+    year_month: string;
+};
+
+/**
+ * LineOut
+ */
+export type LineOut = {
+    /**
+     * Amount
+     */
+    amount: string;
+    /**
+     * Category
+     */
+    category: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Created By
+     */
+    created_by: string;
+    /**
+     * Current
+     */
+    current: boolean;
+    /**
+     * Department Code
+     */
+    department_code: string;
+    /**
+     * Department Id
+     */
+    department_id: string;
+    /**
+     * Department Name
+     */
+    department_name: string;
+    /**
+     * Line Id
+     */
+    line_id: string;
+    /**
+     * Reason
+     */
+    reason: string | null;
+    /**
+     * Version
+     */
+    version: number;
+    /**
+     * Year Month
+     */
+    year_month: string;
+};
+
+/**
+ * LineReplaceIn
+ */
+export type LineReplaceIn = {
+    /**
+     * Amount
+     */
+    amount: string;
+    /**
+     * Reason
+     */
+    reason: string;
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
  * MeOut
  */
 export type MeOut = {
@@ -123,6 +245,28 @@ export type MeOut = {
      * Roles
      */
     roles: Array<string>;
+};
+
+/**
+ * MonthOut
+ */
+export type MonthOut = {
+    /**
+     * Closed At
+     */
+    closed_at: string;
+    /**
+     * Closed By
+     */
+    closed_by: string;
+    /**
+     * Reason
+     */
+    reason: string;
+    /**
+     * Year Month
+     */
+    year_month: string;
 };
 
 /**
@@ -177,6 +321,100 @@ export type Problem = {
 };
 
 /**
+ * RowIssueOut
+ */
+export type RowIssueOut = {
+    /**
+     * Field
+     */
+    field: string;
+    /**
+     * Message
+     */
+    message: string;
+    /**
+     * Row
+     */
+    row: number;
+    /**
+     * Transaction Ref
+     */
+    transaction_ref?: string | null;
+};
+
+/**
+ * StatementOut
+ */
+export type StatementOut = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Imported At
+     */
+    imported_at: string;
+    /**
+     * Imported By
+     */
+    imported_by: string;
+    /**
+     * Row Count
+     */
+    row_count: number;
+    /**
+     * Source Name
+     */
+    source_name: string;
+    /**
+     * Total Amount
+     */
+    total_amount: string;
+    /**
+     * Void Reason
+     */
+    void_reason: string | null;
+    /**
+     * Voided
+     */
+    voided: boolean;
+    /**
+     * Voided At
+     */
+    voided_at: string | null;
+    /**
+     * Voided By
+     */
+    voided_by: string | null;
+};
+
+/**
+ * StatementPreviewOut
+ */
+export type StatementPreviewOut = {
+    /**
+     * Can Apply
+     */
+    can_apply: boolean;
+    /**
+     * Duplicates
+     */
+    duplicates: Array<RowIssueOut>;
+    /**
+     * Errors
+     */
+    errors: Array<RowIssueOut>;
+    /**
+     * Rows Read
+     */
+    rows_read: number;
+    /**
+     * Total Amount
+     */
+    total_amount: string;
+};
+
+/**
  * UploadedFileOut
  */
 export type UploadedFileOut = {
@@ -196,6 +434,74 @@ export type UploadedFileOut = {
      * Url
      */
     url: string;
+};
+
+/**
+ * VarianceOut
+ */
+export type VarianceOut = {
+    /**
+     * Actual
+     */
+    actual: string;
+    /**
+     * Budget
+     */
+    budget: string | null;
+    /**
+     * Category
+     */
+    category: string;
+    /**
+     * Department Code
+     */
+    department_code: string;
+    /**
+     * Department Id
+     */
+    department_id: string;
+    /**
+     * Department Name
+     */
+    department_name: string;
+    /**
+     * Variance
+     */
+    variance: string | null;
+    /**
+     * Year Month
+     */
+    year_month: string;
+};
+
+/**
+ * VoidIn
+ */
+export type VoidIn = {
+    /**
+     * Reason
+     */
+    reason: string;
+};
+
+/**
+ * Body_spend.statement.import
+ */
+export type Import = {
+    /**
+     * File
+     */
+    file: Blob | File;
+};
+
+/**
+ * Body_spend.statement.preview
+ */
+export type Preview = {
+    /**
+     * File
+     */
+    file: Blob | File;
 };
 
 /**
@@ -243,6 +549,216 @@ export type AuditEventListResponses = {
 };
 
 export type AuditEventListResponse = AuditEventListResponses[keyof AuditEventListResponses];
+
+export type BudgetsCategoryListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/budgets/categories';
+};
+
+export type BudgetsCategoryListErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type BudgetsCategoryListError = BudgetsCategoryListErrors[keyof BudgetsCategoryListErrors];
+
+export type BudgetsCategoryListResponses = {
+    /**
+     * Response Budgets.Category.List
+     *
+     * Successful Response
+     */
+    200: Array<string>;
+};
+
+export type BudgetsCategoryListResponse = BudgetsCategoryListResponses[keyof BudgetsCategoryListResponses];
+
+export type BudgetsLineListData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Month
+         */
+        month: string;
+        /**
+         * Department Id
+         */
+        department_id?: string | null;
+    };
+    url: '/api/budgets/lines';
+};
+
+export type BudgetsLineListErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type BudgetsLineListError = BudgetsLineListErrors[keyof BudgetsLineListErrors];
+
+export type BudgetsLineListResponses = {
+    /**
+     * Response Budgets.Line.List
+     *
+     * Successful Response
+     */
+    200: Array<LineOut>;
+};
+
+export type BudgetsLineListResponse = BudgetsLineListResponses[keyof BudgetsLineListResponses];
+
+export type BudgetsLineCreateData = {
+    body: LineCreateIn;
+    path?: never;
+    query?: never;
+    url: '/api/budgets/lines';
+};
+
+export type BudgetsLineCreateErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type BudgetsLineCreateError = BudgetsLineCreateErrors[keyof BudgetsLineCreateErrors];
+
+export type BudgetsLineCreateResponses = {
+    /**
+     * Successful Response
+     */
+    201: LineOut;
+};
+
+export type BudgetsLineCreateResponse = BudgetsLineCreateResponses[keyof BudgetsLineCreateResponses];
+
+export type BudgetsLineReplaceData = {
+    body: LineReplaceIn;
+    path: {
+        /**
+         * Line Id
+         */
+        line_id: string;
+    };
+    query?: never;
+    url: '/api/budgets/lines/{line_id}';
+};
+
+export type BudgetsLineReplaceErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type BudgetsLineReplaceError = BudgetsLineReplaceErrors[keyof BudgetsLineReplaceErrors];
+
+export type BudgetsLineReplaceResponses = {
+    /**
+     * Successful Response
+     */
+    200: LineOut;
+};
+
+export type BudgetsLineReplaceResponse = BudgetsLineReplaceResponses[keyof BudgetsLineReplaceResponses];
+
+export type BudgetsLineHistoryData = {
+    body?: never;
+    path: {
+        /**
+         * Line Id
+         */
+        line_id: string;
+    };
+    query?: never;
+    url: '/api/budgets/lines/{line_id}/history';
+};
+
+export type BudgetsLineHistoryErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type BudgetsLineHistoryError = BudgetsLineHistoryErrors[keyof BudgetsLineHistoryErrors];
+
+export type BudgetsLineHistoryResponses = {
+    /**
+     * Response Budgets.Line.History
+     *
+     * Successful Response
+     */
+    200: Array<LineOut>;
+};
+
+export type BudgetsLineHistoryResponse = BudgetsLineHistoryResponses[keyof BudgetsLineHistoryResponses];
+
+export type BudgetsVarianceReadData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * From
+         */
+        from: string;
+        /**
+         * To
+         */
+        to: string;
+    };
+    url: '/api/budgets/variance';
+};
+
+export type BudgetsVarianceReadErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type BudgetsVarianceReadError = BudgetsVarianceReadErrors[keyof BudgetsVarianceReadErrors];
+
+export type BudgetsVarianceReadResponses = {
+    /**
+     * Response Budgets.Variance.Read
+     *
+     * Successful Response
+     */
+    200: Array<VarianceOut>;
+};
+
+export type BudgetsVarianceReadResponse = BudgetsVarianceReadResponses[keyof BudgetsVarianceReadResponses];
 
 export type ConfirmationsRequestReadData = {
     body?: never;
@@ -405,6 +921,225 @@ export type PlatformHealthReadResponses = {
 };
 
 export type PlatformHealthReadResponse = PlatformHealthReadResponses[keyof PlatformHealthReadResponses];
+
+export type SpendMonthListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/spend/months';
+};
+
+export type SpendMonthListErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type SpendMonthListError = SpendMonthListErrors[keyof SpendMonthListErrors];
+
+export type SpendMonthListResponses = {
+    /**
+     * Response Spend.Month.List
+     *
+     * Successful Response
+     */
+    200: Array<MonthOut>;
+};
+
+export type SpendMonthListResponse = SpendMonthListResponses[keyof SpendMonthListResponses];
+
+export type SpendMonthCloseData = {
+    body: CloseIn;
+    path: {
+        /**
+         * Year Month
+         */
+        year_month: string;
+    };
+    query?: never;
+    url: '/api/spend/months/{year_month}/close';
+};
+
+export type SpendMonthCloseErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type SpendMonthCloseError = SpendMonthCloseErrors[keyof SpendMonthCloseErrors];
+
+export type SpendMonthCloseResponses = {
+    /**
+     * Successful Response
+     */
+    201: MonthOut;
+};
+
+export type SpendMonthCloseResponse = SpendMonthCloseResponses[keyof SpendMonthCloseResponses];
+
+export type SpendStatementListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/spend/statements';
+};
+
+export type SpendStatementListErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type SpendStatementListError = SpendStatementListErrors[keyof SpendStatementListErrors];
+
+export type SpendStatementListResponses = {
+    /**
+     * Response Spend.Statement.List
+     *
+     * Successful Response
+     */
+    200: Array<StatementOut>;
+};
+
+export type SpendStatementListResponse = SpendStatementListResponses[keyof SpendStatementListResponses];
+
+export type SpendStatementImportData = {
+    body: Import;
+    path?: never;
+    query?: never;
+    url: '/api/spend/statements';
+};
+
+export type SpendStatementImportErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type SpendStatementImportError = SpendStatementImportErrors[keyof SpendStatementImportErrors];
+
+export type SpendStatementImportResponses = {
+    /**
+     * Successful Response
+     */
+    201: StatementOut;
+};
+
+export type SpendStatementImportResponse = SpendStatementImportResponses[keyof SpendStatementImportResponses];
+
+export type SpendStatementPreviewData = {
+    body: Preview;
+    path?: never;
+    query?: never;
+    url: '/api/spend/statements/preview';
+};
+
+export type SpendStatementPreviewErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type SpendStatementPreviewError = SpendStatementPreviewErrors[keyof SpendStatementPreviewErrors];
+
+export type SpendStatementPreviewResponses = {
+    /**
+     * Successful Response
+     */
+    200: StatementPreviewOut;
+};
+
+export type SpendStatementPreviewResponse = SpendStatementPreviewResponses[keyof SpendStatementPreviewResponses];
+
+export type SpendStatementVoidData = {
+    body: VoidIn;
+    path: {
+        /**
+         * Statement Id
+         */
+        statement_id: string;
+    };
+    query?: never;
+    url: '/api/spend/statements/{statement_id}/void';
+};
+
+export type SpendStatementVoidErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type SpendStatementVoidError = SpendStatementVoidErrors[keyof SpendStatementVoidErrors];
+
+export type SpendStatementVoidResponses = {
+    /**
+     * Successful Response
+     */
+    200: StatementOut;
+};
+
+export type SpendStatementVoidResponse = SpendStatementVoidResponses[keyof SpendStatementVoidResponses];
+
+export type UsersDepartmentListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/users/departments';
+};
+
+export type UsersDepartmentListErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type UsersDepartmentListError = UsersDepartmentListErrors[keyof UsersDepartmentListErrors];
+
+export type UsersDepartmentListResponses = {
+    /**
+     * Response Users.Department.List
+     *
+     * Successful Response
+     */
+    200: Array<DepartmentEntryOut>;
+};
+
+export type UsersDepartmentListResponse = UsersDepartmentListResponses[keyof UsersDepartmentListResponses];
 
 export type UsersSelfReadData = {
     body?: never;
