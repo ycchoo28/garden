@@ -33,6 +33,7 @@ from app.core.users.oidc import get_identity_provider
 from app.main import create_app
 from app.modules.knowledge.embedding import Embedder, get_embedder
 from app.modules.knowledge.jobs import get_batch_queue, run_prepare_job
+from app.modules.knowledge.lifecycle import OPEN_STATES, BatchState
 from app.modules.spend import CATEGORIES
 from app.seed import seed
 from app.shared.db import session_factory
@@ -619,6 +620,7 @@ async def _load_collection(
     batches: list[dict[str, Any]] = await api.get("/api/knowledge/batches")
     if any(row["collection_name"] == name and row["state"] == "applied" for row in batches):
         return
+    await _withdraw_open_batches(api, name, embedder)
     batch = await api.post(
         f"/api/knowledge/collections/{collection_id}/batches",
         json={"mode": "full_set"},
@@ -642,6 +644,31 @@ async def _load_collection(
     approved = await api.post(f"/api/knowledge/batches/{batch_id}/approve", json={"reason": None})
     if approved["state"] != "applied":
         raise DemoSeedError(f"The batch for '{name}' is {approved['state']}, not applied.")
+
+
+async def _withdraw_open_batches(api: _Api, name: str, embedder: Embedder) -> None:
+    """Clear the open batches that a stopped run left in a collection, so a new batch can start.
+
+    The API allows one open batch per collection. Only the worker moves a batch out of
+    'preparing', and the queue the seed uses went away with the stopped run, so the seed runs
+    that step itself. Then it cancels whatever is still open.
+    """
+    open_states = {state.value for state in OPEN_STATES}
+
+    async def stranded() -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = await api.get("/api/knowledge/batches")
+        return [
+            row for row in rows if row["collection_name"] == name and row["state"] in open_states
+        ]
+
+    for row in await stranded():
+        if row["state"] == BatchState.PREPARING.value:
+            await run_prepare_job(uuid.UUID(row["id"]), embedder=embedder)
+    for row in await stranded():
+        _ = await api.post(
+            f"/api/knowledge/batches/{row['id']}/cancel",
+            json={"reason": "A stopped demo run left this batch open."},
+        )
 
 
 async def _check_search(api: _Api) -> None:
