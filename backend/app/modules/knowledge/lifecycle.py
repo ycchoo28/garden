@@ -23,7 +23,6 @@ class BatchEvent(StrEnum):
     PREPARED = "prepared"
     PREPARE_FAILED = "prepare_failed"
     REQUIRE_APPROVAL = "require_approval"
-    APPLY = "apply"
     APPROVE = "approve"
     REJECT = "reject"
     CANCEL = "cancel"
@@ -39,7 +38,6 @@ TRANSITIONS: dict[tuple[BatchState, BatchEvent], BatchState] = {
     (BatchState.PREPARING, BatchEvent.PREPARED): BatchState.PREPARED,
     (BatchState.PREPARING, BatchEvent.PREPARE_FAILED): BatchState.FAILED,
     (BatchState.PREPARED, BatchEvent.REQUIRE_APPROVAL): BatchState.AWAITING_APPROVAL,
-    (BatchState.PREPARED, BatchEvent.APPLY): BatchState.APPLIED,
     (BatchState.AWAITING_APPROVAL, BatchEvent.APPROVE): BatchState.APPLIED,
     (BatchState.AWAITING_APPROVAL, BatchEvent.REJECT): BatchState.REJECTED,
     (BatchState.UPLOADED, BatchEvent.CANCEL): BatchState.CANCELLED,

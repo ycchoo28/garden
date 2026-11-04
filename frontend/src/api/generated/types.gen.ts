@@ -141,6 +141,10 @@ export type BatchFileOut = {
  */
 export type BatchIn = {
     /**
+     * Access Rules
+     */
+    access_rules?: Array<CollectionRuleIn> | null;
+    /**
      * Mode
      */
     mode: 'full_set' | 'partial';
@@ -150,6 +154,14 @@ export type BatchIn = {
  * BatchOut
  */
 export type BatchOut = {
+    /**
+     * Access Rules
+     */
+    access_rules: Array<CollectionRuleOut> | null;
+    /**
+     * Applied At
+     */
+    applied_at: string | null;
     /**
      * Collection Id
      */
@@ -185,9 +197,17 @@ export type BatchOut = {
         [key: string]: unknown;
     };
     /**
+     * Risk
+     */
+    risk: Array<string>;
+    /**
      * State
      */
     state: string;
+    /**
+     * Undone At
+     */
+    undone_at: string | null;
 };
 
 /**
@@ -548,6 +568,198 @@ export type FieldError = {
      * Message
      */
     message: string;
+};
+
+/**
+ * KnowledgeBatchSummaryOut
+ */
+export type KnowledgeBatchSummaryOut = {
+    /**
+     * Collection Id
+     */
+    collection_id: string;
+    /**
+     * Collection Name
+     */
+    collection_name: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Mode
+     */
+    mode: string;
+    /**
+     * Risk
+     */
+    risk: Array<string>;
+    /**
+     * State
+     */
+    state: string;
+};
+
+/**
+ * KnowledgeEraseIn
+ */
+export type KnowledgeEraseIn = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Reason
+     */
+    reason: string;
+};
+
+/**
+ * KnowledgeReasonIn
+ *
+ * The reason a person gives with an approval, a rejection or a cancellation.
+ */
+export type KnowledgeReasonIn = {
+    /**
+     * Reason
+     */
+    reason?: string | null;
+};
+
+/**
+ * KnowledgeSearchHitOut
+ */
+export type KnowledgeSearchHitOut = {
+    /**
+     * Chunk Ids
+     */
+    chunk_ids: Array<string>;
+    /**
+     * Collection Id
+     */
+    collection_id: string;
+    /**
+     * Collection Name
+     */
+    collection_name: string;
+    /**
+     * Heading Path
+     */
+    heading_path: string;
+    /**
+     * Language
+     */
+    language: string;
+    /**
+     * Locator
+     */
+    locator: string;
+    /**
+     * Score
+     */
+    score: number;
+    /**
+     * Text
+     */
+    text: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Token Count
+     */
+    token_count: number;
+    /**
+     * Translation Group
+     */
+    translation_group: string;
+};
+
+/**
+ * KnowledgeSearchIn
+ */
+export type KnowledgeSearchIn = {
+    /**
+     * As Of
+     */
+    as_of?: string | null;
+    /**
+     * Limit
+     */
+    limit?: number;
+    /**
+     * Max Tokens
+     */
+    max_tokens?: number;
+    /**
+     * Query
+     */
+    query: string;
+};
+
+/**
+ * KnowledgeSearchLogOut
+ */
+export type KnowledgeSearchLogOut = {
+    /**
+     * Acting As Agent
+     */
+    acting_as_agent: boolean;
+    /**
+     * As Of
+     */
+    as_of: string | null;
+    /**
+     * Chunk Ids
+     */
+    chunk_ids: Array<string>;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Person Id
+     */
+    person_id: string;
+    /**
+     * Person Name
+     */
+    person_name: string;
+    /**
+     * Query
+     */
+    query: string;
+    /**
+     * Searched At
+     */
+    searched_at: string;
+};
+
+/**
+ * KnowledgeSearchOut
+ */
+export type KnowledgeSearchOut = {
+    /**
+     * As Of
+     */
+    as_of: string | null;
+    /**
+     * Results
+     */
+    results: Array<KnowledgeSearchHitOut>;
+    /**
+     * Token Count
+     */
+    token_count: number;
+    /**
+     * Truncated
+     */
+    truncated: boolean;
 };
 
 /**
@@ -1778,6 +1990,46 @@ export type PlatformHealthReadResponses = {
 
 export type PlatformHealthReadResponse = PlatformHealthReadResponses[keyof PlatformHealthReadResponses];
 
+export type KnowledgeBatchListData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Collection Id
+         */
+        collection_id?: string | null;
+        /**
+         * State
+         */
+        state?: string | null;
+    };
+    url: '/api/knowledge/batches';
+};
+
+export type KnowledgeBatchListErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type KnowledgeBatchListError = KnowledgeBatchListErrors[keyof KnowledgeBatchListErrors];
+
+export type KnowledgeBatchListResponses = {
+    /**
+     * Response Knowledge.Batch.List
+     *
+     * Successful Response
+     */
+    200: Array<KnowledgeBatchSummaryOut>;
+};
+
+export type KnowledgeBatchListResponse = KnowledgeBatchListResponses[keyof KnowledgeBatchListResponses];
+
 export type KnowledgeBatchReadData = {
     body?: never;
     path: {
@@ -1811,6 +2063,74 @@ export type KnowledgeBatchReadResponses = {
 };
 
 export type KnowledgeBatchReadResponse = KnowledgeBatchReadResponses[keyof KnowledgeBatchReadResponses];
+
+export type KnowledgeBatchApproveData = {
+    body: KnowledgeReasonIn;
+    path: {
+        /**
+         * Batch Id
+         */
+        batch_id: string;
+    };
+    query?: never;
+    url: '/api/knowledge/batches/{batch_id}/approve';
+};
+
+export type KnowledgeBatchApproveErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type KnowledgeBatchApproveError = KnowledgeBatchApproveErrors[keyof KnowledgeBatchApproveErrors];
+
+export type KnowledgeBatchApproveResponses = {
+    /**
+     * Successful Response
+     */
+    200: BatchOut;
+};
+
+export type KnowledgeBatchApproveResponse = KnowledgeBatchApproveResponses[keyof KnowledgeBatchApproveResponses];
+
+export type KnowledgeBatchCancelData = {
+    body: KnowledgeReasonIn;
+    path: {
+        /**
+         * Batch Id
+         */
+        batch_id: string;
+    };
+    query?: never;
+    url: '/api/knowledge/batches/{batch_id}/cancel';
+};
+
+export type KnowledgeBatchCancelErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type KnowledgeBatchCancelError = KnowledgeBatchCancelErrors[keyof KnowledgeBatchCancelErrors];
+
+export type KnowledgeBatchCancelResponses = {
+    /**
+     * Successful Response
+     */
+    200: BatchOut;
+};
+
+export type KnowledgeBatchCancelResponse = KnowledgeBatchCancelResponses[keyof KnowledgeBatchCancelResponses];
 
 export type KnowledgeBatchUploadData = {
     body: FastapiCompatV2BodyKnowledgeBatchUpload;
@@ -1913,6 +2233,108 @@ export type KnowledgeBatchPreviewResponses = {
 };
 
 export type KnowledgeBatchPreviewResponse = KnowledgeBatchPreviewResponses[keyof KnowledgeBatchPreviewResponses];
+
+export type KnowledgeBatchRejectData = {
+    body: KnowledgeReasonIn;
+    path: {
+        /**
+         * Batch Id
+         */
+        batch_id: string;
+    };
+    query?: never;
+    url: '/api/knowledge/batches/{batch_id}/reject';
+};
+
+export type KnowledgeBatchRejectErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type KnowledgeBatchRejectError = KnowledgeBatchRejectErrors[keyof KnowledgeBatchRejectErrors];
+
+export type KnowledgeBatchRejectResponses = {
+    /**
+     * Successful Response
+     */
+    200: BatchOut;
+};
+
+export type KnowledgeBatchRejectResponse = KnowledgeBatchRejectResponses[keyof KnowledgeBatchRejectResponses];
+
+export type KnowledgeBatchSubmitData = {
+    body?: never;
+    path: {
+        /**
+         * Batch Id
+         */
+        batch_id: string;
+    };
+    query?: never;
+    url: '/api/knowledge/batches/{batch_id}/submit';
+};
+
+export type KnowledgeBatchSubmitErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type KnowledgeBatchSubmitError = KnowledgeBatchSubmitErrors[keyof KnowledgeBatchSubmitErrors];
+
+export type KnowledgeBatchSubmitResponses = {
+    /**
+     * Successful Response
+     */
+    200: BatchOut;
+};
+
+export type KnowledgeBatchSubmitResponse = KnowledgeBatchSubmitResponses[keyof KnowledgeBatchSubmitResponses];
+
+export type KnowledgeBatchUndoData = {
+    body?: never;
+    path: {
+        /**
+         * Batch Id
+         */
+        batch_id: string;
+    };
+    query?: never;
+    url: '/api/knowledge/batches/{batch_id}/undo';
+};
+
+export type KnowledgeBatchUndoErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type KnowledgeBatchUndoError = KnowledgeBatchUndoErrors[keyof KnowledgeBatchUndoErrors];
+
+export type KnowledgeBatchUndoResponses = {
+    /**
+     * Successful Response
+     */
+    200: BatchOut;
+};
+
+export type KnowledgeBatchUndoResponse = KnowledgeBatchUndoResponses[keyof KnowledgeBatchUndoResponses];
 
 export type KnowledgeCollectionListData = {
     body?: never;
@@ -2041,6 +2463,105 @@ export type KnowledgeBatchCreateResponses = {
 };
 
 export type KnowledgeBatchCreateResponse = KnowledgeBatchCreateResponses[keyof KnowledgeBatchCreateResponses];
+
+export type KnowledgeDocumentEraseData = {
+    body: KnowledgeEraseIn;
+    path: {
+        /**
+         * Collection Id
+         */
+        collection_id: string;
+    };
+    query?: never;
+    url: '/api/knowledge/collections/{collection_id}/documents/erase';
+};
+
+export type KnowledgeDocumentEraseErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type KnowledgeDocumentEraseError = KnowledgeDocumentEraseErrors[keyof KnowledgeDocumentEraseErrors];
+
+export type KnowledgeDocumentEraseResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type KnowledgeDocumentEraseResponse = KnowledgeDocumentEraseResponses[keyof KnowledgeDocumentEraseResponses];
+
+export type KnowledgeSearchRunData = {
+    body: KnowledgeSearchIn;
+    path?: never;
+    query?: never;
+    url: '/api/knowledge/search';
+};
+
+export type KnowledgeSearchRunErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type KnowledgeSearchRunError = KnowledgeSearchRunErrors[keyof KnowledgeSearchRunErrors];
+
+export type KnowledgeSearchRunResponses = {
+    /**
+     * Successful Response
+     */
+    200: KnowledgeSearchOut;
+};
+
+export type KnowledgeSearchRunResponse = KnowledgeSearchRunResponses[keyof KnowledgeSearchRunResponses];
+
+export type KnowledgeSearchLogListData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/knowledge/search-log';
+};
+
+export type KnowledgeSearchLogListErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type KnowledgeSearchLogListError = KnowledgeSearchLogListErrors[keyof KnowledgeSearchLogListErrors];
+
+export type KnowledgeSearchLogListResponses = {
+    /**
+     * Response Knowledge.Search Log.List
+     *
+     * Successful Response
+     */
+    200: Array<KnowledgeSearchLogOut>;
+};
+
+export type KnowledgeSearchLogListResponse = KnowledgeSearchLogListResponses[keyof KnowledgeSearchLogListResponses];
 
 export type KnowledgeStatusReadData = {
     body?: never;

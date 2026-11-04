@@ -169,7 +169,10 @@ class UserService:
         if department is None:
             raise Forbidden("This account has no department.")
         held = frozenset({EMPLOYEE}) | await self._repo.role_names(person.id)
-        grants: dict[str, frozenset[str]] = {role.name: role.permissions for role in roles}
+        # Modules may each declare a role with the same name, so their grants merge by name.
+        grants: dict[str, frozenset[str]] = {}
+        for role in roles:
+            grants[role.name] = grants.get(role.name, frozenset()) | role.permissions
         permissions: set[str] = set()
         for name in held:
             permissions |= grants.get(name, frozenset())

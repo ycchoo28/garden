@@ -2,19 +2,42 @@
 
 import uuid
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import PurePath
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends
 
+from app.core.approvals import ApprovalService, Approver, Outcome, get_approval_service
 from app.core.audit import AuditService, get_audit_service
 from app.core.files import FileService, get_file_service
 from app.core.users import CurrentPerson
 from app.modules.knowledge.embedding import Embedder, get_embedder
+from app.modules.knowledge.flows import KNOWLEDGE_FLOW_CODE, RUN_AMOUNT, SUBJECT_TYPE
 from app.modules.knowledge.jobs import BatchQueue, get_batch_queue
-from app.modules.knowledge.lifecycle import BatchEvent, BatchState, InvalidTransition, transition
-from app.modules.knowledge.models import BatchFile, Chunk, Collection, CollectionRule, ImportBatch
-from app.modules.knowledge.repository import KnowledgeRepository, get_repository
+from app.modules.knowledge.lifecycle import (
+    OPEN_STATES,
+    BatchEvent,
+    BatchState,
+    InvalidTransition,
+    transition,
+)
+from app.modules.knowledge.models import (
+    BatchFile,
+    Chunk,
+    ChunkRange,
+    Collection,
+    CollectionRule,
+    ImportBatch,
+    SearchLog,
+)
+from app.modules.knowledge.publish import (
+    documents_to_close,
+    risk_triggers,
+    same_rules,
+    staged_digest,
+)
+from app.modules.knowledge.repository import KnowledgeRepository, Scope, get_repository
 from app.modules.knowledge.rrf import rrf_merge
 from app.modules.knowledge.schemas import (
     ASSIGNABLE_ROLES,
@@ -23,7 +46,14 @@ from app.modules.knowledge.schemas import (
     BatchOut,
     CollectionIn,
     CollectionOut,
+    CollectionRuleIn,
     CollectionRuleOut,
+    KnowledgeBatchSummaryOut,
+    KnowledgeEraseIn,
+    KnowledgeSearchHitOut,
+    KnowledgeSearchIn,
+    KnowledgeSearchLogOut,
+    KnowledgeSearchOut,
     PreviewHitOut,
     PreviewIn,
     PreviewOut,
@@ -34,6 +64,7 @@ from app.modules.knowledge.text import detect_language, extract_identifiers
 from app.shared.clock import Clock, get_clock
 from app.shared.errors import Conflict, NotFound, Unprocessable
 from app.shared.ids import new_id
+from app.shared.request_login import VIA_AGENT, current_request_login
 
 # How many candidates each ranking contributes before fusion. Preview keeps the first few after.
 CANDIDATES_PER_RANKING = 50
@@ -49,6 +80,7 @@ class KnowledgeService:
         files: FileService,
         queue: BatchQueue,
         embedder: Embedder,
+        approvals: ApprovalService,
     ) -> None:
         self._repository = repository
         self._audit = audit
@@ -56,6 +88,7 @@ class KnowledgeService:
         self._files = files
         self._queue = queue
         self._embedder = embedder
+        self._approvals = approvals
 
     async def status(self) -> StatusOut:
         await self._repository.ping()
@@ -72,8 +105,9 @@ class KnowledgeService:
     async def create_collection(self, actor: CurrentPerson, body: CollectionIn) -> CollectionOut:
         if await self._repository.collection_name_taken(body.name):
             raise Conflict("A collection with this name already exists.")
-        rules = _rules(body)
+        rules = [CollectionRule(**spec) for spec in _rule_specs(body.rules)]
         collection = Collection(
+            id=new_id(),
             name=body.name,
             created_by=actor.id,
             created_at=self._clock.now(),
@@ -100,6 +134,7 @@ class KnowledgeService:
                 "This collection already has an open batch. Finish or cancel it first.",
                 extensions={"code": "batch_in_progress"},
             )
+        access_rules = None if body.access_rules is None else _rule_specs(body.access_rules)
         batch = ImportBatch(
             id=new_id(),
             collection_id=collection.id,
@@ -107,6 +142,15 @@ class KnowledgeService:
             state=BatchState.UPLOADED.value,
             failure_reason=None,
             report={},
+            access_rules=access_rules,
+            previous_access_rules=None,
+            risk=[],
+            staged_digest=None,
+            approval_run_id=None,
+            applied_at=None,
+            applied_by=None,
+            undone_at=None,
+            undone_by=None,
             created_by=actor.id,
             created_at=self._clock.now(),
             prepared_at=None,
@@ -120,6 +164,24 @@ class KnowledgeService:
         )
         await self._repository.commit()
         return await self._batch_out(batch)
+
+    async def list_batches(
+        self, collection_id: uuid.UUID | None, state: str | None
+    ) -> list[KnowledgeBatchSummaryOut]:
+        rows = await self._repository.list_batches(collection_id, state)
+        names = await self._repository.collection_names(list({row.collection_id for row in rows}))
+        return [
+            KnowledgeBatchSummaryOut(
+                id=row.id,
+                collection_id=row.collection_id,
+                collection_name=names.get(row.collection_id, ""),
+                mode=row.mode,
+                state=row.state,
+                risk=list(row.risk),
+                created_at=row.created_at,
+            )
+            for row in rows
+        ]
 
     async def get_batch(self, batch_id: uuid.UUID) -> BatchOut:
         return await self._batch_out(await self._batch(batch_id))
@@ -186,22 +248,8 @@ class KnowledgeService:
         vector = (await self._embedder.embed([body.query]))[0]
         roles = sorted(actor.roles)
         department = actor.department_code
-        rankings = [
-            await self._repository.vector_candidates(
-                batch.id, vector, roles, department, CANDIDATES_PER_RANKING
-            ),
-            await self._repository.keyword_candidates(
-                batch.id, body.query, roles, department, CANDIDATES_PER_RANKING
-            ),
-        ]
-        identifiers = extract_identifiers(body.query)
-        if identifiers:
-            rankings.append(
-                await self._repository.identifier_candidates(
-                    batch.id, identifiers, roles, department, CANDIDATES_PER_RANKING
-                )
-            )
-        merged = rrf_merge([ranking for ranking in rankings if ranking])
+        scope = Scope.staged(batch.id)
+        merged = await self._rank(scope, body.query, vector, roles, department)
         fused = [chunk_id for chunk_id, _ in merged[:FUSED_DEPTH]]
         scores = dict(merged)
         rows = await self._repository.chunks_by_ids(fused)
@@ -232,7 +280,354 @@ class KnowledgeService:
             token_count=sum(hit.token_count for hit in hits),
         )
 
+    # Approval and apply
+
+    async def submit_batch(self, actor: CurrentPerson, batch_id: uuid.UUID) -> BatchOut:
+        """Ask for approval to apply the batch. The staged result is fixed from now on."""
+        batch = await self._batch(batch_id)
+        _require_state(
+            batch, BatchState.PREPARED, "Only a prepared batch can be sent for approval."
+        )
+        collection = await self._collection(batch.collection_id)
+        files = await self._repository.batch_files(batch.id)
+        chunks = await self._repository.batch_chunks(batch.id)
+        live = await self._repository.live_document_names(collection.id)
+        _replaced, removed = documents_to_close(
+            live=live, staged={row.name for row in files}, full_set=batch.mode == "full_set"
+        )
+        rules_changed = batch.access_rules is not None and not same_rules(
+            batch.access_rules, _rule_specs_of(collection)
+        )
+        risk = risk_triggers(removed=len(removed), rules_changed=rules_changed)
+        run_id = await self._approvals.start(
+            flow_code=KNOWLEDGE_FLOW_CODE,
+            subject_type=SUBJECT_TYPE,
+            subject_id=batch.id,
+            subject_department_id=actor.department_id,
+            amount=RUN_AMOUNT,
+            started_by=actor.id,
+            started_by_name=actor.name,
+        )
+        batch.state = _next(batch, BatchEvent.REQUIRE_APPROVAL).value
+        batch.approval_run_id = run_id
+        batch.staged_digest = staged_digest(_payload(batch, files, chunks))
+        batch.risk = risk
+        batch.report = {**batch.report, "removed_documents": sorted(removed)}
+        self._audit.record(
+            actor_id=actor.id,
+            operation="knowledge.batch.submit",
+            target=f"batch:{batch.id}",
+            summary=(
+                f"Asked for approval to apply the batch to {collection.name}. "
+                f"Risk: {', '.join(risk) or 'none'}."
+            ),
+        )
+        await self._repository.commit()
+        return await self._batch_out(batch)
+
+    async def approve_batch(
+        self, actor: CurrentPerson, batch_id: uuid.UUID, reason: str | None
+    ) -> BatchOut:
+        batch = await self._batch(batch_id)
+        _require_state(
+            batch, BatchState.AWAITING_APPROVAL, "This batch is not waiting for approval."
+        )
+        collection = await self._collection(batch.collection_id)
+        files = await self._repository.batch_files(batch.id)
+        chunks = await self._repository.batch_chunks(batch.id)
+        # The approval binds to the result the approver saw. A changed result needs a new request.
+        if staged_digest(_payload(batch, files, chunks)) != batch.staged_digest:
+            raise Conflict(
+                "The staged result changed after approval was asked for. "
+                "Cancel the request and ask again.",
+                extensions={"code": "staged_result_changed"},
+            )
+        await self._decide(batch, actor, Outcome.APPROVED, reason)
+        await self._publish(batch, collection, files, chunks, actor)
+        await self._repository.commit()
+        return await self._batch_out(batch)
+
+    async def reject_batch(
+        self, actor: CurrentPerson, batch_id: uuid.UUID, reason: str | None
+    ) -> BatchOut:
+        batch = await self._batch(batch_id)
+        _require_state(
+            batch, BatchState.AWAITING_APPROVAL, "This batch is not waiting for approval."
+        )
+        await self._decide(batch, actor, Outcome.REJECTED, reason)
+        batch.state = _next(batch, BatchEvent.REJECT).value
+        self._audit.record(
+            actor_id=actor.id,
+            operation="knowledge.batch.reject",
+            target=f"batch:{batch.id}",
+            summary=f"Rejected the batch: {(reason or '').strip()}",
+        )
+        await self._repository.commit()
+        return await self._batch_out(batch)
+
+    async def cancel_batch(
+        self, actor: CurrentPerson, batch_id: uuid.UUID, reason: str | None
+    ) -> BatchOut:
+        batch = await self._batch(batch_id)
+        if batch.state not in {state.value for state in OPEN_STATES}:
+            raise Conflict(f"A batch that is {batch.state} cannot be cancelled.")
+        new_state = _next(batch, BatchEvent.CANCEL)
+        if batch.state == BatchState.AWAITING_APPROVAL.value:
+            if batch.approval_run_id is None:
+                raise Conflict("This batch has no approval request.")
+            # Only the person who asked for approval may withdraw that request.
+            _ = await self._approvals.cancel(
+                run_id=batch.approval_run_id, actor_id=actor.id, reason=reason
+            )
+        batch.state = new_state.value
+        self._audit.record(
+            actor_id=actor.id,
+            operation="knowledge.batch.cancel",
+            target=f"batch:{batch.id}",
+            summary="Cancelled the batch.",
+        )
+        await self._repository.commit()
+        return await self._batch_out(batch)
+
+    async def undo_batch(self, actor: CurrentPerson, batch_id: uuid.UUID) -> BatchOut:
+        """Put the live state back to what it was before this batch was applied."""
+        batch = await self._batch(batch_id)
+        _require_state(batch, BatchState.APPLIED, "Only an applied batch can be undone.")
+        later = [
+            other
+            for other in await self._repository.applied_batches(batch.collection_id)
+            if other.id != batch.id
+            and other.applied_at is not None
+            and batch.applied_at is not None
+            and other.applied_at > batch.applied_at
+        ]
+        if later:
+            raise Conflict("A later batch was applied to this collection. Undo that batch first.")
+        collection = await self._collection(batch.collection_id)
+        now = self._clock.now()
+        for span in await self._repository.open_spans_of(batch.id):
+            span.live_to = now
+        for closed in await self._repository.spans_closed_by(batch.id):
+            self._repository.add(
+                ChunkRange(
+                    id=new_id(),
+                    chunk_id=closed.chunk_id,
+                    live_from=now,
+                    live_to=None,
+                    opened_by_batch_id=closed.opened_by_batch_id,
+                    closed_by_batch_id=None,
+                )
+            )
+        if batch.previous_access_rules is not None:
+            _replace_rules(collection, batch.previous_access_rules)
+        batch.state = _next(batch, BatchEvent.UNDO).value
+        batch.undone_at = now
+        batch.undone_by = actor.id
+        self._audit.record(
+            actor_id=actor.id,
+            operation="knowledge.batch.undo",
+            target=f"batch:{batch.id}",
+            summary=f"Undid the batch on {collection.name}.",
+        )
+        await self._repository.commit()
+        return await self._batch_out(batch)
+
+    # Erasure and search
+
+    async def erase_document(
+        self, actor: CurrentPerson, collection_id: uuid.UUID, body: KnowledgeEraseIn
+    ) -> None:
+        """Remove a document from every batch of a collection, search and file storage."""
+        collection = await self._collection(collection_id)
+        rows = await self._repository.batch_files_named(collection.id, body.name)
+        if not rows:
+            raise NotFound("No document has that name in this collection.")
+        hashes = {row.sha256 for row in rows}
+        await self._repository.delete_batch_files([row.id for row in rows])
+        await self._repository.flush()
+        for sha256 in hashes:
+            if not await self._repository.sha_in_use(sha256):
+                await self._files.erase(sha256)
+        self._audit.record(
+            actor_id=actor.id,
+            operation="knowledge.document.erase",
+            target=f"collection:{collection.id}",
+            summary=(
+                f"Erased document {body.name} from {len(rows)} batch(es): {body.reason.strip()}"
+            ),
+        )
+        await self._repository.commit()
+
+    async def search(self, actor: CurrentPerson, body: KnowledgeSearchIn) -> KnowledgeSearchOut:
+        """Hybrid search over the chunks live now, or at `as_of`. Access rules apply in SQL."""
+        now = self._clock.now()
+        as_of = None if body.as_of is None else _as_utc(body.as_of)
+        if as_of is not None and as_of > now:
+            raise Unprocessable("A search can look back in time, not forward.")
+        at = as_of or now
+        vector = (await self._embedder.embed([body.query]))[0]
+        roles = sorted(actor.roles)
+        merged = await self._rank(Scope.live(at), body.query, vector, roles, actor.department_code)
+        fused = [chunk_id for chunk_id, _ in merged[:FUSED_DEPTH]]
+        scores = dict(merged)
+        rows = await self._repository.chunks_by_ids(fused)
+        candidates = await self._candidates(fused, rows, scores)
+        hits, truncated = assemble(
+            candidates,
+            query_language=detect_language(body.query),
+            limit=body.limit,
+            max_tokens=body.max_tokens,
+        )
+        collection_of = {row.id: row.collection_id for row in rows.values()}
+        names = await self._repository.collection_names(list(set(collection_of.values())))
+        results: list[KnowledgeSearchHitOut] = []
+        for hit in hits:
+            collection_id = collection_of[hit.chunk_ids[0]]
+            results.append(
+                KnowledgeSearchHitOut(
+                    chunk_ids=list(hit.chunk_ids),
+                    collection_id=collection_id,
+                    collection_name=names.get(collection_id, ""),
+                    title=hit.title,
+                    translation_group=hit.translation_group,
+                    language=hit.language,
+                    heading_path=hit.heading_path,
+                    locator=hit.locator,
+                    text=hit.text,
+                    token_count=hit.token_count,
+                    score=hit.score,
+                )
+            )
+        login = current_request_login.get()
+        self._repository.add(
+            SearchLog(
+                id=new_id(),
+                person_id=actor.id,
+                person_name=actor.name,
+                acting_as_agent=login is not None and login.via == VIA_AGENT,
+                query=body.query,
+                as_of=as_of,
+                chunk_ids=[chunk_id for hit in hits for chunk_id in hit.chunk_ids],
+                searched_at=now,
+            )
+        )
+        await self._repository.commit()
+        return KnowledgeSearchOut(
+            results=results,
+            truncated=truncated,
+            token_count=sum(hit.token_count for hit in hits),
+            as_of=as_of,
+        )
+
+    async def search_log(self, limit: int) -> list[KnowledgeSearchLogOut]:
+        return [
+            KnowledgeSearchLogOut(
+                id=row.id,
+                searched_at=row.searched_at,
+                person_id=row.person_id,
+                person_name=row.person_name,
+                acting_as_agent=row.acting_as_agent,
+                query=row.query,
+                as_of=row.as_of,
+                chunk_ids=list(row.chunk_ids),
+            )
+            for row in await self._repository.search_logs(limit)
+        ]
+
     # Helpers
+
+    async def _publish(
+        self,
+        batch: ImportBatch,
+        collection: Collection,
+        files: Sequence[BatchFile],
+        chunks: Sequence[Chunk],
+        actor: CurrentPerson,
+    ) -> None:
+        """Make the batch live: close what it replaces or removes, open its chunks, set rules."""
+        now = self._clock.now()
+        live = await self._repository.live_document_names(collection.id)
+        replaced, removed = documents_to_close(
+            live=live, staged={row.name for row in files}, full_set=batch.mode == "full_set"
+        )
+        await self._repository.close_documents(
+            collection.id, sorted(replaced | removed), now, batch.id
+        )
+        for chunk in chunks:
+            self._repository.add(
+                ChunkRange(
+                    id=new_id(),
+                    chunk_id=chunk.id,
+                    live_from=now,
+                    live_to=None,
+                    opened_by_batch_id=batch.id,
+                    closed_by_batch_id=None,
+                )
+            )
+        if batch.access_rules is not None and not same_rules(
+            batch.access_rules, _rule_specs_of(collection)
+        ):
+            batch.previous_access_rules = _rule_specs_of(collection)
+            _replace_rules(collection, batch.access_rules)
+        batch.state = _next(batch, BatchEvent.APPROVE).value
+        batch.applied_at = now
+        batch.applied_by = actor.id
+        batch.report = {
+            **batch.report,
+            "replaced_documents": sorted(replaced),
+            "removed_documents": sorted(removed),
+        }
+        self._audit.record(
+            actor_id=actor.id,
+            operation="knowledge.batch.apply",
+            target=f"batch:{batch.id}",
+            summary=(
+                f"Applied the batch to {collection.name}: {len(files)} document(s), "
+                f"{len(removed)} removed."
+            ),
+        )
+
+    async def _decide(
+        self,
+        batch: ImportBatch,
+        actor: CurrentPerson,
+        outcome: Outcome,
+        reason: str | None,
+    ) -> None:
+        if batch.approval_run_id is None:
+            raise Conflict("This batch has no approval request.")
+        _ = await self._approvals.decide(
+            run_id=batch.approval_run_id,
+            approver=Approver(id=actor.id, roles=actor.roles, department_id=actor.department_id),
+            approver_name=actor.name,
+            outcome=outcome,
+            reason=reason,
+        )
+
+    async def _rank(
+        self,
+        scope: Scope,
+        query: str,
+        vector: list[float],
+        roles: list[str],
+        department: str,
+    ) -> list[tuple[uuid.UUID, float]]:
+        rankings = [
+            await self._repository.vector_candidates(
+                scope, vector, roles, department, CANDIDATES_PER_RANKING
+            ),
+            await self._repository.keyword_candidates(
+                scope, query, roles, department, CANDIDATES_PER_RANKING
+            ),
+        ]
+        identifiers = extract_identifiers(query)
+        if identifiers:
+            rankings.append(
+                await self._repository.identifier_candidates(
+                    scope, identifiers, roles, department, CANDIDATES_PER_RANKING
+                )
+            )
+        return rrf_merge([ranking for ranking in rankings if ranking])
 
     async def _candidates(
         self,
@@ -291,10 +686,95 @@ class KnowledgeService:
             state=batch.state,
             failure_reason=batch.failure_reason,
             report=dict(batch.report),
+            risk=list(batch.risk),
+            access_rules=(
+                None
+                if batch.access_rules is None
+                else [_rule_out(rule) for rule in batch.access_rules]
+            ),
             created_at=batch.created_at,
             prepared_at=batch.prepared_at,
+            applied_at=batch.applied_at,
+            undone_at=batch.undone_at,
             files=[_file_out(row) for row in files],
         )
+
+
+def _payload(
+    batch: ImportBatch, files: Sequence[BatchFile], chunks: Sequence[Chunk]
+) -> dict[str, Any]:
+    """The staged result in a canonical form. Its digest is what an approval is bound to."""
+    return {
+        "mode": batch.mode,
+        "access_rules": batch.access_rules,
+        "files": [
+            {
+                "id": str(row.id),
+                "sha256": row.sha256,
+                "name": row.name,
+                "translation_group": row.translation_group,
+                "title": row.title,
+                "language": row.language,
+            }
+            for row in files
+        ],
+        "chunks": [
+            {
+                "id": str(row.id),
+                "file": str(row.batch_file_id),
+                "kind": row.kind,
+                "position": row.position,
+                "parent": None if row.parent_id is None else str(row.parent_id),
+                "body": row.body,
+                "prefix": row.context_prefix,
+                "identifiers": list(row.identifiers),
+                "tokens": row.token_count,
+                "embedding": None if row.embedding is None else [float(v) for v in row.embedding],
+            }
+            for row in chunks
+        ],
+    }
+
+
+def _rule_specs(rules: Sequence[CollectionRuleIn]) -> list[dict[str, Any]]:
+    unknown = sorted({rule.role for rule in rules} - ASSIGNABLE_ROLES)
+    if unknown:
+        raise Unprocessable(f"Unknown role(s): {', '.join(unknown)}.")
+    return [
+        {
+            "role": rule.role,
+            "all_departments": rule.all_departments,
+            "department_codes": sorted({code.strip().lower() for code in rule.department_codes}),
+        }
+        for rule in rules
+    ]
+
+
+def _rule_specs_of(collection: Collection) -> list[dict[str, Any]]:
+    return [
+        {
+            "role": rule.role,
+            "all_departments": rule.all_departments,
+            "department_codes": list(rule.department_codes),
+        }
+        for rule in collection.rules
+    ]
+
+
+def _replace_rules(collection: Collection, specs: Sequence[dict[str, Any]]) -> None:
+    collection.rules = [CollectionRule(**spec) for spec in specs]
+
+
+def _rule_out(spec: dict[str, Any]) -> CollectionRuleOut:
+    return CollectionRuleOut(
+        role=spec["role"],
+        all_departments=spec["all_departments"],
+        department_codes=list(spec["department_codes"]),
+    )
+
+
+def _as_utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value
 
 
 def _next(batch: ImportBatch, event: BatchEvent) -> BatchState:
@@ -307,20 +787,6 @@ def _next(batch: ImportBatch, event: BatchEvent) -> BatchState:
 def _require_state(batch: ImportBatch, state: BatchState, message: str) -> None:
     if batch.state != state:
         raise Conflict(message)
-
-
-def _rules(body: CollectionIn) -> list[CollectionRule]:
-    unknown = sorted({rule.role for rule in body.rules} - ASSIGNABLE_ROLES)
-    if unknown:
-        raise Unprocessable(f"Unknown role(s): {', '.join(unknown)}.")
-    return [
-        CollectionRule(
-            role=rule.role,
-            all_departments=rule.all_departments,
-            department_codes=sorted({code.strip().lower() for code in rule.department_codes}),
-        )
-        for rule in body.rules
-    ]
 
 
 def _collection_out(collection: Collection) -> CollectionOut:
@@ -361,5 +827,6 @@ def get_service(
     files: Annotated[FileService, Depends(get_file_service)],
     queue: Annotated[BatchQueue, Depends(get_batch_queue)],
     embedder: Annotated[Embedder, Depends(get_embedder)],
+    approvals: Annotated[ApprovalService, Depends(get_approval_service)],
 ) -> KnowledgeService:
-    return KnowledgeService(repository, audit, clock, files, queue, embedder)
+    return KnowledgeService(repository, audit, clock, files, queue, embedder, approvals)

@@ -110,6 +110,20 @@ class FileService:
             return False
         return await self._repo.get(sha256) is not None
 
+    async def erase(self, sha256: str) -> None:
+        """Remove a stored file's record and its bytes, for an erasure the owning module records.
+
+        The caller writes the audit row and commits. The bytes go once the record is staged.
+        """
+        if _SHA256.fullmatch(sha256) is None:
+            return
+        stored = await self._repo.get(sha256)
+        if stored is not None:
+            await self._repo.delete(stored)
+        path = self._path(sha256)
+        if path.is_file():
+            path.unlink()
+
     async def read(self, sha256: str) -> tuple[StoredFile, bytes]:
         if _SHA256.fullmatch(sha256) is None:
             raise NotFound("No file has that identifier.")

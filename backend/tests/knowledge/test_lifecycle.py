@@ -12,11 +12,14 @@ from app.modules.knowledge.lifecycle import (
 )
 
 
-def test_a_batch_moves_from_upload_to_applied() -> None:
+def test_a_batch_moves_from_upload_to_applied_only_through_approval() -> None:
     state = BatchState.UPLOADED
-    for event in (BatchEvent.PREPARE, BatchEvent.PREPARED, BatchEvent.APPLY):
+    for event in (BatchEvent.PREPARE, BatchEvent.PREPARED, BatchEvent.REQUIRE_APPROVAL):
         state = transition(state, event)
-    assert state is BatchState.APPLIED
+    assert state is BatchState.AWAITING_APPROVAL
+    assert transition(state, BatchEvent.APPROVE) is BatchState.APPLIED
+    with pytest.raises(InvalidTransition):
+        _ = transition(BatchState.PREPARED, BatchEvent.APPROVE)
 
 
 def test_a_batch_waits_for_approval_then_applies_or_is_rejected() -> None:
@@ -39,7 +42,7 @@ def test_an_applied_batch_can_be_undone_once() -> None:
 @pytest.mark.parametrize(
     ("state", "event"),
     [
-        (BatchState.UPLOADED, BatchEvent.APPLY),
+        (BatchState.UPLOADED, BatchEvent.APPROVE),
         (BatchState.PREPARING, BatchEvent.PREPARE),
         (BatchState.PREPARED, BatchEvent.APPROVE),
         (BatchState.APPLIED, BatchEvent.CANCEL),

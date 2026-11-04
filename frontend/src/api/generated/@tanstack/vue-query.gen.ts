@@ -3,8 +3,8 @@
 import { queryOptions, type UseMutationOptions } from '@tanstack/vue-query';
 
 import { client } from '../client.gen';
-import { auditEventList, budgetsCategoryList, budgetsLineCreate, budgetsLineHistory, budgetsLineList, budgetsLineReplace, budgetsVarianceRead, claimsClaimCreate, claimsClaimDecide, claimsClaimList, claimsClaimRead, claimsClaimSubmit, claimsClaimWithdraw, claimsDecisionQueue, claimsLineAdd, claimsLineVoid, confirmationsRequestDecide, confirmationsRequestRead, filesFileRead, filesFileUpload, knowledgeBatchCreate, knowledgeBatchPrepare, knowledgeBatchPreview, knowledgeBatchRead, knowledgeBatchUpload, knowledgeCollectionCreate, knowledgeCollectionList, knowledgeCollectionRead, knowledgeStatusRead, type Options, platformHealthRead, spendMonthClose, spendMonthList, spendStatementImport, spendStatementList, spendStatementPreview, spendStatementVoid, usersDepartmentList, usersDirectoryList, usersSelfRead, usersSessionEnd, usersSessionFinish, usersSessionStart } from '../sdk.gen';
-import type { AuditEventListData, AuditEventListError, AuditEventListResponse, BudgetsCategoryListData, BudgetsCategoryListError, BudgetsCategoryListResponse, BudgetsLineCreateData, BudgetsLineCreateError, BudgetsLineCreateResponse, BudgetsLineHistoryData, BudgetsLineHistoryError, BudgetsLineHistoryResponse, BudgetsLineListData, BudgetsLineListError, BudgetsLineListResponse, BudgetsLineReplaceData, BudgetsLineReplaceError, BudgetsLineReplaceResponse, BudgetsVarianceReadData, BudgetsVarianceReadError, BudgetsVarianceReadResponse, ClaimsClaimCreateData, ClaimsClaimCreateError, ClaimsClaimCreateResponse, ClaimsClaimDecideData, ClaimsClaimDecideError, ClaimsClaimDecideResponse, ClaimsClaimListData, ClaimsClaimListError, ClaimsClaimListResponse, ClaimsClaimReadData, ClaimsClaimReadError, ClaimsClaimReadResponse, ClaimsClaimSubmitData, ClaimsClaimSubmitError, ClaimsClaimSubmitResponse, ClaimsClaimWithdrawData, ClaimsClaimWithdrawError, ClaimsClaimWithdrawResponse, ClaimsDecisionQueueData, ClaimsDecisionQueueError, ClaimsDecisionQueueResponse, ClaimsLineAddData, ClaimsLineAddError, ClaimsLineAddResponse, ClaimsLineVoidData, ClaimsLineVoidError, ClaimsLineVoidResponse, ConfirmationsRequestDecideData, ConfirmationsRequestDecideError, ConfirmationsRequestDecideResponse, ConfirmationsRequestReadData, ConfirmationsRequestReadError, ConfirmationsRequestReadResponse, FilesFileReadData, FilesFileReadError, FilesFileUploadData, FilesFileUploadError, FilesFileUploadResponse, KnowledgeBatchCreateData, KnowledgeBatchCreateError, KnowledgeBatchCreateResponse, KnowledgeBatchPrepareData, KnowledgeBatchPrepareError, KnowledgeBatchPrepareResponse, KnowledgeBatchPreviewData, KnowledgeBatchPreviewError, KnowledgeBatchPreviewResponse, KnowledgeBatchReadData, KnowledgeBatchReadError, KnowledgeBatchReadResponse, KnowledgeBatchUploadData, KnowledgeBatchUploadError, KnowledgeBatchUploadResponse, KnowledgeCollectionCreateData, KnowledgeCollectionCreateError, KnowledgeCollectionCreateResponse, KnowledgeCollectionListData, KnowledgeCollectionListError, KnowledgeCollectionListResponse, KnowledgeCollectionReadData, KnowledgeCollectionReadError, KnowledgeCollectionReadResponse, KnowledgeStatusReadData, KnowledgeStatusReadError, KnowledgeStatusReadResponse, PlatformHealthReadData, PlatformHealthReadError, PlatformHealthReadResponse, SpendMonthCloseData, SpendMonthCloseError, SpendMonthCloseResponse, SpendMonthListData, SpendMonthListError, SpendMonthListResponse, SpendStatementImportData, SpendStatementImportError, SpendStatementImportResponse, SpendStatementListData, SpendStatementListError, SpendStatementListResponse, SpendStatementPreviewData, SpendStatementPreviewError, SpendStatementPreviewResponse, SpendStatementVoidData, SpendStatementVoidError, SpendStatementVoidResponse, UsersDepartmentListData, UsersDepartmentListError, UsersDepartmentListResponse, UsersDirectoryListData, UsersDirectoryListError, UsersDirectoryListResponse, UsersSelfReadData, UsersSelfReadError, UsersSelfReadResponse, UsersSessionEndData, UsersSessionEndError, UsersSessionEndResponse, UsersSessionFinishData, UsersSessionFinishError, UsersSessionStartData, UsersSessionStartError } from '../types.gen';
+import { auditEventList, budgetsCategoryList, budgetsLineCreate, budgetsLineHistory, budgetsLineList, budgetsLineReplace, budgetsVarianceRead, claimsClaimCreate, claimsClaimDecide, claimsClaimList, claimsClaimRead, claimsClaimSubmit, claimsClaimWithdraw, claimsDecisionQueue, claimsLineAdd, claimsLineVoid, confirmationsRequestDecide, confirmationsRequestRead, filesFileRead, filesFileUpload, knowledgeBatchApprove, knowledgeBatchCancel, knowledgeBatchCreate, knowledgeBatchList, knowledgeBatchPrepare, knowledgeBatchPreview, knowledgeBatchRead, knowledgeBatchReject, knowledgeBatchSubmit, knowledgeBatchUndo, knowledgeBatchUpload, knowledgeCollectionCreate, knowledgeCollectionList, knowledgeCollectionRead, knowledgeDocumentErase, knowledgeSearchLogList, knowledgeSearchRun, knowledgeStatusRead, type Options, platformHealthRead, spendMonthClose, spendMonthList, spendStatementImport, spendStatementList, spendStatementPreview, spendStatementVoid, usersDepartmentList, usersDirectoryList, usersSelfRead, usersSessionEnd, usersSessionFinish, usersSessionStart } from '../sdk.gen';
+import type { AuditEventListData, AuditEventListError, AuditEventListResponse, BudgetsCategoryListData, BudgetsCategoryListError, BudgetsCategoryListResponse, BudgetsLineCreateData, BudgetsLineCreateError, BudgetsLineCreateResponse, BudgetsLineHistoryData, BudgetsLineHistoryError, BudgetsLineHistoryResponse, BudgetsLineListData, BudgetsLineListError, BudgetsLineListResponse, BudgetsLineReplaceData, BudgetsLineReplaceError, BudgetsLineReplaceResponse, BudgetsVarianceReadData, BudgetsVarianceReadError, BudgetsVarianceReadResponse, ClaimsClaimCreateData, ClaimsClaimCreateError, ClaimsClaimCreateResponse, ClaimsClaimDecideData, ClaimsClaimDecideError, ClaimsClaimDecideResponse, ClaimsClaimListData, ClaimsClaimListError, ClaimsClaimListResponse, ClaimsClaimReadData, ClaimsClaimReadError, ClaimsClaimReadResponse, ClaimsClaimSubmitData, ClaimsClaimSubmitError, ClaimsClaimSubmitResponse, ClaimsClaimWithdrawData, ClaimsClaimWithdrawError, ClaimsClaimWithdrawResponse, ClaimsDecisionQueueData, ClaimsDecisionQueueError, ClaimsDecisionQueueResponse, ClaimsLineAddData, ClaimsLineAddError, ClaimsLineAddResponse, ClaimsLineVoidData, ClaimsLineVoidError, ClaimsLineVoidResponse, ConfirmationsRequestDecideData, ConfirmationsRequestDecideError, ConfirmationsRequestDecideResponse, ConfirmationsRequestReadData, ConfirmationsRequestReadError, ConfirmationsRequestReadResponse, FilesFileReadData, FilesFileReadError, FilesFileUploadData, FilesFileUploadError, FilesFileUploadResponse, KnowledgeBatchApproveData, KnowledgeBatchApproveError, KnowledgeBatchApproveResponse, KnowledgeBatchCancelData, KnowledgeBatchCancelError, KnowledgeBatchCancelResponse, KnowledgeBatchCreateData, KnowledgeBatchCreateError, KnowledgeBatchCreateResponse, KnowledgeBatchListData, KnowledgeBatchListError, KnowledgeBatchListResponse, KnowledgeBatchPrepareData, KnowledgeBatchPrepareError, KnowledgeBatchPrepareResponse, KnowledgeBatchPreviewData, KnowledgeBatchPreviewError, KnowledgeBatchPreviewResponse, KnowledgeBatchReadData, KnowledgeBatchReadError, KnowledgeBatchReadResponse, KnowledgeBatchRejectData, KnowledgeBatchRejectError, KnowledgeBatchRejectResponse, KnowledgeBatchSubmitData, KnowledgeBatchSubmitError, KnowledgeBatchSubmitResponse, KnowledgeBatchUndoData, KnowledgeBatchUndoError, KnowledgeBatchUndoResponse, KnowledgeBatchUploadData, KnowledgeBatchUploadError, KnowledgeBatchUploadResponse, KnowledgeCollectionCreateData, KnowledgeCollectionCreateError, KnowledgeCollectionCreateResponse, KnowledgeCollectionListData, KnowledgeCollectionListError, KnowledgeCollectionListResponse, KnowledgeCollectionReadData, KnowledgeCollectionReadError, KnowledgeCollectionReadResponse, KnowledgeDocumentEraseData, KnowledgeDocumentEraseError, KnowledgeDocumentEraseResponse, KnowledgeSearchLogListData, KnowledgeSearchLogListError, KnowledgeSearchLogListResponse, KnowledgeSearchRunData, KnowledgeSearchRunError, KnowledgeSearchRunResponse, KnowledgeStatusReadData, KnowledgeStatusReadError, KnowledgeStatusReadResponse, PlatformHealthReadData, PlatformHealthReadError, PlatformHealthReadResponse, SpendMonthCloseData, SpendMonthCloseError, SpendMonthCloseResponse, SpendMonthListData, SpendMonthListError, SpendMonthListResponse, SpendStatementImportData, SpendStatementImportError, SpendStatementImportResponse, SpendStatementListData, SpendStatementListError, SpendStatementListResponse, SpendStatementPreviewData, SpendStatementPreviewError, SpendStatementPreviewResponse, SpendStatementVoidData, SpendStatementVoidError, SpendStatementVoidResponse, UsersDepartmentListData, UsersDepartmentListError, UsersDepartmentListResponse, UsersDirectoryListData, UsersDirectoryListError, UsersDirectoryListResponse, UsersSelfReadData, UsersSelfReadError, UsersSelfReadResponse, UsersSessionEndData, UsersSessionEndError, UsersSessionEndResponse, UsersSessionFinishData, UsersSessionFinishError, UsersSessionStartData, UsersSessionStartError } from '../types.gen';
 
 export type QueryKey<TOptions extends Options> = [
     Pick<TOptions, 'baseUrl' | 'body' | 'headers' | 'path' | 'query'> & {
@@ -449,6 +449,26 @@ export const platformHealthReadOptions = (options?: Options<PlatformHealthReadDa
     queryKey: platformHealthReadQueryKey(options)
 });
 
+export const knowledgeBatchListQueryKey = (options?: Options<KnowledgeBatchListData>) => createQueryKey('knowledgeBatchList', options);
+
+/**
+ * List Batches
+ *
+ * List import batches, newest first, optionally for one collection or one state.
+ */
+export const knowledgeBatchListOptions = (options?: Options<KnowledgeBatchListData>) => queryOptions<KnowledgeBatchListResponse, KnowledgeBatchListError, KnowledgeBatchListResponse, ReturnType<typeof knowledgeBatchListQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await knowledgeBatchList({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: knowledgeBatchListQueryKey(options)
+});
+
 export const knowledgeBatchReadQueryKey = (options: Options<KnowledgeBatchReadData>) => createQueryKey('knowledgeBatchRead', options);
 
 /**
@@ -468,6 +488,44 @@ export const knowledgeBatchReadOptions = (options: Options<KnowledgeBatchReadDat
     },
     queryKey: knowledgeBatchReadQueryKey(options)
 });
+
+/**
+ * Approve Batch
+ *
+ * Approve a batch waiting for approval, which applies it live. Only a person may do this.
+ */
+export const knowledgeBatchApproveMutation = (options?: Partial<Options<KnowledgeBatchApproveData>>): UseMutationOptions<KnowledgeBatchApproveResponse, KnowledgeBatchApproveError, Options<KnowledgeBatchApproveData>> => {
+    const mutationOptions: UseMutationOptions<KnowledgeBatchApproveResponse, KnowledgeBatchApproveError, Options<KnowledgeBatchApproveData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await knowledgeBatchApprove({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+/**
+ * Cancel Batch
+ *
+ * Cancel a batch that is still open. A request waiting for approval is withdrawn too.
+ */
+export const knowledgeBatchCancelMutation = (options?: Partial<Options<KnowledgeBatchCancelData>>): UseMutationOptions<KnowledgeBatchCancelResponse, KnowledgeBatchCancelError, Options<KnowledgeBatchCancelData>> => {
+    const mutationOptions: UseMutationOptions<KnowledgeBatchCancelResponse, KnowledgeBatchCancelError, Options<KnowledgeBatchCancelData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await knowledgeBatchCancel({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
 
 /**
  * Upload File
@@ -516,6 +574,63 @@ export const knowledgeBatchPreviewMutation = (options?: Partial<Options<Knowledg
     const mutationOptions: UseMutationOptions<KnowledgeBatchPreviewResponse, KnowledgeBatchPreviewError, Options<KnowledgeBatchPreviewData>> = {
         mutationFn: async (fnOptions) => {
             const { data } = await knowledgeBatchPreview({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+/**
+ * Reject Batch
+ *
+ * Reject a batch waiting for approval, with a reason. Only a person may do this.
+ */
+export const knowledgeBatchRejectMutation = (options?: Partial<Options<KnowledgeBatchRejectData>>): UseMutationOptions<KnowledgeBatchRejectResponse, KnowledgeBatchRejectError, Options<KnowledgeBatchRejectData>> => {
+    const mutationOptions: UseMutationOptions<KnowledgeBatchRejectResponse, KnowledgeBatchRejectError, Options<KnowledgeBatchRejectData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await knowledgeBatchReject({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+/**
+ * Submit Batch
+ *
+ * Ask for approval to apply a prepared batch. The staged result is fixed from this point.
+ */
+export const knowledgeBatchSubmitMutation = (options?: Partial<Options<KnowledgeBatchSubmitData>>): UseMutationOptions<KnowledgeBatchSubmitResponse, KnowledgeBatchSubmitError, Options<KnowledgeBatchSubmitData>> => {
+    const mutationOptions: UseMutationOptions<KnowledgeBatchSubmitResponse, KnowledgeBatchSubmitError, Options<KnowledgeBatchSubmitData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await knowledgeBatchSubmit({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+/**
+ * Undo Batch
+ *
+ * Undo an applied batch, restoring the live documents and access rules it replaced. The person confirms this first.
+ */
+export const knowledgeBatchUndoMutation = (options?: Partial<Options<KnowledgeBatchUndoData>>): UseMutationOptions<KnowledgeBatchUndoResponse, KnowledgeBatchUndoError, Options<KnowledgeBatchUndoData>> => {
+    const mutationOptions: UseMutationOptions<KnowledgeBatchUndoResponse, KnowledgeBatchUndoError, Options<KnowledgeBatchUndoData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await knowledgeBatchUndo({
                 ...options,
                 ...fnOptions,
                 throwOnError: true
@@ -603,6 +718,64 @@ export const knowledgeBatchCreateMutation = (options?: Partial<Options<Knowledge
     };
     return mutationOptions;
 };
+
+/**
+ * Erase Document
+ *
+ * Erase a document from every batch of a collection, from search and from file storage. Only a person may do this, with a reason.
+ */
+export const knowledgeDocumentEraseMutation = (options?: Partial<Options<KnowledgeDocumentEraseData>>): UseMutationOptions<KnowledgeDocumentEraseResponse, KnowledgeDocumentEraseError, Options<KnowledgeDocumentEraseData>> => {
+    const mutationOptions: UseMutationOptions<KnowledgeDocumentEraseResponse, KnowledgeDocumentEraseError, Options<KnowledgeDocumentEraseData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await knowledgeDocumentErase({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+/**
+ * Search
+ *
+ * Search the knowledge the caller may read, as it is live now or was live at a past moment. Each result names its source document and section.
+ */
+export const knowledgeSearchRunMutation = (options?: Partial<Options<KnowledgeSearchRunData>>): UseMutationOptions<KnowledgeSearchRunResponse, KnowledgeSearchRunError, Options<KnowledgeSearchRunData>> => {
+    const mutationOptions: UseMutationOptions<KnowledgeSearchRunResponse, KnowledgeSearchRunError, Options<KnowledgeSearchRunData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await knowledgeSearchRun({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+export const knowledgeSearchLogListQueryKey = (options?: Options<KnowledgeSearchLogListData>) => createQueryKey('knowledgeSearchLogList', options);
+
+/**
+ * Search Log
+ *
+ * Read who searched for what and which chunks they got back. Only a person may read it.
+ */
+export const knowledgeSearchLogListOptions = (options?: Options<KnowledgeSearchLogListData>) => queryOptions<KnowledgeSearchLogListResponse, KnowledgeSearchLogListError, KnowledgeSearchLogListResponse, ReturnType<typeof knowledgeSearchLogListQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await knowledgeSearchLogList({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: knowledgeSearchLogListQueryKey(options)
+});
 
 export const knowledgeStatusReadQueryKey = (options?: Options<KnowledgeStatusReadData>) => createQueryKey('knowledgeStatusRead', options);
 

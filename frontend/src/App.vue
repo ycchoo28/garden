@@ -20,6 +20,8 @@ const links = computed(() => {
   const items: { to: string; label: string }[] = [];
   if (permissions.includes('claims.view')) items.push({ to: '/claims', label: 'Claims' });
   if (permissions.includes('claims.decide')) items.push({ to: '/approvals', label: 'Approvals' });
+  if (permissions.includes('knowledge.search')) items.push({ to: '/search', label: 'Search' });
+  if (permissions.includes('knowledge.search_log.read')) items.push({ to: '/search-log', label: 'Search log' });
   return items;
 });
 

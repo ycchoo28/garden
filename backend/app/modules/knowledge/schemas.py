@@ -1,4 +1,7 @@
-"""Request and response shapes for the knowledge module."""
+"""Request and response shapes for the knowledge module.
+
+Every class here is prefixed with `Knowledge` where its name could clash with another module.
+"""
 
 import uuid
 from datetime import datetime
@@ -56,6 +59,8 @@ class CollectionOut(BaseModel):
 
 class BatchIn(BaseModel):
     mode: Literal["full_set", "partial"]
+    # When set, applying the batch replaces the collection's access rules. That is a risk trigger.
+    access_rules: list[CollectionRuleIn] | None = Field(default=None, max_length=20)
 
 
 class BatchFileOut(BaseModel):
@@ -78,9 +83,34 @@ class BatchOut(BaseModel):
     state: str
     failure_reason: str | None
     report: dict[str, Any]
+    risk: list[str]
+    access_rules: list[CollectionRuleOut] | None
     created_at: datetime
     prepared_at: datetime | None
+    applied_at: datetime | None
+    undone_at: datetime | None
     files: list[BatchFileOut]
+
+
+class KnowledgeBatchSummaryOut(BaseModel):
+    id: uuid.UUID
+    collection_id: uuid.UUID
+    collection_name: str
+    mode: str
+    state: str
+    risk: list[str]
+    created_at: datetime
+
+
+class KnowledgeReasonIn(BaseModel):
+    """The reason a person gives with an approval, a rejection or a cancellation."""
+
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class KnowledgeEraseIn(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    reason: str = Field(min_length=1, max_length=500)
 
 
 class PreviewIn(BaseModel):
@@ -106,3 +136,43 @@ class PreviewOut(BaseModel):
     results: list[PreviewHitOut]
     truncated: bool
     token_count: int
+
+
+class KnowledgeSearchIn(BaseModel):
+    query: str = Field(min_length=1, max_length=500)
+    limit: int = Field(default=5, ge=1, le=20)
+    max_tokens: int = Field(default=8000, ge=200, le=8000)
+    # Search what was live at this moment. Omit it to search what is live now.
+    as_of: datetime | None = None
+
+
+class KnowledgeSearchHitOut(BaseModel):
+    chunk_ids: list[uuid.UUID]
+    collection_id: uuid.UUID
+    collection_name: str
+    title: str
+    translation_group: str
+    language: str
+    heading_path: str
+    locator: str
+    text: str
+    token_count: int
+    score: float
+
+
+class KnowledgeSearchOut(BaseModel):
+    results: list[KnowledgeSearchHitOut]
+    truncated: bool
+    token_count: int
+    as_of: datetime | None
+
+
+class KnowledgeSearchLogOut(BaseModel):
+    id: uuid.UUID
+    searched_at: datetime
+    person_id: uuid.UUID
+    person_name: str
+    acting_as_agent: bool
+    query: str
+    as_of: datetime | None
+    chunk_ids: list[uuid.UUID]

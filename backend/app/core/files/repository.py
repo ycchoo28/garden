@@ -22,6 +22,9 @@ class FileRepository:
     def add(self, stored: StoredFile) -> None:
         self._session.add(stored)
 
+    async def delete(self, stored: StoredFile) -> None:
+        await self._session.delete(stored)
+
 
 def get_file_repository(session: Annotated[AsyncSession, Depends(get_session)]) -> FileRepository:
     return FileRepository(session)

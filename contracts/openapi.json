@@ -214,6 +214,21 @@
       },
       "BatchIn": {
         "properties": {
+          "access_rules": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CollectionRuleIn"
+                },
+                "maxItems": 20,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Rules"
+          },
           "mode": {
             "enum": [
               "full_set",
@@ -231,6 +246,32 @@
       },
       "BatchOut": {
         "properties": {
+          "access_rules": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CollectionRuleOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Rules"
+          },
+          "applied_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied At"
+          },
           "collection_id": {
             "format": "uuid",
             "title": "Collection Id",
@@ -285,9 +326,28 @@
             "title": "Report",
             "type": "object"
           },
+          "risk": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Risk",
+            "type": "array"
+          },
           "state": {
             "title": "State",
             "type": "string"
+          },
+          "undone_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Undone At"
           }
         },
         "required": [
@@ -297,8 +357,12 @@
           "state",
           "failure_reason",
           "report",
+          "risk",
+          "access_rules",
           "created_at",
           "prepared_at",
+          "applied_at",
+          "undone_at",
           "files"
         ],
         "title": "BatchOut",
@@ -837,6 +901,307 @@
           "message"
         ],
         "title": "FieldError",
+        "type": "object"
+      },
+      "KnowledgeBatchSummaryOut": {
+        "properties": {
+          "collection_id": {
+            "format": "uuid",
+            "title": "Collection Id",
+            "type": "string"
+          },
+          "collection_name": {
+            "title": "Collection Name",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "risk": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Risk",
+            "type": "array"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "collection_id",
+          "collection_name",
+          "mode",
+          "state",
+          "risk",
+          "created_at"
+        ],
+        "title": "KnowledgeBatchSummaryOut",
+        "type": "object"
+      },
+      "KnowledgeEraseIn": {
+        "properties": {
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "reason"
+        ],
+        "title": "KnowledgeEraseIn",
+        "type": "object"
+      },
+      "KnowledgeReasonIn": {
+        "description": "The reason a person gives with an approval, a rejection or a cancellation.",
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "KnowledgeReasonIn",
+        "type": "object"
+      },
+      "KnowledgeSearchHitOut": {
+        "properties": {
+          "chunk_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Chunk Ids",
+            "type": "array"
+          },
+          "collection_id": {
+            "format": "uuid",
+            "title": "Collection Id",
+            "type": "string"
+          },
+          "collection_name": {
+            "title": "Collection Name",
+            "type": "string"
+          },
+          "heading_path": {
+            "title": "Heading Path",
+            "type": "string"
+          },
+          "language": {
+            "title": "Language",
+            "type": "string"
+          },
+          "locator": {
+            "title": "Locator",
+            "type": "string"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "token_count": {
+            "title": "Token Count",
+            "type": "integer"
+          },
+          "translation_group": {
+            "title": "Translation Group",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk_ids",
+          "collection_id",
+          "collection_name",
+          "title",
+          "translation_group",
+          "language",
+          "heading_path",
+          "locator",
+          "text",
+          "token_count",
+          "score"
+        ],
+        "title": "KnowledgeSearchHitOut",
+        "type": "object"
+      },
+      "KnowledgeSearchIn": {
+        "properties": {
+          "as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "limit": {
+            "default": 5,
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "max_tokens": {
+            "default": 8000,
+            "maximum": 8000.0,
+            "minimum": 200.0,
+            "title": "Max Tokens",
+            "type": "integer"
+          },
+          "query": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "KnowledgeSearchIn",
+        "type": "object"
+      },
+      "KnowledgeSearchLogOut": {
+        "properties": {
+          "acting_as_agent": {
+            "title": "Acting As Agent",
+            "type": "boolean"
+          },
+          "as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "chunk_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Chunk Ids",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "person_id": {
+            "format": "uuid",
+            "title": "Person Id",
+            "type": "string"
+          },
+          "person_name": {
+            "title": "Person Name",
+            "type": "string"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "searched_at": {
+            "format": "date-time",
+            "title": "Searched At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "searched_at",
+          "person_id",
+          "person_name",
+          "acting_as_agent",
+          "query",
+          "as_of",
+          "chunk_ids"
+        ],
+        "title": "KnowledgeSearchLogOut",
+        "type": "object"
+      },
+      "KnowledgeSearchOut": {
+        "properties": {
+          "as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeSearchHitOut"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "token_count": {
+            "title": "Token Count",
+            "type": "integer"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "results",
+          "truncated",
+          "token_count",
+          "as_of"
+        ],
+        "title": "KnowledgeSearchOut",
         "type": "object"
       },
       "LineCreateIn": {
@@ -2970,6 +3335,93 @@
         }
       }
     },
+    "/api/knowledge/batches": {
+      "get": {
+        "description": "List import batches, newest first, optionally for one collection or one state.",
+        "operationId": "knowledge.batch.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "collection_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Collection Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 30,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/KnowledgeBatchSummaryOut"
+                  },
+                  "title": "Response Knowledge.Batch.List",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "List Batches",
+        "tags": [
+          "knowledge"
+        ],
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": true
+        }
+      }
+    },
     "/api/knowledge/batches/{batch_id}": {
       "get": {
         "description": "Read an import batch, its files and its preparation report.",
@@ -3019,6 +3471,144 @@
           }
         },
         "summary": "Read Batch",
+        "tags": [
+          "knowledge"
+        ],
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": true
+        }
+      }
+    },
+    "/api/knowledge/batches/{batch_id}/approve": {
+      "post": {
+        "description": "Approve a batch waiting for approval, which applies it live. Only a person may do this.",
+        "operationId": "knowledge.batch.approve",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Batch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeReasonIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Approve Batch",
+        "tags": [
+          "knowledge"
+        ],
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": false
+        }
+      }
+    },
+    "/api/knowledge/batches/{batch_id}/cancel": {
+      "post": {
+        "description": "Cancel a batch that is still open. A request waiting for approval is withdrawn too.",
+        "operationId": "knowledge.batch.cancel",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Batch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeReasonIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Cancel Batch",
         "tags": [
           "knowledge"
         ],
@@ -3221,6 +3811,193 @@
         ],
         "x-agent": {
           "confirm": false,
+          "save": true,
+          "tool": true
+        }
+      }
+    },
+    "/api/knowledge/batches/{batch_id}/reject": {
+      "post": {
+        "description": "Reject a batch waiting for approval, with a reason. Only a person may do this.",
+        "operationId": "knowledge.batch.reject",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Batch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeReasonIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Reject Batch",
+        "tags": [
+          "knowledge"
+        ],
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": false
+        }
+      }
+    },
+    "/api/knowledge/batches/{batch_id}/submit": {
+      "post": {
+        "description": "Ask for approval to apply a prepared batch. The staged result is fixed from this point.",
+        "operationId": "knowledge.batch.submit",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Batch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Submit Batch",
+        "tags": [
+          "knowledge"
+        ],
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": true
+        }
+      }
+    },
+    "/api/knowledge/batches/{batch_id}/undo": {
+      "post": {
+        "description": "Undo an applied batch, restoring the live documents and access rules it replaced. The person confirms this first.",
+        "operationId": "knowledge.batch.undo",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Batch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Undo Batch",
+        "tags": [
+          "knowledge"
+        ],
+        "x-agent": {
+          "confirm": true,
           "save": true,
           "tool": true
         }
@@ -3457,6 +4234,190 @@
           "confirm": false,
           "save": true,
           "tool": true
+        }
+      }
+    },
+    "/api/knowledge/collections/{collection_id}/documents/erase": {
+      "post": {
+        "description": "Erase a document from every batch of a collection, from search and from file storage. Only a person may do this, with a reason.",
+        "operationId": "knowledge.document.erase",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "collection_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Collection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeEraseIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Erase Document",
+        "tags": [
+          "knowledge"
+        ],
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": false
+        }
+      }
+    },
+    "/api/knowledge/search": {
+      "post": {
+        "description": "Search the knowledge the caller may read, as it is live now or was live at a past moment. Each result names its source document and section.",
+        "operationId": "knowledge.search.run",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeSearchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeSearchOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Search",
+        "tags": [
+          "knowledge"
+        ],
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": true
+        }
+      }
+    },
+    "/api/knowledge/search-log": {
+      "get": {
+        "description": "Read who searched for what and which chunks they got back. Only a person may read it.",
+        "operationId": "knowledge.search_log.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/KnowledgeSearchLogOut"
+                  },
+                  "title": "Response Knowledge.Search Log.List",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Search Log",
+        "tags": [
+          "knowledge"
+        ],
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": false
         }
       }
     },

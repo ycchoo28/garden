@@ -26,3 +26,4 @@ Records are numbered in the order they were made, and a later record may replace
 | [0019](0019-month-close.md) | Closing a month freezes its spend |
 | [0020](0020-pgvector-and-local-embeddings.md) | Vectors in pgvector, and embeddings from a local model |
 | [0021](0021-hybrid-search-with-rrf.md) | Hybrid search fused with reciprocal rank fusion |
+| [0030](0030-batch-approval-and-undo.md) | A batch goes live only after approval, and undo restores the spans |

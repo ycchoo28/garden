@@ -57,28 +57,6 @@ export const zBatchFileOut = z.object({
 });
 
 /**
- * BatchIn
- */
-export const zBatchIn = z.object({
-    mode: z.enum(['full_set', 'partial'])
-});
-
-/**
- * BatchOut
- */
-export const zBatchOut = z.object({
-    collection_id: z.uuid(),
-    created_at: z.iso.datetime(),
-    failure_reason: z.string().nullable(),
-    files: z.array(zBatchFileOut),
-    id: z.uuid(),
-    mode: z.string(),
-    prepared_at: z.iso.datetime().nullable(),
-    report: z.record(z.string(), z.unknown()),
-    state: z.string()
-});
-
-/**
  * BudgetLineOut
  */
 export const zBudgetLineOut = z.object({
@@ -151,6 +129,14 @@ export const zCollectionRuleIn = z.object({
 });
 
 /**
+ * BatchIn
+ */
+export const zBatchIn = z.object({
+    access_rules: z.array(zCollectionRuleIn).max(20).nullish(),
+    mode: z.enum(['full_set', 'partial'])
+});
+
+/**
  * CollectionIn
  */
 export const zCollectionIn = z.object({
@@ -165,6 +151,25 @@ export const zCollectionRuleOut = z.object({
     all_departments: z.boolean(),
     department_codes: z.array(z.string()),
     role: z.string()
+});
+
+/**
+ * BatchOut
+ */
+export const zBatchOut = z.object({
+    access_rules: z.array(zCollectionRuleOut).nullable(),
+    applied_at: z.iso.datetime().nullable(),
+    collection_id: z.uuid(),
+    created_at: z.iso.datetime(),
+    failure_reason: z.string().nullable(),
+    files: z.array(zBatchFileOut),
+    id: z.uuid(),
+    mode: z.string(),
+    prepared_at: z.iso.datetime().nullable(),
+    report: z.record(z.string(), z.unknown()),
+    risk: z.array(z.string()),
+    state: z.string(),
+    undone_at: z.iso.datetime().nullable()
 });
 
 /**
@@ -234,6 +239,87 @@ export const zDepartmentOut = z.object({
 export const zFieldError = z.object({
     field: z.string(),
     message: z.string()
+});
+
+/**
+ * KnowledgeBatchSummaryOut
+ */
+export const zKnowledgeBatchSummaryOut = z.object({
+    collection_id: z.uuid(),
+    collection_name: z.string(),
+    created_at: z.iso.datetime(),
+    id: z.uuid(),
+    mode: z.string(),
+    risk: z.array(z.string()),
+    state: z.string()
+});
+
+/**
+ * KnowledgeEraseIn
+ */
+export const zKnowledgeEraseIn = z.object({
+    name: z.string().min(1).max(255),
+    reason: z.string().min(1).max(500)
+});
+
+/**
+ * KnowledgeReasonIn
+ *
+ * The reason a person gives with an approval, a rejection or a cancellation.
+ */
+export const zKnowledgeReasonIn = z.object({
+    reason: z.string().max(500).nullish()
+});
+
+/**
+ * KnowledgeSearchHitOut
+ */
+export const zKnowledgeSearchHitOut = z.object({
+    chunk_ids: z.array(z.uuid()),
+    collection_id: z.uuid(),
+    collection_name: z.string(),
+    heading_path: z.string(),
+    language: z.string(),
+    locator: z.string(),
+    score: z.number(),
+    text: z.string(),
+    title: z.string(),
+    token_count: z.int(),
+    translation_group: z.string()
+});
+
+/**
+ * KnowledgeSearchIn
+ */
+export const zKnowledgeSearchIn = z.object({
+    as_of: z.iso.datetime().nullish(),
+    limit: z.int().gte(1).lte(20).optional().default(5),
+    max_tokens: z.int().gte(200).lte(8000).optional().default(8000),
+    query: z.string().min(1).max(500)
+});
+
+/**
+ * KnowledgeSearchLogOut
+ */
+export const zKnowledgeSearchLogOut = z.object({
+    acting_as_agent: z.boolean(),
+    as_of: z.iso.datetime().nullable(),
+    chunk_ids: z.array(z.uuid()),
+    id: z.uuid(),
+    person_id: z.uuid(),
+    person_name: z.string(),
+    query: z.string(),
+    searched_at: z.iso.datetime()
+});
+
+/**
+ * KnowledgeSearchOut
+ */
+export const zKnowledgeSearchOut = z.object({
+    as_of: z.iso.datetime().nullable(),
+    results: z.array(zKnowledgeSearchHitOut),
+    token_count: z.int(),
+    truncated: z.boolean()
 });
 
 /**
@@ -683,6 +769,18 @@ export const zFilesFileReadPath = z.object({
  */
 export const zPlatformHealthReadResponse = z.record(z.string(), z.string());
 
+export const zKnowledgeBatchListQuery = z.object({
+    collection_id: z.uuid().nullish(),
+    state: z.string().max(30).nullish()
+});
+
+/**
+ * Response Knowledge.Batch.List
+ *
+ * Successful Response
+ */
+export const zKnowledgeBatchListResponse = z.array(zKnowledgeBatchSummaryOut);
+
 export const zKnowledgeBatchReadPath = z.object({
     batch_id: z.uuid()
 });
@@ -691,6 +789,28 @@ export const zKnowledgeBatchReadPath = z.object({
  * Successful Response
  */
 export const zKnowledgeBatchReadResponse = zBatchOut;
+
+export const zKnowledgeBatchApproveBody = zKnowledgeReasonIn;
+
+export const zKnowledgeBatchApprovePath = z.object({
+    batch_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeBatchApproveResponse = zBatchOut;
+
+export const zKnowledgeBatchCancelBody = zKnowledgeReasonIn;
+
+export const zKnowledgeBatchCancelPath = z.object({
+    batch_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeBatchCancelResponse = zBatchOut;
 
 export const zKnowledgeBatchUploadBody = zFastapiCompatV2BodyKnowledgeBatchUpload;
 
@@ -722,6 +842,35 @@ export const zKnowledgeBatchPreviewPath = z.object({
  * Successful Response
  */
 export const zKnowledgeBatchPreviewResponse = zPreviewOut;
+
+export const zKnowledgeBatchRejectBody = zKnowledgeReasonIn;
+
+export const zKnowledgeBatchRejectPath = z.object({
+    batch_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeBatchRejectResponse = zBatchOut;
+
+export const zKnowledgeBatchSubmitPath = z.object({
+    batch_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeBatchSubmitResponse = zBatchOut;
+
+export const zKnowledgeBatchUndoPath = z.object({
+    batch_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeBatchUndoResponse = zBatchOut;
 
 /**
  * Response Knowledge.Collection.List
@@ -756,6 +905,35 @@ export const zKnowledgeBatchCreatePath = z.object({
  * Successful Response
  */
 export const zKnowledgeBatchCreateResponse = zBatchOut;
+
+export const zKnowledgeDocumentEraseBody = zKnowledgeEraseIn;
+
+export const zKnowledgeDocumentErasePath = z.object({
+    collection_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeDocumentEraseResponse = z.void();
+
+export const zKnowledgeSearchRunBody = zKnowledgeSearchIn;
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeSearchRunResponse = zKnowledgeSearchOut;
+
+export const zKnowledgeSearchLogListQuery = z.object({
+    limit: z.int().gte(1).lte(500).optional().default(100)
+});
+
+/**
+ * Response Knowledge.Search Log.List
+ *
+ * Successful Response
+ */
+export const zKnowledgeSearchLogListResponse = z.array(zKnowledgeSearchLogOut);
 
 /**
  * Successful Response
