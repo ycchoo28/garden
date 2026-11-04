@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router';
 
 import { usersSelfReadOptions } from './api/generated/@tanstack/vue-query.gen';
+import { knowledgeRoutes } from './modules/knowledge';
 import { usersRoutes } from './modules/users';
 import { queryClient } from './queryClient';
 import { isUnauthorized } from './shared/problem';
@@ -8,7 +9,7 @@ import { isPublicPath, signInAddress } from './shared/redirects';
 
 export const router = createRouter({
   history: createWebHistory(),
-  routes: [...usersRoutes, { path: '/:pathMatch(.*)*', redirect: '/' }],
+  routes: [...usersRoutes, ...knowledgeRoutes, { path: '/:pathMatch(.*)*', redirect: '/' }],
 });
 
 // A private page needs a signed-in person. Without a session the browser goes to sign-in and comes back here.

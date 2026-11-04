@@ -8,7 +8,6 @@ from app.shared.permissions import Permission, Role
 EMPLOYEE = "employee"
 MANAGER = "manager"
 FINANCE = "finance"
-KNOWLEDGE_ADMIN = "knowledge_admin"
 ADMIN = "admin"
 
 ROLES: tuple[Role, ...] = (
@@ -18,8 +17,6 @@ ROLES: tuple[Role, ...] = (
     ),
     Role(MANAGER, frozenset({"users.directory.view"})),
     Role(FINANCE, frozenset({"users.directory.view", "audit.view"})),
-    # Knowledge permissions arrive with the knowledge module; until then this role grants nothing.
-    Role(KNOWLEDGE_ADMIN, frozenset()),
     Role(ADMIN, frozenset({"users.directory.view", "audit.view"})),
 )
 

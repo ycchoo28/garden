@@ -3,8 +3,8 @@
 import { queryOptions, type UseMutationOptions } from '@tanstack/vue-query';
 
 import { client } from '../client.gen';
-import { auditEventList, confirmationsRequestDecide, confirmationsRequestRead, filesFileRead, filesFileUpload, type Options, platformHealthRead, usersDirectoryList, usersSelfRead, usersSessionEnd, usersSessionFinish, usersSessionStart } from '../sdk.gen';
-import type { AuditEventListData, AuditEventListError, AuditEventListResponse, ConfirmationsRequestDecideData, ConfirmationsRequestDecideError, ConfirmationsRequestDecideResponse, ConfirmationsRequestReadData, ConfirmationsRequestReadError, ConfirmationsRequestReadResponse, FilesFileReadData, FilesFileReadError, FilesFileUploadData, FilesFileUploadError, FilesFileUploadResponse, PlatformHealthReadData, PlatformHealthReadError, PlatformHealthReadResponse, UsersDirectoryListData, UsersDirectoryListError, UsersDirectoryListResponse, UsersSelfReadData, UsersSelfReadError, UsersSelfReadResponse, UsersSessionEndData, UsersSessionEndError, UsersSessionEndResponse, UsersSessionFinishData, UsersSessionFinishError, UsersSessionStartData, UsersSessionStartError } from '../types.gen';
+import { auditEventList, confirmationsRequestDecide, confirmationsRequestRead, filesFileRead, filesFileUpload, knowledgeBatchCreate, knowledgeBatchPrepare, knowledgeBatchPreview, knowledgeBatchRead, knowledgeBatchUpload, knowledgeCollectionCreate, knowledgeCollectionList, knowledgeCollectionRead, knowledgeStatusRead, type Options, platformHealthRead, usersDirectoryList, usersSelfRead, usersSessionEnd, usersSessionFinish, usersSessionStart } from '../sdk.gen';
+import type { AuditEventListData, AuditEventListError, AuditEventListResponse, ConfirmationsRequestDecideData, ConfirmationsRequestDecideError, ConfirmationsRequestDecideResponse, ConfirmationsRequestReadData, ConfirmationsRequestReadError, ConfirmationsRequestReadResponse, FilesFileReadData, FilesFileReadError, FilesFileUploadData, FilesFileUploadError, FilesFileUploadResponse, KnowledgeBatchCreateData, KnowledgeBatchCreateError, KnowledgeBatchCreateResponse, KnowledgeBatchPrepareData, KnowledgeBatchPrepareError, KnowledgeBatchPrepareResponse, KnowledgeBatchPreviewData, KnowledgeBatchPreviewError, KnowledgeBatchPreviewResponse, KnowledgeBatchReadData, KnowledgeBatchReadError, KnowledgeBatchReadResponse, KnowledgeBatchUploadData, KnowledgeBatchUploadError, KnowledgeBatchUploadResponse, KnowledgeCollectionCreateData, KnowledgeCollectionCreateError, KnowledgeCollectionCreateResponse, KnowledgeCollectionListData, KnowledgeCollectionListError, KnowledgeCollectionListResponse, KnowledgeCollectionReadData, KnowledgeCollectionReadError, KnowledgeCollectionReadResponse, KnowledgeStatusReadData, KnowledgeStatusReadError, KnowledgeStatusReadResponse, PlatformHealthReadData, PlatformHealthReadError, PlatformHealthReadResponse, UsersDirectoryListData, UsersDirectoryListError, UsersDirectoryListResponse, UsersSelfReadData, UsersSelfReadError, UsersSelfReadResponse, UsersSessionEndData, UsersSessionEndError, UsersSessionEndResponse, UsersSessionFinishData, UsersSessionFinishError, UsersSessionStartData, UsersSessionStartError } from '../types.gen';
 
 export type QueryKey<TOptions extends Options> = [
     Pick<TOptions, 'baseUrl' | 'body' | 'headers' | 'path' | 'query'> & {
@@ -155,6 +155,181 @@ export const platformHealthReadOptions = (options?: Options<PlatformHealthReadDa
         return data;
     },
     queryKey: platformHealthReadQueryKey(options)
+});
+
+export const knowledgeBatchReadQueryKey = (options: Options<KnowledgeBatchReadData>) => createQueryKey('knowledgeBatchRead', options);
+
+/**
+ * Read Batch
+ *
+ * Read an import batch, its files and its preparation report.
+ */
+export const knowledgeBatchReadOptions = (options: Options<KnowledgeBatchReadData>) => queryOptions<KnowledgeBatchReadResponse, KnowledgeBatchReadError, KnowledgeBatchReadResponse, ReturnType<typeof knowledgeBatchReadQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await knowledgeBatchRead({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: knowledgeBatchReadQueryKey(options)
+});
+
+/**
+ * Upload File
+ *
+ * Add one Markdown, text or PDF file to a batch that is still uploading.
+ */
+export const knowledgeBatchUploadMutation = (options?: Partial<Options<KnowledgeBatchUploadData>>): UseMutationOptions<KnowledgeBatchUploadResponse, KnowledgeBatchUploadError, Options<KnowledgeBatchUploadData>> => {
+    const mutationOptions: UseMutationOptions<KnowledgeBatchUploadResponse, KnowledgeBatchUploadError, Options<KnowledgeBatchUploadData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await knowledgeBatchUpload({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+/**
+ * Prepare Batch
+ *
+ * Start preparing a batch in the background: parse, chunk and embed its files.
+ */
+export const knowledgeBatchPrepareMutation = (options?: Partial<Options<KnowledgeBatchPrepareData>>): UseMutationOptions<KnowledgeBatchPrepareResponse, KnowledgeBatchPrepareError, Options<KnowledgeBatchPrepareData>> => {
+    const mutationOptions: UseMutationOptions<KnowledgeBatchPrepareResponse, KnowledgeBatchPrepareError, Options<KnowledgeBatchPrepareData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await knowledgeBatchPrepare({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+/**
+ * Preview Batch
+ *
+ * Search a prepared batch before it is applied. Results follow the caller's access rules.
+ */
+export const knowledgeBatchPreviewMutation = (options?: Partial<Options<KnowledgeBatchPreviewData>>): UseMutationOptions<KnowledgeBatchPreviewResponse, KnowledgeBatchPreviewError, Options<KnowledgeBatchPreviewData>> => {
+    const mutationOptions: UseMutationOptions<KnowledgeBatchPreviewResponse, KnowledgeBatchPreviewError, Options<KnowledgeBatchPreviewData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await knowledgeBatchPreview({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+export const knowledgeCollectionListQueryKey = (options?: Options<KnowledgeCollectionListData>) => createQueryKey('knowledgeCollectionList', options);
+
+/**
+ * List Collections
+ *
+ * List every knowledge collection and its access rules.
+ */
+export const knowledgeCollectionListOptions = (options?: Options<KnowledgeCollectionListData>) => queryOptions<KnowledgeCollectionListResponse, KnowledgeCollectionListError, KnowledgeCollectionListResponse, ReturnType<typeof knowledgeCollectionListQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await knowledgeCollectionList({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: knowledgeCollectionListQueryKey(options)
+});
+
+/**
+ * Create Collection
+ *
+ * Create a knowledge collection with its access rules. Only a person may do this.
+ */
+export const knowledgeCollectionCreateMutation = (options?: Partial<Options<KnowledgeCollectionCreateData>>): UseMutationOptions<KnowledgeCollectionCreateResponse, KnowledgeCollectionCreateError, Options<KnowledgeCollectionCreateData>> => {
+    const mutationOptions: UseMutationOptions<KnowledgeCollectionCreateResponse, KnowledgeCollectionCreateError, Options<KnowledgeCollectionCreateData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await knowledgeCollectionCreate({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+export const knowledgeCollectionReadQueryKey = (options: Options<KnowledgeCollectionReadData>) => createQueryKey('knowledgeCollectionRead', options);
+
+/**
+ * Read Collection
+ *
+ * Read one knowledge collection and its access rules.
+ */
+export const knowledgeCollectionReadOptions = (options: Options<KnowledgeCollectionReadData>) => queryOptions<KnowledgeCollectionReadResponse, KnowledgeCollectionReadError, KnowledgeCollectionReadResponse, ReturnType<typeof knowledgeCollectionReadQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await knowledgeCollectionRead({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: knowledgeCollectionReadQueryKey(options)
+});
+
+/**
+ * Create Batch
+ *
+ * Open an import batch for a collection. One may be open at a time.
+ */
+export const knowledgeBatchCreateMutation = (options?: Partial<Options<KnowledgeBatchCreateData>>): UseMutationOptions<KnowledgeBatchCreateResponse, KnowledgeBatchCreateError, Options<KnowledgeBatchCreateData>> => {
+    const mutationOptions: UseMutationOptions<KnowledgeBatchCreateResponse, KnowledgeBatchCreateError, Options<KnowledgeBatchCreateData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await knowledgeBatchCreate({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+export const knowledgeStatusReadQueryKey = (options?: Options<KnowledgeStatusReadData>) => createQueryKey('knowledgeStatusRead', options);
+
+/**
+ * Read Status
+ *
+ * Read whether the knowledge module is up and can reach its database.
+ */
+export const knowledgeStatusReadOptions = (options?: Options<KnowledgeStatusReadData>) => queryOptions<KnowledgeStatusReadResponse, KnowledgeStatusReadError, KnowledgeStatusReadResponse, ReturnType<typeof knowledgeStatusReadQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await knowledgeStatusRead({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: knowledgeStatusReadQueryKey(options)
 });
 
 export const usersSelfReadQueryKey = (options?: Options<UsersSelfReadData>) => createQueryKey('usersSelfRead', options);

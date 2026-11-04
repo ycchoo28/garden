@@ -10,6 +10,8 @@ from app.core.audit.models import Base as audit_base
 from app.core.confirmations.models import Base as confirmations_base
 from app.core.files.models import Base as files_base
 from app.core.users.models import Base as users_base
+from app.modules import knowledge
+from app.modules.knowledge.models import Base as knowledge_base
 from app.shared.permissions import Permission, Role
 
 # new-module: insert imports above this line
@@ -34,6 +36,13 @@ MODULES: tuple[InstalledModule, ...] = (
         confirmations.ROLES,
         confirmations.PERMISSIONS,
         confirmations_base.metadata,
+    ),
+    InstalledModule(
+        "knowledge",
+        knowledge.router,
+        knowledge.ROLES,
+        knowledge.PERMISSIONS,
+        knowledge_base.metadata,
     ),
     # new-module: insert entries above this line
 )

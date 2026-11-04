@@ -2,7 +2,11 @@
 
 import asyncio
 
+from app.modules.knowledge import jobs as knowledge_jobs
 from app.shared.jobs import app as jobs
+
+# Importing a module's jobs registers its tasks with the worker.
+_TASK_MODULES = (knowledge_jobs,)
 
 
 async def main() -> None:

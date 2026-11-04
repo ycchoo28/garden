@@ -16,6 +16,80 @@ export const zAuditEventOut = z.object({
 });
 
 /**
+ * BatchFileOut
+ */
+export const zBatchFileOut = z.object({
+    content_type: z.string(),
+    id: z.uuid(),
+    language: z.string().nullable(),
+    name: z.string(),
+    parse_error: z.string().nullable(),
+    parse_status: z.string().nullable(),
+    sha256: z.string(),
+    size_bytes: z.int(),
+    title: z.string().nullable(),
+    translation_group: z.string()
+});
+
+/**
+ * BatchIn
+ */
+export const zBatchIn = z.object({
+    mode: z.enum(['full_set', 'partial'])
+});
+
+/**
+ * BatchOut
+ */
+export const zBatchOut = z.object({
+    collection_id: z.uuid(),
+    created_at: z.iso.datetime(),
+    failure_reason: z.string().nullable(),
+    files: z.array(zBatchFileOut),
+    id: z.uuid(),
+    mode: z.string(),
+    prepared_at: z.iso.datetime().nullable(),
+    report: z.record(z.string(), z.unknown()),
+    state: z.string()
+});
+
+/**
+ * CollectionRuleIn
+ */
+export const zCollectionRuleIn = z.object({
+    all_departments: z.boolean().optional().default(false),
+    department_codes: z.array(z.string()).max(20).optional(),
+    role: z.string().min(1).max(50)
+});
+
+/**
+ * CollectionIn
+ */
+export const zCollectionIn = z.object({
+    name: z.string().min(1).max(200),
+    rules: z.array(zCollectionRuleIn).max(20).optional()
+});
+
+/**
+ * CollectionRuleOut
+ */
+export const zCollectionRuleOut = z.object({
+    all_departments: z.boolean(),
+    department_codes: z.array(z.string()),
+    role: z.string()
+});
+
+/**
+ * CollectionOut
+ */
+export const zCollectionOut = z.object({
+    created_at: z.iso.datetime(),
+    id: z.uuid(),
+    name: z.string(),
+    rules: z.array(zCollectionRuleOut)
+});
+
+/**
  * ConfirmationOut
  */
 export const zConfirmationOut = z.object({
@@ -71,6 +145,40 @@ export const zPersonOut = z.object({
 });
 
 /**
+ * PreviewHitOut
+ */
+export const zPreviewHitOut = z.object({
+    batch_file_id: z.uuid(),
+    chunk_ids: z.array(z.uuid()),
+    heading_path: z.string(),
+    language: z.string(),
+    locator: z.string(),
+    score: z.number(),
+    text: z.string(),
+    title: z.string(),
+    token_count: z.int(),
+    translation_group: z.string()
+});
+
+/**
+ * PreviewIn
+ */
+export const zPreviewIn = z.object({
+    limit: z.int().gte(1).lte(20).optional().default(5),
+    max_tokens: z.int().gte(200).lte(8000).optional().default(8000),
+    query: z.string().min(1).max(500)
+});
+
+/**
+ * PreviewOut
+ */
+export const zPreviewOut = z.object({
+    results: z.array(zPreviewHitOut),
+    token_count: z.int(),
+    truncated: z.boolean()
+});
+
+/**
  * Problem
  *
  * The body of every error response. It matches what `_problem` emits.
@@ -82,6 +190,15 @@ export const zProblem = z.object({
     status: z.int(),
     title: z.string(),
     type: z.string()
+});
+
+/**
+ * StatusOut
+ */
+export const zStatusOut = z.object({
+    database: z.string(),
+    module: z.string(),
+    status: z.string()
 });
 
 /**
@@ -97,8 +214,16 @@ export const zUploadedFileOut = z.object({
 /**
  * Body_files.file.upload
  */
-export const zUpload = z.object({
+export const zFastapiCompatV2BodyFilesFileUpload = z.object({
     file: z.string()
+});
+
+/**
+ * Body_knowledge.batch.upload
+ */
+export const zFastapiCompatV2BodyKnowledgeBatchUpload = z.object({
+    file: z.string(),
+    translation_group: z.string().max(200).nullish()
 });
 
 export const zAuditEventListQuery = z.object({
@@ -132,7 +257,7 @@ export const zConfirmationsRequestDecidePath = z.object({
  */
 export const zConfirmationsRequestDecideResponse = zConfirmationOut;
 
-export const zFilesFileUploadBody = zUpload;
+export const zFilesFileUploadBody = zFastapiCompatV2BodyFilesFileUpload;
 
 /**
  * Successful Response
@@ -149,6 +274,85 @@ export const zFilesFileReadPath = z.object({
  * Successful Response
  */
 export const zPlatformHealthReadResponse = z.record(z.string(), z.string());
+
+export const zKnowledgeBatchReadPath = z.object({
+    batch_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeBatchReadResponse = zBatchOut;
+
+export const zKnowledgeBatchUploadBody = zFastapiCompatV2BodyKnowledgeBatchUpload;
+
+export const zKnowledgeBatchUploadPath = z.object({
+    batch_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeBatchUploadResponse = zBatchFileOut;
+
+export const zKnowledgeBatchPreparePath = z.object({
+    batch_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeBatchPrepareResponse = zBatchOut;
+
+export const zKnowledgeBatchPreviewBody = zPreviewIn;
+
+export const zKnowledgeBatchPreviewPath = z.object({
+    batch_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeBatchPreviewResponse = zPreviewOut;
+
+/**
+ * Response Knowledge.Collection.List
+ *
+ * Successful Response
+ */
+export const zKnowledgeCollectionListResponse = z.array(zCollectionOut);
+
+export const zKnowledgeCollectionCreateBody = zCollectionIn;
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeCollectionCreateResponse = zCollectionOut;
+
+export const zKnowledgeCollectionReadPath = z.object({
+    collection_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeCollectionReadResponse = zCollectionOut;
+
+export const zKnowledgeBatchCreateBody = zBatchIn;
+
+export const zKnowledgeBatchCreatePath = z.object({
+    collection_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeBatchCreateResponse = zBatchOut;
+
+/**
+ * Successful Response
+ */
+export const zKnowledgeStatusReadResponse = zStatusOut;
 
 /**
  * Successful Response

@@ -20,3 +20,5 @@ Records are numbered in the order they were made, and a later record may replace
 | [0013](0013-scaffold.md) | New modules come from one template that CI proves |
 | [0014](0014-local-only-runtime.md) | Everything runs on the developer's machine |
 | [0015](0015-single-currency.md) | One currency, USD, with no exchange rates |
+| [0016](0016-pgvector-and-local-embeddings.md) | Vectors in pgvector, and embeddings from a local model |
+| [0017](0017-hybrid-search-with-rrf.md) | Hybrid search fused with reciprocal rank fusion |

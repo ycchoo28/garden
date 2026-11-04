@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AuditEventListData, AuditEventListErrors, AuditEventListResponses, ConfirmationsRequestDecideData, ConfirmationsRequestDecideErrors, ConfirmationsRequestDecideResponses, ConfirmationsRequestReadData, ConfirmationsRequestReadErrors, ConfirmationsRequestReadResponses, FilesFileReadData, FilesFileReadErrors, FilesFileReadResponses, FilesFileUploadData, FilesFileUploadErrors, FilesFileUploadResponses, PlatformHealthReadData, PlatformHealthReadErrors, PlatformHealthReadResponses, UsersDirectoryListData, UsersDirectoryListErrors, UsersDirectoryListResponses, UsersSelfReadData, UsersSelfReadErrors, UsersSelfReadResponses, UsersSessionEndData, UsersSessionEndErrors, UsersSessionEndResponses, UsersSessionFinishData, UsersSessionFinishErrors, UsersSessionFinishResponses, UsersSessionStartData, UsersSessionStartErrors, UsersSessionStartResponses } from './types.gen';
+import type { AuditEventListData, AuditEventListErrors, AuditEventListResponses, ConfirmationsRequestDecideData, ConfirmationsRequestDecideErrors, ConfirmationsRequestDecideResponses, ConfirmationsRequestReadData, ConfirmationsRequestReadErrors, ConfirmationsRequestReadResponses, FilesFileReadData, FilesFileReadErrors, FilesFileReadResponses, FilesFileUploadData, FilesFileUploadErrors, FilesFileUploadResponses, KnowledgeBatchCreateData, KnowledgeBatchCreateErrors, KnowledgeBatchCreateResponses, KnowledgeBatchPrepareData, KnowledgeBatchPrepareErrors, KnowledgeBatchPrepareResponses, KnowledgeBatchPreviewData, KnowledgeBatchPreviewErrors, KnowledgeBatchPreviewResponses, KnowledgeBatchReadData, KnowledgeBatchReadErrors, KnowledgeBatchReadResponses, KnowledgeBatchUploadData, KnowledgeBatchUploadErrors, KnowledgeBatchUploadResponses, KnowledgeCollectionCreateData, KnowledgeCollectionCreateErrors, KnowledgeCollectionCreateResponses, KnowledgeCollectionListData, KnowledgeCollectionListErrors, KnowledgeCollectionListResponses, KnowledgeCollectionReadData, KnowledgeCollectionReadErrors, KnowledgeCollectionReadResponses, KnowledgeStatusReadData, KnowledgeStatusReadErrors, KnowledgeStatusReadResponses, PlatformHealthReadData, PlatformHealthReadErrors, PlatformHealthReadResponses, UsersDirectoryListData, UsersDirectoryListErrors, UsersDirectoryListResponses, UsersSelfReadData, UsersSelfReadErrors, UsersSelfReadResponses, UsersSessionEndData, UsersSessionEndErrors, UsersSessionEndResponses, UsersSessionFinishData, UsersSessionFinishErrors, UsersSessionFinishResponses, UsersSessionStartData, UsersSessionStartErrors, UsersSessionStartResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -74,6 +74,98 @@ export const filesFileRead = <ThrowOnError extends boolean = false>(options: Opt
  * Say whether Garden is up. Needs no sign-in.
  */
 export const platformHealthRead = <ThrowOnError extends boolean = false>(options?: Options<PlatformHealthReadData, ThrowOnError>): RequestResult<PlatformHealthReadResponses, PlatformHealthReadErrors, ThrowOnError> => (options?.client ?? client).get<PlatformHealthReadResponses, PlatformHealthReadErrors, ThrowOnError>({ url: '/api/health', ...options });
+
+/**
+ * Read Batch
+ *
+ * Read an import batch, its files and its preparation report.
+ */
+export const knowledgeBatchRead = <ThrowOnError extends boolean = false>(options: Options<KnowledgeBatchReadData, ThrowOnError>): RequestResult<KnowledgeBatchReadResponses, KnowledgeBatchReadErrors, ThrowOnError> => (options.client ?? client).get<KnowledgeBatchReadResponses, KnowledgeBatchReadErrors, ThrowOnError>({ url: '/api/knowledge/batches/{batch_id}', ...options });
+
+/**
+ * Upload File
+ *
+ * Add one Markdown, text or PDF file to a batch that is still uploading.
+ */
+export const knowledgeBatchUpload = <ThrowOnError extends boolean = false>(options: Options<KnowledgeBatchUploadData, ThrowOnError>): RequestResult<KnowledgeBatchUploadResponses, KnowledgeBatchUploadErrors, ThrowOnError> => (options.client ?? client).post<KnowledgeBatchUploadResponses, KnowledgeBatchUploadErrors, ThrowOnError>({
+    ...formDataBodySerializer,
+    url: '/api/knowledge/batches/{batch_id}/files',
+    ...options,
+    headers: {
+        'Content-Type': null,
+        ...options.headers
+    }
+});
+
+/**
+ * Prepare Batch
+ *
+ * Start preparing a batch in the background: parse, chunk and embed its files.
+ */
+export const knowledgeBatchPrepare = <ThrowOnError extends boolean = false>(options: Options<KnowledgeBatchPrepareData, ThrowOnError>): RequestResult<KnowledgeBatchPrepareResponses, KnowledgeBatchPrepareErrors, ThrowOnError> => (options.client ?? client).post<KnowledgeBatchPrepareResponses, KnowledgeBatchPrepareErrors, ThrowOnError>({ url: '/api/knowledge/batches/{batch_id}/prepare', ...options });
+
+/**
+ * Preview Batch
+ *
+ * Search a prepared batch before it is applied. Results follow the caller's access rules.
+ */
+export const knowledgeBatchPreview = <ThrowOnError extends boolean = false>(options: Options<KnowledgeBatchPreviewData, ThrowOnError>): RequestResult<KnowledgeBatchPreviewResponses, KnowledgeBatchPreviewErrors, ThrowOnError> => (options.client ?? client).post<KnowledgeBatchPreviewResponses, KnowledgeBatchPreviewErrors, ThrowOnError>({
+    url: '/api/knowledge/batches/{batch_id}/preview',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * List Collections
+ *
+ * List every knowledge collection and its access rules.
+ */
+export const knowledgeCollectionList = <ThrowOnError extends boolean = false>(options?: Options<KnowledgeCollectionListData, ThrowOnError>): RequestResult<KnowledgeCollectionListResponses, KnowledgeCollectionListErrors, ThrowOnError> => (options?.client ?? client).get<KnowledgeCollectionListResponses, KnowledgeCollectionListErrors, ThrowOnError>({ url: '/api/knowledge/collections', ...options });
+
+/**
+ * Create Collection
+ *
+ * Create a knowledge collection with its access rules. Only a person may do this.
+ */
+export const knowledgeCollectionCreate = <ThrowOnError extends boolean = false>(options: Options<KnowledgeCollectionCreateData, ThrowOnError>): RequestResult<KnowledgeCollectionCreateResponses, KnowledgeCollectionCreateErrors, ThrowOnError> => (options.client ?? client).post<KnowledgeCollectionCreateResponses, KnowledgeCollectionCreateErrors, ThrowOnError>({
+    url: '/api/knowledge/collections',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Read Collection
+ *
+ * Read one knowledge collection and its access rules.
+ */
+export const knowledgeCollectionRead = <ThrowOnError extends boolean = false>(options: Options<KnowledgeCollectionReadData, ThrowOnError>): RequestResult<KnowledgeCollectionReadResponses, KnowledgeCollectionReadErrors, ThrowOnError> => (options.client ?? client).get<KnowledgeCollectionReadResponses, KnowledgeCollectionReadErrors, ThrowOnError>({ url: '/api/knowledge/collections/{collection_id}', ...options });
+
+/**
+ * Create Batch
+ *
+ * Open an import batch for a collection. One may be open at a time.
+ */
+export const knowledgeBatchCreate = <ThrowOnError extends boolean = false>(options: Options<KnowledgeBatchCreateData, ThrowOnError>): RequestResult<KnowledgeBatchCreateResponses, KnowledgeBatchCreateErrors, ThrowOnError> => (options.client ?? client).post<KnowledgeBatchCreateResponses, KnowledgeBatchCreateErrors, ThrowOnError>({
+    url: '/api/knowledge/collections/{collection_id}/batches',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Read Status
+ *
+ * Read whether the knowledge module is up and can reach its database.
+ */
+export const knowledgeStatusRead = <ThrowOnError extends boolean = false>(options?: Options<KnowledgeStatusReadData, ThrowOnError>): RequestResult<KnowledgeStatusReadResponses, KnowledgeStatusReadErrors, ThrowOnError> => (options?.client ?? client).get<KnowledgeStatusReadResponses, KnowledgeStatusReadErrors, ThrowOnError>({ url: '/api/knowledge/status', ...options });
 
 /**
  * Read Me

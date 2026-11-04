@@ -39,6 +39,178 @@ export type AuditEventOut = {
 };
 
 /**
+ * BatchFileOut
+ */
+export type BatchFileOut = {
+    /**
+     * Content Type
+     */
+    content_type: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Language
+     */
+    language: string | null;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Parse Error
+     */
+    parse_error: string | null;
+    /**
+     * Parse Status
+     */
+    parse_status: string | null;
+    /**
+     * Sha256
+     */
+    sha256: string;
+    /**
+     * Size Bytes
+     */
+    size_bytes: number;
+    /**
+     * Title
+     */
+    title: string | null;
+    /**
+     * Translation Group
+     */
+    translation_group: string;
+};
+
+/**
+ * BatchIn
+ */
+export type BatchIn = {
+    /**
+     * Mode
+     */
+    mode: 'full_set' | 'partial';
+};
+
+/**
+ * BatchOut
+ */
+export type BatchOut = {
+    /**
+     * Collection Id
+     */
+    collection_id: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Failure Reason
+     */
+    failure_reason: string | null;
+    /**
+     * Files
+     */
+    files: Array<BatchFileOut>;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Mode
+     */
+    mode: string;
+    /**
+     * Prepared At
+     */
+    prepared_at: string | null;
+    /**
+     * Report
+     */
+    report: {
+        [key: string]: unknown;
+    };
+    /**
+     * State
+     */
+    state: string;
+};
+
+/**
+ * CollectionIn
+ */
+export type CollectionIn = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Rules
+     */
+    rules?: Array<CollectionRuleIn>;
+};
+
+/**
+ * CollectionOut
+ */
+export type CollectionOut = {
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Rules
+     */
+    rules: Array<CollectionRuleOut>;
+};
+
+/**
+ * CollectionRuleIn
+ */
+export type CollectionRuleIn = {
+    /**
+     * All Departments
+     */
+    all_departments?: boolean;
+    /**
+     * Department Codes
+     */
+    department_codes?: Array<string>;
+    /**
+     * Role
+     */
+    role: string;
+};
+
+/**
+ * CollectionRuleOut
+ */
+export type CollectionRuleOut = {
+    /**
+     * All Departments
+     */
+    all_departments: boolean;
+    /**
+     * Department Codes
+     */
+    department_codes: Array<string>;
+    /**
+     * Role
+     */
+    role: string;
+};
+
+/**
  * ConfirmationOut
  */
 export type ConfirmationOut = {
@@ -145,6 +317,88 @@ export type PersonOut = {
 };
 
 /**
+ * PreviewHitOut
+ */
+export type PreviewHitOut = {
+    /**
+     * Batch File Id
+     */
+    batch_file_id: string;
+    /**
+     * Chunk Ids
+     */
+    chunk_ids: Array<string>;
+    /**
+     * Heading Path
+     */
+    heading_path: string;
+    /**
+     * Language
+     */
+    language: string;
+    /**
+     * Locator
+     */
+    locator: string;
+    /**
+     * Score
+     */
+    score: number;
+    /**
+     * Text
+     */
+    text: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Token Count
+     */
+    token_count: number;
+    /**
+     * Translation Group
+     */
+    translation_group: string;
+};
+
+/**
+ * PreviewIn
+ */
+export type PreviewIn = {
+    /**
+     * Limit
+     */
+    limit?: number;
+    /**
+     * Max Tokens
+     */
+    max_tokens?: number;
+    /**
+     * Query
+     */
+    query: string;
+};
+
+/**
+ * PreviewOut
+ */
+export type PreviewOut = {
+    /**
+     * Results
+     */
+    results: Array<PreviewHitOut>;
+    /**
+     * Token Count
+     */
+    token_count: number;
+    /**
+     * Truncated
+     */
+    truncated: boolean;
+};
+
+/**
  * Problem
  *
  * The body of every error response. It matches what `_problem` emits.
@@ -177,6 +431,24 @@ export type Problem = {
 };
 
 /**
+ * StatusOut
+ */
+export type StatusOut = {
+    /**
+     * Database
+     */
+    database: string;
+    /**
+     * Module
+     */
+    module: string;
+    /**
+     * Status
+     */
+    status: string;
+};
+
+/**
  * UploadedFileOut
  */
 export type UploadedFileOut = {
@@ -201,11 +473,25 @@ export type UploadedFileOut = {
 /**
  * Body_files.file.upload
  */
-export type Upload = {
+export type FastapiCompatV2BodyFilesFileUpload = {
     /**
      * File
      */
     file: Blob | File;
+};
+
+/**
+ * Body_knowledge.batch.upload
+ */
+export type FastapiCompatV2BodyKnowledgeBatchUpload = {
+    /**
+     * File
+     */
+    file: Blob | File;
+    /**
+     * Translation Group
+     */
+    translation_group?: string | null;
 };
 
 export type AuditEventListData = {
@@ -313,7 +599,7 @@ export type ConfirmationsRequestDecideResponses = {
 export type ConfirmationsRequestDecideResponse = ConfirmationsRequestDecideResponses[keyof ConfirmationsRequestDecideResponses];
 
 export type FilesFileUploadData = {
-    body: Upload;
+    body: FastapiCompatV2BodyFilesFileUpload;
     path?: never;
     query?: never;
     url: '/api/files';
@@ -405,6 +691,299 @@ export type PlatformHealthReadResponses = {
 };
 
 export type PlatformHealthReadResponse = PlatformHealthReadResponses[keyof PlatformHealthReadResponses];
+
+export type KnowledgeBatchReadData = {
+    body?: never;
+    path: {
+        /**
+         * Batch Id
+         */
+        batch_id: string;
+    };
+    query?: never;
+    url: '/api/knowledge/batches/{batch_id}';
+};
+
+export type KnowledgeBatchReadErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type KnowledgeBatchReadError = KnowledgeBatchReadErrors[keyof KnowledgeBatchReadErrors];
+
+export type KnowledgeBatchReadResponses = {
+    /**
+     * Successful Response
+     */
+    200: BatchOut;
+};
+
+export type KnowledgeBatchReadResponse = KnowledgeBatchReadResponses[keyof KnowledgeBatchReadResponses];
+
+export type KnowledgeBatchUploadData = {
+    body: FastapiCompatV2BodyKnowledgeBatchUpload;
+    path: {
+        /**
+         * Batch Id
+         */
+        batch_id: string;
+    };
+    query?: never;
+    url: '/api/knowledge/batches/{batch_id}/files';
+};
+
+export type KnowledgeBatchUploadErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type KnowledgeBatchUploadError = KnowledgeBatchUploadErrors[keyof KnowledgeBatchUploadErrors];
+
+export type KnowledgeBatchUploadResponses = {
+    /**
+     * Successful Response
+     */
+    201: BatchFileOut;
+};
+
+export type KnowledgeBatchUploadResponse = KnowledgeBatchUploadResponses[keyof KnowledgeBatchUploadResponses];
+
+export type KnowledgeBatchPrepareData = {
+    body?: never;
+    path: {
+        /**
+         * Batch Id
+         */
+        batch_id: string;
+    };
+    query?: never;
+    url: '/api/knowledge/batches/{batch_id}/prepare';
+};
+
+export type KnowledgeBatchPrepareErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type KnowledgeBatchPrepareError = KnowledgeBatchPrepareErrors[keyof KnowledgeBatchPrepareErrors];
+
+export type KnowledgeBatchPrepareResponses = {
+    /**
+     * Successful Response
+     */
+    200: BatchOut;
+};
+
+export type KnowledgeBatchPrepareResponse = KnowledgeBatchPrepareResponses[keyof KnowledgeBatchPrepareResponses];
+
+export type KnowledgeBatchPreviewData = {
+    body: PreviewIn;
+    path: {
+        /**
+         * Batch Id
+         */
+        batch_id: string;
+    };
+    query?: never;
+    url: '/api/knowledge/batches/{batch_id}/preview';
+};
+
+export type KnowledgeBatchPreviewErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type KnowledgeBatchPreviewError = KnowledgeBatchPreviewErrors[keyof KnowledgeBatchPreviewErrors];
+
+export type KnowledgeBatchPreviewResponses = {
+    /**
+     * Successful Response
+     */
+    200: PreviewOut;
+};
+
+export type KnowledgeBatchPreviewResponse = KnowledgeBatchPreviewResponses[keyof KnowledgeBatchPreviewResponses];
+
+export type KnowledgeCollectionListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/knowledge/collections';
+};
+
+export type KnowledgeCollectionListErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type KnowledgeCollectionListError = KnowledgeCollectionListErrors[keyof KnowledgeCollectionListErrors];
+
+export type KnowledgeCollectionListResponses = {
+    /**
+     * Response Knowledge.Collection.List
+     *
+     * Successful Response
+     */
+    200: Array<CollectionOut>;
+};
+
+export type KnowledgeCollectionListResponse = KnowledgeCollectionListResponses[keyof KnowledgeCollectionListResponses];
+
+export type KnowledgeCollectionCreateData = {
+    body: CollectionIn;
+    path?: never;
+    query?: never;
+    url: '/api/knowledge/collections';
+};
+
+export type KnowledgeCollectionCreateErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type KnowledgeCollectionCreateError = KnowledgeCollectionCreateErrors[keyof KnowledgeCollectionCreateErrors];
+
+export type KnowledgeCollectionCreateResponses = {
+    /**
+     * Successful Response
+     */
+    201: CollectionOut;
+};
+
+export type KnowledgeCollectionCreateResponse = KnowledgeCollectionCreateResponses[keyof KnowledgeCollectionCreateResponses];
+
+export type KnowledgeCollectionReadData = {
+    body?: never;
+    path: {
+        /**
+         * Collection Id
+         */
+        collection_id: string;
+    };
+    query?: never;
+    url: '/api/knowledge/collections/{collection_id}';
+};
+
+export type KnowledgeCollectionReadErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type KnowledgeCollectionReadError = KnowledgeCollectionReadErrors[keyof KnowledgeCollectionReadErrors];
+
+export type KnowledgeCollectionReadResponses = {
+    /**
+     * Successful Response
+     */
+    200: CollectionOut;
+};
+
+export type KnowledgeCollectionReadResponse = KnowledgeCollectionReadResponses[keyof KnowledgeCollectionReadResponses];
+
+export type KnowledgeBatchCreateData = {
+    body: BatchIn;
+    path: {
+        /**
+         * Collection Id
+         */
+        collection_id: string;
+    };
+    query?: never;
+    url: '/api/knowledge/collections/{collection_id}/batches';
+};
+
+export type KnowledgeBatchCreateErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type KnowledgeBatchCreateError = KnowledgeBatchCreateErrors[keyof KnowledgeBatchCreateErrors];
+
+export type KnowledgeBatchCreateResponses = {
+    /**
+     * Successful Response
+     */
+    201: BatchOut;
+};
+
+export type KnowledgeBatchCreateResponse = KnowledgeBatchCreateResponses[keyof KnowledgeBatchCreateResponses];
+
+export type KnowledgeStatusReadData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/knowledge/status';
+};
+
+export type KnowledgeStatusReadErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type KnowledgeStatusReadError = KnowledgeStatusReadErrors[keyof KnowledgeStatusReadErrors];
+
+export type KnowledgeStatusReadResponses = {
+    /**
+     * Successful Response
+     */
+    200: StatusOut;
+};
+
+export type KnowledgeStatusReadResponse = KnowledgeStatusReadResponses[keyof KnowledgeStatusReadResponses];
 
 export type UsersSelfReadData = {
     body?: never;
