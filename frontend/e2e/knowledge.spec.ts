@@ -24,7 +24,8 @@ test('an admin creates a collection, prepares a batch and previews it', async ({
   await expect(page.getByRole('heading', { name: 'Knowledge collections' })).toBeVisible();
 
   await page.getByLabel('Name').fill(name);
-  await page.getByLabel('Role that may read it').fill('manager');
+  // Preview shows only what the caller may read, so the collection must grant a role the admin holds.
+  await page.getByLabel('Role that may read it').fill('knowledge_admin');
   await page.getByRole('button', { name: 'Create collection' }).click();
 
   const row = page.getByRole('listitem').filter({ hasText: name });
