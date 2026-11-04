@@ -11,7 +11,7 @@ Schema: `claims`. Tables: `claim`, `line`.
 ## Interface
 
 Import from `app.modules.claims` only: `router`, `ROLES` and `PERMISSIONS`.
-The approved spend per department, month and category is exposed through `ClaimsService.approved_spend`, which the spend module will read once it exists.
+The approved spend per department, month and category is exposed through `ClaimsService.approved_spend`, which the budgets module reads for the variance report.
 
 ## Key decisions
 

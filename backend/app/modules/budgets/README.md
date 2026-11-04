@@ -4,7 +4,7 @@
 
 - Budget lines: one amount per department, month and category, with every replaced version kept.
 - Schema: `budgets`. Tables: `line`.
-- It reads actual spend from `spend` through that module's interface, and does not own spend.
+- It reads actual spend from `spend` (card statements that are not voided) and from `claims` (approved claim lines), each through that module's public interface. It owns neither.
 
 ## Interface
 
