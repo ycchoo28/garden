@@ -12,6 +12,7 @@ from app.core.audit import AuditService, get_audit_service
 from app.core.users import CurrentPerson, DepartmentView, UserService, get_user_service
 from app.modules.budgets.models import BudgetLine
 from app.modules.budgets.repository import BudgetRepository, get_repository
+from app.modules.claims import ClaimsService, get_claims_service
 from app.modules.spend import CATEGORIES, SpendService, get_spend_service, is_year_month
 from app.shared.clock import Clock, get_clock
 from app.shared.errors import Conflict, FieldError, Forbidden, NotFound, Unprocessable
@@ -72,12 +73,14 @@ class BudgetService:
         clock: Clock,
         users: UserService,
         spend: SpendService,
+        claims: ClaimsService,
     ) -> None:
         self._repo = repo
         self._audit = audit
         self._clock = clock
         self._users = users
         self._spend = spend
+        self._claims = claims
 
     async def _departments(self) -> dict[uuid.UUID, DepartmentView]:
         return {view.id: view for view in await self._users.departments()}
@@ -246,6 +249,26 @@ class BudgetService:
         departments = await self._departments()
         return [self._view(row, departments) for row in rows]
 
+    async def _actual(
+        self,
+        *,
+        first_month: str,
+        last_month: str,
+        scope: frozenset[uuid.UUID] | None,
+    ) -> dict[tuple[uuid.UUID, str, str], Decimal]:
+        """Card statement rows plus approved claim lines, per department, month and category."""
+        actuals = dict(
+            await self._spend.actual_spend(
+                first_month=first_month, last_month=last_month, department_ids=scope
+            )
+        )
+        for row in await self._claims.approved_spend(from_month=first_month, to_month=last_month):
+            if scope is not None and row.department_id not in scope:
+                continue
+            key = (row.department_id, row.month, row.category)
+            actuals[key] = actuals.get(key, Decimal("0.00")) + row.amount
+        return actuals
+
     async def variance(
         self, caller: CurrentPerson, *, first_month: str, last_month: str
     ) -> list[VarianceView]:
@@ -265,9 +288,7 @@ class BudgetService:
         budgets = {
             (line.department_id, line.year_month, line.category): line.amount for line in lines
         }
-        actuals = await self._spend.actual_spend(
-            first_month=first_month, last_month=last_month, department_ids=scope
-        )
+        actuals = await self._actual(first_month=first_month, last_month=last_month, scope=scope)
         departments = await self._departments()
         keys = sorted(
             set(budgets) | set(actuals),
@@ -300,5 +321,6 @@ def get_budget_service(
     clock: Annotated[Clock, Depends(get_clock)],
     users: Annotated[UserService, Depends(get_user_service)],
     spend: Annotated[SpendService, Depends(get_spend_service)],
+    claims: Annotated[ClaimsService, Depends(get_claims_service)],
 ) -> BudgetService:
-    return BudgetService(repo, audit, clock, users, spend)
+    return BudgetService(repo, audit, clock, users, spend, claims)

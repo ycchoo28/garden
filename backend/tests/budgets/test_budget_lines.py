@@ -1,6 +1,9 @@
 """Budget lines and the variance report, through the HTTP seam: department scope, versions and
 history, and the way card statements count as actual spend."""
 
+from decimal import Decimal
+from typing import Any
+
 import pytest
 from httpx import AsyncClient
 
@@ -187,3 +190,200 @@ async def test_variance_refuses_a_backwards_range(
         "/api/budgets/variance", params={"from": "2026-10", "to": "2026-09"}
     )
     assert response.status_code == 422
+
+
+# Variance reads card statements and approved claims. The month is far past the seeded year, so the
+# test owns every row in it.
+VARIANCE_MONTH = "2033-03"
+MARCUS = "marcus.lee@fernhill.example"  # design employee
+PRIYA = "priya.nair@fernhill.example"  # design manager
+TOMAS = "tomas.berg@fernhill.example"  # engineering employee
+ANA = "ana.costa@fernhill.example"  # engineering manager
+LENA = "lena.fischer@fernhill.example"  # finance
+RECEIPT = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+
+
+async def _receipt_sha(client: AsyncClient) -> str:
+    uploaded = await client.post(
+        "/api/files", files={"file": ("receipt.png", RECEIPT, "image/png")}
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    return str(uploaded.json()["sha256"])
+
+
+async def _add_meal(
+    client: AsyncClient, claim: dict[str, Any], amount: str, spent_on: str = f"{VARIANCE_MONTH}-05"
+) -> dict[str, Any]:
+    added = await client.post(
+        f"/api/claims/{claim['claim']['id']}/lines",
+        json={
+            "expected_version": claim["claim"]["version"],
+            "category": "meals",
+            "spent_on": spent_on,
+            "amount": amount,
+            "description": "Team lunch",
+            "receipt_sha256": await _receipt_sha(client),
+        },
+    )
+    assert added.status_code == 201, added.text
+    body: dict[str, Any] = added.json()
+    return body
+
+
+async def _claim_with_meal(client: AsyncClient, amount: str) -> dict[str, Any]:
+    created = await client.post("/api/claims", json={"title": "Team lunch"})
+    assert created.status_code == 201, created.text
+    return await _add_meal(client, created.json(), amount)
+
+
+async def _submit(client: AsyncClient, claim: dict[str, Any]) -> dict[str, Any]:
+    response = await client.post(
+        f"/api/claims/{claim['claim']['id']}/submit",
+        json={"expected_version": claim["claim"]["version"]},
+    )
+    assert response.status_code == 200, response.text
+    body: dict[str, Any] = response.json()
+    return body
+
+
+async def _decide(
+    client: AsyncClient, claim: dict[str, Any], decision: str, reason: str | None = None
+) -> None:
+    response = await client.post(
+        f"/api/claims/{claim['claim']['id']}/decision",
+        json={
+            "expected_version": claim["claim"]["version"],
+            "decision": decision,
+            "reason": reason,
+        },
+    )
+    assert response.status_code == 200, response.text
+
+
+async def _import_statement(client: AsyncClient, *rows: str) -> dict[str, Any]:
+    header = b"transaction_ref,posted_on,department_code,category,merchant,amount_usd\n"
+    csv = header + "\n".join(rows).encode() + b"\n"
+    imported = await client.post(
+        "/api/spend/statements", files={"file": ("statement.csv", csv, "text/csv")}
+    )
+    assert imported.status_code == 201, imported.text
+    body: dict[str, Any] = imported.json()
+    return body
+
+
+async def _variance(client: AsyncClient) -> list[dict[str, Any]]:
+    response = await client.get(
+        "/api/budgets/variance", params={"from": VARIANCE_MONTH, "to": VARIANCE_MONTH}
+    )
+    assert response.status_code == 200, response.text
+    rows: list[dict[str, Any]] = response.json()
+    return rows
+
+
+def _actual_total(rows: list[dict[str, Any]]) -> Decimal:
+    return sum((Decimal(row["actual"]) for row in rows), Decimal("0.00"))
+
+
+@pytest.mark.asyncio
+async def test_variance_counts_only_approved_claims_and_unvoided_rows(
+    client: AsyncClient, identity: FakeIdentity
+) -> None:
+    await sign_in(client, identity, LENA)
+    design = await _department_id(client, "design")
+    await client.post(
+        "/api/budgets/lines",
+        json={
+            "department_id": design,
+            "year_month": VARIANCE_MONTH,
+            "category": "meals",
+            "amount": "1000",
+        },
+    )
+    kept = await _import_statement(client, f"tx-6001,{VARIANCE_MONTH}-07,design,meals,Cafe,20")
+    assert kept["id"]
+    voided = await _import_statement(client, f"tx-6002,{VARIANCE_MONTH}-08,design,meals,Cafe,50")
+    voiding = await client.post(
+        f"/api/spend/statements/{voided['id']}/void", json={"reason": "Wrong file"}
+    )
+    assert voiding.status_code == 200, voiding.text
+    await _import_statement(client, f"tx-6003,{VARIANCE_MONTH}-09,design,meals,Cafe,5")
+
+    await sign_in(client, identity, MARCUS)
+    approved = await _add_meal(client, await _claim_with_meal(client, "80.00"), "25.00")
+    duplicate_id = next(line["id"] for line in approved["lines"] if line["amount"] == "25.00")
+    voiding_line = await client.post(
+        f"/api/claims/{approved['claim']['id']}/lines/{duplicate_id}/void",
+        json={"expected_version": approved["claim"]["version"], "reason": "Duplicate"},
+    )
+    assert voiding_line.status_code == 200, voiding_line.text
+    approved = await _submit(client, voiding_line.json())
+    pending = await _submit(client, await _claim_with_meal(client, "500.00"))
+    await _claim_with_meal(client, "300.00")
+    rejected = await _submit(client, await _claim_with_meal(client, "40.00"))
+    withdrawn = await _submit(client, await _claim_with_meal(client, "60.00"))
+    withdraw = await client.post(
+        f"/api/claims/{withdrawn['claim']['id']}/withdraw",
+        json={"expected_version": withdrawn["claim"]["version"]},
+    )
+    assert withdraw.status_code == 200, withdraw.text
+
+    await sign_in(client, identity, PRIYA)
+    await _decide(client, approved, "approve")
+    await _decide(client, rejected, "reject", "Not needed")
+    assert pending["claim"]["status"] == "submitted"
+
+    rows = await _variance(client)
+    meals = [
+        row for row in rows if row["department_code"] == "design" and row["category"] == "meals"
+    ]
+    assert len(meals) == 1
+    assert meals[0]["budget"] == "1000.00"
+    # 20 and 5 from the statements, and 80 from the approved claim. The voided statement, the voided
+    # claim line, and the pending, rejected, withdrawn and draft claims all stay out.
+    assert meals[0]["actual"] == "105.00"
+    assert meals[0]["variance"] == "895.00"
+
+
+@pytest.mark.asyncio
+async def test_variance_scope_and_totals_reconcile_with_the_source_rows(
+    client: AsyncClient, identity: FakeIdentity
+) -> None:
+    await sign_in(client, identity, LENA)
+    await _import_statement(
+        client,
+        f"tx-7001,{VARIANCE_MONTH}-02,design,meals,Cafe,20",
+        f"tx-7002,{VARIANCE_MONTH}-03,engineering,software,Tooling,15.25",
+    )
+
+    await sign_in(client, identity, MARCUS)
+    design_claim = await _submit(client, await _claim_with_meal(client, "80.10"))
+    await sign_in(client, identity, PRIYA)
+    await _decide(client, design_claim, "approve")
+
+    await sign_in(client, identity, TOMAS)
+    engineering_claim = await _submit(client, await _claim_with_meal(client, "60.00"))
+    await sign_in(client, identity, ANA)
+    await _decide(client, engineering_claim, "approve")
+
+    # Finance sees every department, and the rows add up to the statement rows plus approved claims.
+    await sign_in(client, identity, LENA)
+    everything = await _variance(client)
+    assert {row["department_code"] for row in everything} == {"design", "engineering"}
+    assert _actual_total(everything) == Decimal("175.35")
+    engineering_meals = [
+        row
+        for row in everything
+        if row["department_code"] == "engineering" and row["category"] == "meals"
+    ]
+    assert engineering_meals[0]["actual"] == "60.00"
+
+    # A manager sees only their own department, and that department's rows reconcile on their own.
+    await sign_in(client, identity, PRIYA)
+    design_only = await _variance(client)
+    assert {row["department_code"] for row in design_only} == {"design"}
+    assert _actual_total(design_only) == Decimal("100.10")
+
+    await sign_in(client, identity, ANA)
+    engineering_only = await _variance(client)
+    assert {row["department_code"] for row in engineering_only} == {"engineering"}
+    assert _actual_total(engineering_only) == Decimal("75.25")
