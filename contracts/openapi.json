@@ -1910,7 +1910,8 @@
           "confirm": false,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "audit.view"
       }
     },
     "/api/budgets/categories": {
@@ -1961,7 +1962,8 @@
           "confirm": false,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "budgets.view"
       }
     },
     "/api/budgets/lines": {
@@ -2041,7 +2043,8 @@
           "confirm": false,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "budgets.view"
       },
       "post": {
         "description": "Create the budget for one department, month and category. Finance and admin only.",
@@ -2096,7 +2099,8 @@
           "confirm": false,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "budgets.manage"
       }
     },
     "/api/budgets/lines/{line_id}": {
@@ -2165,7 +2169,8 @@
           "confirm": false,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "budgets.manage"
       }
     },
     "/api/budgets/lines/{line_id}/history": {
@@ -2228,7 +2233,8 @@
           "confirm": false,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "budgets.view"
       }
     },
     "/api/budgets/variance": {
@@ -2301,7 +2307,8 @@
           "confirm": false,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "budgets.view"
       }
     },
     "/api/claims": {
@@ -2352,7 +2359,8 @@
           "confirm": false,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "claims.view"
       },
       "post": {
         "description": "Create a draft claim. Add lines to it before you submit.",
@@ -2407,7 +2415,8 @@
           "confirm": false,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "claims.create"
       }
     },
     "/api/claims/queue": {
@@ -2458,7 +2467,8 @@
           "confirm": false,
           "save": true,
           "tool": false
-        }
+        },
+        "x-permission": "claims.decide"
       }
     },
     "/api/claims/{claim_id}": {
@@ -2517,7 +2527,8 @@
           "confirm": false,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "claims.view"
       }
     },
     "/api/claims/{claim_id}/decision": {
@@ -2586,7 +2597,8 @@
           "confirm": false,
           "save": true,
           "tool": false
-        }
+        },
+        "x-permission": "claims.decide"
       }
     },
     "/api/claims/{claim_id}/lines": {
@@ -2655,7 +2667,8 @@
           "confirm": false,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "claims.create"
       }
     },
     "/api/claims/{claim_id}/lines/{line_id}/void": {
@@ -2734,7 +2747,8 @@
           "confirm": false,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "claims.create"
       }
     },
     "/api/claims/{claim_id}/submit": {
@@ -2803,7 +2817,8 @@
           "confirm": false,
           "save": true,
           "tool": false
-        }
+        },
+        "x-permission": "claims.submit"
       }
     },
     "/api/claims/{claim_id}/withdraw": {
@@ -2872,7 +2887,8 @@
           "confirm": true,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "claims.withdraw"
       }
     },
     "/api/cli-logins": {
@@ -2920,7 +2936,8 @@
           "confirm": false,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "cli_logins.view"
       },
       "post": {
         "description": "Finish a CLI login with the code the browser returned. The token is shown once.",
@@ -3108,7 +3125,8 @@
           "confirm": false,
           "save": true,
           "tool": false
-        }
+        },
+        "x-permission": "cli_logins.revoke"
       }
     },
     "/api/confirmations/{confirmation_id}": {
@@ -3164,7 +3182,8 @@
           "confirm": false,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "users.self"
       }
     },
     "/api/confirmations/{confirmation_id}/decision": {
@@ -3230,7 +3249,8 @@
           "confirm": false,
           "save": true,
           "tool": false
-        }
+        },
+        "x-permission": "confirmations.decide"
       }
     },
     "/api/files": {
@@ -3284,7 +3304,8 @@
           "confirm": false,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "files.upload"
       }
     },
     "/api/files/{sha256}": {
@@ -3332,7 +3353,8 @@
           "confirm": true,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "files.delete"
       },
       "get": {
         "description": "Download a file by its SHA-256.",
@@ -3383,7 +3405,8 @@
           "confirm": false,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "files.view"
       }
     },
     "/api/gateway/usage/today": {
@@ -3427,7 +3450,8 @@
           "confirm": false,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "gateway.usage.view"
       }
     },
     "/api/gateway/v1/chat/completions": {
@@ -3485,7 +3509,8 @@
           "confirm": false,
           "save": true,
           "tool": false
-        }
+        },
+        "x-permission": "gateway.model.use"
       }
     },
     "/api/gateway/v1/models": {
@@ -3531,7 +3556,8 @@
           "confirm": false,
           "save": true,
           "tool": false
-        }
+        },
+        "x-permission": "gateway.model.use"
       }
     },
     "/api/health": {
@@ -3641,7 +3667,8 @@
           "confirm": false,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "knowledge.batch.prepare"
       }
     },
     "/api/knowledge/batches/{batch_id}/files": {
@@ -3710,7 +3737,8 @@
           "confirm": false,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "knowledge.batch.prepare"
       }
     },
     "/api/knowledge/batches/{batch_id}/prepare": {
@@ -3769,7 +3797,8 @@
           "confirm": false,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "knowledge.batch.prepare"
       }
     },
     "/api/knowledge/batches/{batch_id}/preview": {
@@ -3838,7 +3867,8 @@
           "confirm": false,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "knowledge.batch.prepare"
       }
     },
     "/api/knowledge/collections": {
@@ -3889,7 +3919,8 @@
           "confirm": false,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "knowledge.collection.view"
       },
       "post": {
         "description": "Create a knowledge collection with its access rules. Only a person may do this.",
@@ -3944,7 +3975,8 @@
           "confirm": false,
           "save": true,
           "tool": false
-        }
+        },
+        "x-permission": "knowledge.collection.manage"
       }
     },
     "/api/knowledge/collections/{collection_id}": {
@@ -4003,7 +4035,8 @@
           "confirm": false,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "knowledge.collection.view"
       }
     },
     "/api/knowledge/collections/{collection_id}/batches": {
@@ -4072,7 +4105,8 @@
           "confirm": false,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "knowledge.batch.prepare"
       }
     },
     "/api/knowledge/status": {
@@ -4119,7 +4153,8 @@
           "confirm": false,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "knowledge.collection.view"
       }
     },
     "/api/spend/months": {
@@ -4170,7 +4205,8 @@
           "confirm": false,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "spend.statement.view"
       }
     },
     "/api/spend/months/{year_month}/close": {
@@ -4239,7 +4275,8 @@
           "confirm": true,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "spend.month.close"
       }
     },
     "/api/spend/statements": {
@@ -4290,7 +4327,8 @@
           "confirm": false,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "spend.statement.view"
       },
       "post": {
         "description": "Import a card statement CSV. Every row is saved, or none is when a row has an error or a duplicate.",
@@ -4345,7 +4383,8 @@
           "confirm": false,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "spend.statement.import"
       }
     },
     "/api/spend/statements/preview": {
@@ -4402,7 +4441,8 @@
           "confirm": false,
           "save": false,
           "tool": true
-        }
+        },
+        "x-permission": "spend.statement.import"
       }
     },
     "/api/spend/statements/{statement_id}/void": {
@@ -4471,7 +4511,8 @@
           "confirm": true,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "spend.statement.void"
       }
     },
     "/api/users/departments": {
@@ -4519,7 +4560,8 @@
           "confirm": false,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "users.directory.view"
       }
     },
     "/api/users/me": {
@@ -4563,7 +4605,8 @@
           "confirm": false,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "users.self"
       }
     },
     "/api/users/people": {
@@ -4611,7 +4654,8 @@
           "confirm": false,
           "save": true,
           "tool": true
-        }
+        },
+        "x-permission": "users.directory.view"
       }
     },
     "/api/users/sign-out": {

@@ -4,7 +4,7 @@ from collections.abc import Callable
 from typing import Annotated, cast
 
 from fastapi import Depends, FastAPI, Request, params
-from fastapi.routing import APIRoute
+from fastapi.routing import APIRoute, iter_route_contexts
 
 from app.core.users.service import CurrentPerson, UserService, get_user_service
 from app.shared.errors import Forbidden
@@ -100,17 +100,19 @@ def advertise_permissions(app: FastAPI) -> None:
         if not isinstance(paths_value, dict):
             return schema
         paths = cast("dict[str, object]", paths_value)
-        for route in app.routes:
+        # Included routers are listed lazily, so walk the effective routes rather than app.routes.
+        for context in iter_route_contexts(app.routes):
+            route = context.original_route
             if not isinstance(route, APIRoute) or not route.include_in_schema:
                 continue
             permission = route_permission(route)
             if permission is None:
                 continue
-            path_item = paths.get(route.path_format)
+            path_item = paths.get(context.path_format or route.path_format)
             if not isinstance(path_item, dict):
                 continue
             operations = cast("dict[str, object]", path_item)
-            for method in route.methods or ():
+            for method in context.methods or ():
                 operation = operations.get(method.lower())
                 if isinstance(operation, dict):
                     cast("dict[str, object]", operation)["x-permission"] = permission
