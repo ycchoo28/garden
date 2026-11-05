@@ -163,7 +163,8 @@ def test_installer_runs_unattended_and_the_launchers_and_dsh_patch_work(
     assert who.returncode == 0, who.stderr
     assert as_json(who.stdout)["name"] == PORTAL_NAME
 
-    assert (tmp_path / "home" / "skills" / "garden-basics" / "SKILL.md").exists()
+    for skill in ("garden-basics", "garden-budgets", "garden-claims", "garden-knowledge"):
+        assert (tmp_path / "home" / "skills" / skill / "SKILL.md").exists()
 
     # dsh's launcher is written by garden: it runs `garden dsh`, which reads the login at start.
     dsh_launcher = (bin_dir / "dsh").read_text(encoding="utf-8")
