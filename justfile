@@ -196,6 +196,15 @@ e2e: up
     curl --fail --silent --show-error --retry 30 --retry-all-errors --retry-delay 1 "$GARDEN_OIDC_ISSUER/.well-known/openid-configuration" >/dev/null
     # The first sign-in page a fresh provider serves is slow, so warm the page the browser opens too.
     curl --fail --silent --show-error --max-time 60 --retry 30 --retry-all-errors --retry-delay 1 "$GARDEN_OIDC_ISSUER/authorize?client_id=$GARDEN_OIDC_CLIENT_ID&response_type=code&redirect_uri=$GARDEN_PUBLIC_URL/auth/callback&scope=openid&state=warmup" >/dev/null
+    # The tests start their own API, worker, web app and embedder, so those ports must be free.
+    api="${GARDEN_E2E_API_URL:-{{api_url}}}"
+    web="${GARDEN_E2E_WEB_URL:-{{web_url}}}"
+    for port in "${api##*:}" "${web##*:}" 55084; do
+        if (echo > "/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
+            echo "Port $port is already in use, for example by just demo or just dev. Stop it before the browser tests." >&2
+            exit 1
+        fi
+    done
     # The browser tests get a fresh database of their own, so they never leave rows in the dev database.
     db="${GARDEN_E2E_DB:-garden_e2e}"
     [[ "$db" == *_e2e ]] || { echo "GARDEN_E2E_DB must end in _e2e." >&2; exit 1; }

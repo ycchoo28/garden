@@ -22,11 +22,16 @@ const { mode, toggle } = useColorMode();
   <SkipLink />
   <header class="border-b border-line bg-surface">
     <div class="mx-auto flex h-14 max-w-[70rem] items-center gap-3 px-4">
-      <span
-        class="grid size-8 place-items-center rounded-lg bg-primary font-bold text-primary-contrast"
-        aria-hidden="true"
-      >G</span>
-      <span class="font-semibold">Garden</span>
+      <RouterLink
+        to="/"
+        class="flex shrink-0 items-center gap-2.5 rounded-lg"
+      >
+        <span
+          class="grid size-8 place-items-center rounded-lg bg-primary font-bold text-primary-contrast"
+          aria-hidden="true"
+        >G</span>
+        <span class="font-semibold">Garden</span>
+      </RouterLink>
       <nav
         v-if="links?.length"
         aria-label="Main"

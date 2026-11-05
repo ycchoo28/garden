@@ -7,10 +7,10 @@ import './styles.css';
 import App from './App.vue';
 import { queryClient } from './queryClient';
 import { router } from './router';
-import { themeOptions } from './shared/ui/theme';
+import { themeOptions } from './shared/ui';
 
 createApp(App)
   .use(router)
   .use(VueQueryPlugin, { queryClient })
-  .use(PrimeVue, themeOptions)
+  .use(PrimeVue, { theme: themeOptions })
   .mount('#app');
