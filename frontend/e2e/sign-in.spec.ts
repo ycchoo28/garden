@@ -22,6 +22,17 @@ test('a seeded person signs in and sees their name and permissions', async ({ pa
   await expect(page.getByRole('banner').getByText('Dev Admin')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Your permissions' })).toBeVisible();
   await expect(page.getByText('users.self', { exact: true })).toBeVisible();
+  // The PrimeVue theme loads its colour variables even on a page with no PrimeVue component.
+  const primary = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--p-primary-color'));
+  expect(primary).not.toBe('');
+});
+
+test('the Garden name in the header goes back to the home page', async ({ page }) => {
+  await signIn(page, PERSON, 'Dev Admin');
+  await page.goto('/claims');
+  await page.getByRole('banner').getByRole('link', { name: 'Garden' }).click();
+  await page.waitForURL(`${WEB_URL}/`);
+  await expect(page.getByRole('heading', { name: 'Your permissions' })).toBeVisible();
 });
 
 test('signing out ends the session and shows the signed-out page', async ({ page }) => {

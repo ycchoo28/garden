@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AuditEventListData, AuditEventListErrors, AuditEventListResponses, BudgetsCategoryListData, BudgetsCategoryListErrors, BudgetsCategoryListResponses, BudgetsLineCreateData, BudgetsLineCreateErrors, BudgetsLineCreateResponses, BudgetsLineHistoryData, BudgetsLineHistoryErrors, BudgetsLineHistoryResponses, BudgetsLineListData, BudgetsLineListErrors, BudgetsLineListResponses, BudgetsLineReplaceData, BudgetsLineReplaceErrors, BudgetsLineReplaceResponses, BudgetsVarianceReadData, BudgetsVarianceReadErrors, BudgetsVarianceReadResponses, ClaimsClaimCreateData, ClaimsClaimCreateErrors, ClaimsClaimCreateResponses, ClaimsClaimDecideData, ClaimsClaimDecideErrors, ClaimsClaimDecideResponses, ClaimsClaimListData, ClaimsClaimListErrors, ClaimsClaimListResponses, ClaimsClaimReadData, ClaimsClaimReadErrors, ClaimsClaimReadResponses, ClaimsClaimSubmitData, ClaimsClaimSubmitErrors, ClaimsClaimSubmitResponses, ClaimsClaimWithdrawData, ClaimsClaimWithdrawErrors, ClaimsClaimWithdrawResponses, ClaimsDecisionQueueData, ClaimsDecisionQueueErrors, ClaimsDecisionQueueResponses, ClaimsLineAddData, ClaimsLineAddErrors, ClaimsLineAddResponses, ClaimsLineVoidData, ClaimsLineVoidErrors, ClaimsLineVoidResponses, ConfirmationsRequestDecideData, ConfirmationsRequestDecideErrors, ConfirmationsRequestDecideResponses, ConfirmationsRequestReadData, ConfirmationsRequestReadErrors, ConfirmationsRequestReadResponses, FilesFileDeleteData, FilesFileDeleteErrors, FilesFileDeleteResponses, FilesFileReadData, FilesFileReadErrors, FilesFileReadResponses, FilesFileUploadData, FilesFileUploadErrors, FilesFileUploadResponses, GatewayModelCompleteData, GatewayModelCompleteErrors, GatewayModelCompleteResponses, GatewayModelListData, GatewayModelListErrors, GatewayModelListResponses, GatewayUsageReadData, GatewayUsageReadErrors, GatewayUsageReadResponses, KnowledgeBatchApproveData, KnowledgeBatchApproveErrors, KnowledgeBatchApproveResponses, KnowledgeBatchCancelData, KnowledgeBatchCancelErrors, KnowledgeBatchCancelResponses, KnowledgeBatchCreateData, KnowledgeBatchCreateErrors, KnowledgeBatchCreateResponses, KnowledgeBatchListData, KnowledgeBatchListErrors, KnowledgeBatchListResponses, KnowledgeBatchPrepareData, KnowledgeBatchPrepareErrors, KnowledgeBatchPrepareResponses, KnowledgeBatchPreviewData, KnowledgeBatchPreviewErrors, KnowledgeBatchPreviewResponses, KnowledgeBatchReadData, KnowledgeBatchReadErrors, KnowledgeBatchReadResponses, KnowledgeBatchRejectData, KnowledgeBatchRejectErrors, KnowledgeBatchRejectResponses, KnowledgeBatchSubmitData, KnowledgeBatchSubmitErrors, KnowledgeBatchSubmitResponses, KnowledgeBatchUndoData, KnowledgeBatchUndoErrors, KnowledgeBatchUndoResponses, KnowledgeBatchUploadData, KnowledgeBatchUploadErrors, KnowledgeBatchUploadResponses, KnowledgeCollectionCreateData, KnowledgeCollectionCreateErrors, KnowledgeCollectionCreateResponses, KnowledgeCollectionListData, KnowledgeCollectionListErrors, KnowledgeCollectionListResponses, KnowledgeCollectionReadData, KnowledgeCollectionReadErrors, KnowledgeCollectionReadResponses, KnowledgeDocumentEraseData, KnowledgeDocumentEraseErrors, KnowledgeDocumentEraseResponses, KnowledgeSearchLogListData, KnowledgeSearchLogListErrors, KnowledgeSearchLogListResponses, KnowledgeSearchRunData, KnowledgeSearchRunErrors, KnowledgeSearchRunResponses, KnowledgeStatusReadData, KnowledgeStatusReadErrors, KnowledgeStatusReadResponses, PlatformHealthReadData, PlatformHealthReadErrors, PlatformHealthReadResponses, SpendMonthCloseData, SpendMonthCloseErrors, SpendMonthCloseResponses, SpendMonthListData, SpendMonthListErrors, SpendMonthListResponses, SpendStatementImportData, SpendStatementImportErrors, SpendStatementImportResponses, SpendStatementListData, SpendStatementListErrors, SpendStatementListResponses, SpendStatementPreviewData, SpendStatementPreviewErrors, SpendStatementPreviewResponses, SpendStatementVoidData, SpendStatementVoidErrors, SpendStatementVoidResponses, UsersCliLoginCreateData, UsersCliLoginCreateErrors, UsersCliLoginCreateResponses, UsersCliLoginListData, UsersCliLoginListErrors, UsersCliLoginListResponses, UsersCliLoginRevokeData, UsersCliLoginRevokeErrors, UsersCliLoginRevokeResponses, UsersCliLoginStartData, UsersCliLoginStartErrors, UsersCliLoginStartResponses, UsersDepartmentListData, UsersDepartmentListErrors, UsersDepartmentListResponses, UsersDirectoryListData, UsersDirectoryListErrors, UsersDirectoryListResponses, UsersSelfReadData, UsersSelfReadErrors, UsersSelfReadResponses, UsersSessionEndData, UsersSessionEndErrors, UsersSessionEndResponses, UsersSessionFinishData, UsersSessionFinishErrors, UsersSessionFinishResponses, UsersSessionStartData, UsersSessionStartErrors, UsersSessionStartResponses } from './types.gen';
+import type { AgentCliApprovalCreateData, AgentCliApprovalCreateErrors, AgentCliApprovalCreateResponses, AgentCliApprovalStartData, AgentCliApprovalStartErrors, AgentCliApprovalStartResponses, AgentConfirmationDecideData, AgentConfirmationDecideErrors, AgentConfirmationDecideResponses, AgentConfirmationReadData, AgentConfirmationReadErrors, AgentConfirmationReadResponses, AgentModelChatCompletionData, AgentModelChatCompletionErrors, AgentModelChatCompletionResponses, AgentModelListData, AgentModelListErrors, AgentModelListResponses, AgentMyLoginListData, AgentMyLoginListErrors, AgentMyLoginListResponses, AgentMyLoginSignOutData, AgentMyLoginSignOutErrors, AgentMyLoginSignOutResponses, AgentMyModelUsageReadData, AgentMyModelUsageReadErrors, AgentMyModelUsageReadResponses, AuditEventListData, AuditEventListErrors, AuditEventListResponses, BudgetsCategoryListData, BudgetsCategoryListErrors, BudgetsCategoryListResponses, BudgetsLineCreateData, BudgetsLineCreateErrors, BudgetsLineCreateResponses, BudgetsLineHistoryData, BudgetsLineHistoryErrors, BudgetsLineHistoryResponses, BudgetsLineListData, BudgetsLineListErrors, BudgetsLineListResponses, BudgetsLineReplaceData, BudgetsLineReplaceErrors, BudgetsLineReplaceResponses, BudgetsMonthCloseData, BudgetsMonthCloseErrors, BudgetsMonthCloseResponses, BudgetsMonthListData, BudgetsMonthListErrors, BudgetsMonthListResponses, BudgetsVarianceReadData, BudgetsVarianceReadErrors, BudgetsVarianceReadResponses, ClaimsClaimCreateData, ClaimsClaimCreateErrors, ClaimsClaimCreateResponses, ClaimsClaimDecideData, ClaimsClaimDecideErrors, ClaimsClaimDecideResponses, ClaimsClaimListData, ClaimsClaimListErrors, ClaimsClaimListResponses, ClaimsClaimReadData, ClaimsClaimReadErrors, ClaimsClaimReadResponses, ClaimsClaimSubmitData, ClaimsClaimSubmitErrors, ClaimsClaimSubmitResponses, ClaimsClaimWithdrawData, ClaimsClaimWithdrawErrors, ClaimsClaimWithdrawResponses, ClaimsDecisionQueueData, ClaimsDecisionQueueErrors, ClaimsDecisionQueueResponses, ClaimsLineAddData, ClaimsLineAddErrors, ClaimsLineAddResponses, ClaimsLineVoidData, ClaimsLineVoidErrors, ClaimsLineVoidResponses, FilesFileDeleteData, FilesFileDeleteErrors, FilesFileDeleteResponses, FilesFileReadData, FilesFileReadErrors, FilesFileReadResponses, FilesFileUploadData, FilesFileUploadErrors, FilesFileUploadResponses, KnowledgeBatchApproveData, KnowledgeBatchApproveErrors, KnowledgeBatchApproveResponses, KnowledgeBatchCancelData, KnowledgeBatchCancelErrors, KnowledgeBatchCancelResponses, KnowledgeBatchCreateData, KnowledgeBatchCreateErrors, KnowledgeBatchCreateResponses, KnowledgeBatchListData, KnowledgeBatchListErrors, KnowledgeBatchListResponses, KnowledgeBatchPrepareData, KnowledgeBatchPrepareErrors, KnowledgeBatchPrepareResponses, KnowledgeBatchPreviewData, KnowledgeBatchPreviewErrors, KnowledgeBatchPreviewResponses, KnowledgeBatchReadData, KnowledgeBatchReadErrors, KnowledgeBatchReadResponses, KnowledgeBatchRejectData, KnowledgeBatchRejectErrors, KnowledgeBatchRejectResponses, KnowledgeBatchSubmitData, KnowledgeBatchSubmitErrors, KnowledgeBatchSubmitResponses, KnowledgeBatchUndoData, KnowledgeBatchUndoErrors, KnowledgeBatchUndoResponses, KnowledgeBatchUploadData, KnowledgeBatchUploadErrors, KnowledgeBatchUploadResponses, KnowledgeCollectionCreateData, KnowledgeCollectionCreateErrors, KnowledgeCollectionCreateResponses, KnowledgeCollectionListData, KnowledgeCollectionListErrors, KnowledgeCollectionListResponses, KnowledgeCollectionReadData, KnowledgeCollectionReadErrors, KnowledgeCollectionReadResponses, KnowledgeDocumentEraseData, KnowledgeDocumentEraseErrors, KnowledgeDocumentEraseResponses, KnowledgeSearchLogListData, KnowledgeSearchLogListErrors, KnowledgeSearchLogListResponses, KnowledgeSearchRunData, KnowledgeSearchRunErrors, KnowledgeSearchRunResponses, KnowledgeStatusReadData, KnowledgeStatusReadErrors, KnowledgeStatusReadResponses, PlatformHealthReadData, PlatformHealthReadErrors, PlatformHealthReadResponses, UsersDepartmentListData, UsersDepartmentListErrors, UsersDepartmentListResponses, UsersDirectoryListData, UsersDirectoryListErrors, UsersDirectoryListResponses, UsersSelfReadData, UsersSelfReadErrors, UsersSelfReadResponses, UsersSessionEndData, UsersSessionEndErrors, UsersSessionEndResponses, UsersSessionFinishData, UsersSessionFinishErrors, UsersSessionFinishResponses, UsersSessionStartData, UsersSessionStartErrors, UsersSessionStartResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -19,6 +19,90 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
 };
 
 /**
+ * Create Cli Login
+ *
+ * Finish a CLI login with the code the browser returned. The token is shown once.
+ */
+export const agentCliApprovalCreate = <ThrowOnError extends boolean = false>(options: Options<AgentCliApprovalCreateData, ThrowOnError>): RequestResult<AgentCliApprovalCreateResponses, AgentCliApprovalCreateErrors, ThrowOnError> => (options.client ?? client).post<AgentCliApprovalCreateResponses, AgentCliApprovalCreateErrors, ThrowOnError>({
+    url: '/api/agent/cli/approvals',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Start Cli Login
+ *
+ * Start a CLI login. Redirects the browser to the identity provider, which returns the code to a listener on this machine.
+ */
+export const agentCliApprovalStart = <ThrowOnError extends boolean = false>(options: Options<AgentCliApprovalStartData, ThrowOnError>): RequestResult<AgentCliApprovalStartResponses, AgentCliApprovalStartErrors, ThrowOnError> => (options.client ?? client).get<AgentCliApprovalStartResponses, AgentCliApprovalStartErrors, ThrowOnError>({ url: '/api/agent/cli/authorize', ...options });
+
+/**
+ * Usage Today
+ *
+ * Read today's model requests and tokens for the signed-in person. Counts only.
+ */
+export const agentMyModelUsageRead = <ThrowOnError extends boolean = false>(options?: Options<AgentMyModelUsageReadData, ThrowOnError>): RequestResult<AgentMyModelUsageReadResponses, AgentMyModelUsageReadErrors, ThrowOnError> => (options?.client ?? client).get<AgentMyModelUsageReadResponses, AgentMyModelUsageReadErrors, ThrowOnError>({ url: '/api/agent/model/my-usage', ...options });
+
+/**
+ * Chat Completions
+ *
+ * Send an OpenAI-compatible chat completion to a model on the gateway allowlist.
+ */
+export const agentModelChatCompletion = <ThrowOnError extends boolean = false>(options: Options<AgentModelChatCompletionData, ThrowOnError>): RequestResult<AgentModelChatCompletionResponses, AgentModelChatCompletionErrors, ThrowOnError> => (options.client ?? client).post<AgentModelChatCompletionResponses, AgentModelChatCompletionErrors, ThrowOnError>({
+    url: '/api/agent/model/v1/chat/completions',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * List Models
+ *
+ * List the models the gateway forwards.
+ */
+export const agentModelList = <ThrowOnError extends boolean = false>(options?: Options<AgentModelListData, ThrowOnError>): RequestResult<AgentModelListResponses, AgentModelListErrors, ThrowOnError> => (options?.client ?? client).get<AgentModelListResponses, AgentModelListErrors, ThrowOnError>({ url: '/api/agent/model/v1/models', ...options });
+
+/**
+ * Read Confirmation
+ *
+ * Check whether the person has approved a confirmation.
+ */
+export const agentConfirmationRead = <ThrowOnError extends boolean = false>(options: Options<AgentConfirmationReadData, ThrowOnError>): RequestResult<AgentConfirmationReadResponses, AgentConfirmationReadErrors, ThrowOnError> => (options.client ?? client).get<AgentConfirmationReadResponses, AgentConfirmationReadErrors, ThrowOnError>({ url: '/api/agent/my-confirmations/{confirmation_id}', ...options });
+
+/**
+ * Decide Confirmation
+ *
+ * Approve or reject a pending confirmation. Only a browser sign-in may do this.
+ */
+export const agentConfirmationDecide = <ThrowOnError extends boolean = false>(options: Options<AgentConfirmationDecideData, ThrowOnError>): RequestResult<AgentConfirmationDecideResponses, AgentConfirmationDecideErrors, ThrowOnError> => (options.client ?? client).post<AgentConfirmationDecideResponses, AgentConfirmationDecideErrors, ThrowOnError>({
+    url: '/api/agent/my-confirmations/{confirmation_id}/decision',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * List Cli Logins
+ *
+ * List the caller's CLI logins, newest first, with their state.
+ */
+export const agentMyLoginList = <ThrowOnError extends boolean = false>(options?: Options<AgentMyLoginListData, ThrowOnError>): RequestResult<AgentMyLoginListResponses, AgentMyLoginListErrors, ThrowOnError> => (options?.client ?? client).get<AgentMyLoginListResponses, AgentMyLoginListErrors, ThrowOnError>({ url: '/api/agent/my-logins', ...options });
+
+/**
+ * Revoke Cli Login
+ *
+ * Revoke one of the caller's CLI logins. Only a browser sign-in may do this.
+ */
+export const agentMyLoginSignOut = <ThrowOnError extends boolean = false>(options: Options<AgentMyLoginSignOutData, ThrowOnError>): RequestResult<AgentMyLoginSignOutResponses, AgentMyLoginSignOutErrors, ThrowOnError> => (options.client ?? client).post<AgentMyLoginSignOutResponses, AgentMyLoginSignOutErrors, ThrowOnError>({ url: '/api/agent/my-logins/{login_id}/sign-out', ...options });
+
+/**
  * List Events
  *
  * List the most recent saved changes, newest first.
@@ -28,7 +112,7 @@ export const auditEventList = <ThrowOnError extends boolean = false>(options?: O
 /**
  * List Categories
  *
- * List the spend categories that budget lines and card rows use.
+ * List the spend categories that budget lines and claim lines use.
  */
 export const budgetsCategoryList = <ThrowOnError extends boolean = false>(options?: Options<BudgetsCategoryListData, ThrowOnError>): RequestResult<BudgetsCategoryListResponses, BudgetsCategoryListErrors, ThrowOnError> => (options?.client ?? client).get<BudgetsCategoryListResponses, BudgetsCategoryListErrors, ThrowOnError>({ url: '/api/budgets/categories', ...options });
 
@@ -73,6 +157,27 @@ export const budgetsLineReplace = <ThrowOnError extends boolean = false>(options
  * List every version of a budget line, oldest first, with the reason for each replacement.
  */
 export const budgetsLineHistory = <ThrowOnError extends boolean = false>(options: Options<BudgetsLineHistoryData, ThrowOnError>): RequestResult<BudgetsLineHistoryResponses, BudgetsLineHistoryErrors, ThrowOnError> => (options.client ?? client).get<BudgetsLineHistoryResponses, BudgetsLineHistoryErrors, ThrowOnError>({ url: '/api/budgets/lines/{line_id}/history', ...options });
+
+/**
+ * List Closed Months
+ *
+ * List closed months, newest first. Finance and admin only.
+ */
+export const budgetsMonthList = <ThrowOnError extends boolean = false>(options?: Options<BudgetsMonthListData, ThrowOnError>): RequestResult<BudgetsMonthListResponses, BudgetsMonthListErrors, ThrowOnError> => (options?.client ?? client).get<BudgetsMonthListResponses, BudgetsMonthListErrors, ThrowOnError>({ url: '/api/budgets/months', ...options });
+
+/**
+ * Close Month
+ *
+ * Close a month with a reason. Afterwards no claim line for that month can be added or changed, and a closed month never reopens. An agent's request waits for the person's confirmation.
+ */
+export const budgetsMonthClose = <ThrowOnError extends boolean = false>(options: Options<BudgetsMonthCloseData, ThrowOnError>): RequestResult<BudgetsMonthCloseResponses, BudgetsMonthCloseErrors, ThrowOnError> => (options.client ?? client).post<BudgetsMonthCloseResponses, BudgetsMonthCloseErrors, ThrowOnError>({
+    url: '/api/budgets/months/{year_month}/close',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Read Variance
@@ -187,62 +292,6 @@ export const claimsClaimWithdraw = <ThrowOnError extends boolean = false>(option
 });
 
 /**
- * List Cli Logins
- *
- * List the caller's CLI logins, newest first, with their state.
- */
-export const usersCliLoginList = <ThrowOnError extends boolean = false>(options?: Options<UsersCliLoginListData, ThrowOnError>): RequestResult<UsersCliLoginListResponses, UsersCliLoginListErrors, ThrowOnError> => (options?.client ?? client).get<UsersCliLoginListResponses, UsersCliLoginListErrors, ThrowOnError>({ url: '/api/cli-logins', ...options });
-
-/**
- * Create Cli Login
- *
- * Finish a CLI login with the code the browser returned. The token is shown once.
- */
-export const usersCliLoginCreate = <ThrowOnError extends boolean = false>(options: Options<UsersCliLoginCreateData, ThrowOnError>): RequestResult<UsersCliLoginCreateResponses, UsersCliLoginCreateErrors, ThrowOnError> => (options.client ?? client).post<UsersCliLoginCreateResponses, UsersCliLoginCreateErrors, ThrowOnError>({
-    url: '/api/cli-logins',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Start Cli Login
- *
- * Start a CLI login. Redirects the browser to the identity provider, which returns the code to a listener on this machine.
- */
-export const usersCliLoginStart = <ThrowOnError extends boolean = false>(options: Options<UsersCliLoginStartData, ThrowOnError>): RequestResult<UsersCliLoginStartResponses, UsersCliLoginStartErrors, ThrowOnError> => (options.client ?? client).get<UsersCliLoginStartResponses, UsersCliLoginStartErrors, ThrowOnError>({ url: '/api/cli-logins/authorize', ...options });
-
-/**
- * Revoke Cli Login
- *
- * Revoke one of the caller's CLI logins. Only a browser sign-in may do this.
- */
-export const usersCliLoginRevoke = <ThrowOnError extends boolean = false>(options: Options<UsersCliLoginRevokeData, ThrowOnError>): RequestResult<UsersCliLoginRevokeResponses, UsersCliLoginRevokeErrors, ThrowOnError> => (options.client ?? client).delete<UsersCliLoginRevokeResponses, UsersCliLoginRevokeErrors, ThrowOnError>({ url: '/api/cli-logins/{login_id}', ...options });
-
-/**
- * Read Confirmation
- *
- * Check whether the person has approved a confirmation.
- */
-export const confirmationsRequestRead = <ThrowOnError extends boolean = false>(options: Options<ConfirmationsRequestReadData, ThrowOnError>): RequestResult<ConfirmationsRequestReadResponses, ConfirmationsRequestReadErrors, ThrowOnError> => (options.client ?? client).get<ConfirmationsRequestReadResponses, ConfirmationsRequestReadErrors, ThrowOnError>({ url: '/api/confirmations/{confirmation_id}', ...options });
-
-/**
- * Decide Confirmation
- *
- * Approve or reject a pending confirmation. Only a browser sign-in may do this.
- */
-export const confirmationsRequestDecide = <ThrowOnError extends boolean = false>(options: Options<ConfirmationsRequestDecideData, ThrowOnError>): RequestResult<ConfirmationsRequestDecideResponses, ConfirmationsRequestDecideErrors, ThrowOnError> => (options.client ?? client).post<ConfirmationsRequestDecideResponses, ConfirmationsRequestDecideErrors, ThrowOnError>({
-    url: '/api/confirmations/{confirmation_id}/decision',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
  * Upload File
  *
  * Upload one file. Accepts PDF, PNG, JPEG or plain text.
@@ -270,34 +319,6 @@ export const filesFileDelete = <ThrowOnError extends boolean = false>(options: O
  * Download a file by its SHA-256.
  */
 export const filesFileRead = <ThrowOnError extends boolean = false>(options: Options<FilesFileReadData, ThrowOnError>): RequestResult<FilesFileReadResponses, FilesFileReadErrors, ThrowOnError> => (options.client ?? client).get<FilesFileReadResponses, FilesFileReadErrors, ThrowOnError>({ url: '/api/files/{sha256}', ...options });
-
-/**
- * Usage Today
- *
- * Read today's model requests and tokens for the signed-in person. Counts only.
- */
-export const gatewayUsageRead = <ThrowOnError extends boolean = false>(options?: Options<GatewayUsageReadData, ThrowOnError>): RequestResult<GatewayUsageReadResponses, GatewayUsageReadErrors, ThrowOnError> => (options?.client ?? client).get<GatewayUsageReadResponses, GatewayUsageReadErrors, ThrowOnError>({ url: '/api/gateway/usage/today', ...options });
-
-/**
- * Chat Completions
- *
- * Send an OpenAI-compatible chat completion to a model on the gateway allowlist.
- */
-export const gatewayModelComplete = <ThrowOnError extends boolean = false>(options: Options<GatewayModelCompleteData, ThrowOnError>): RequestResult<GatewayModelCompleteResponses, GatewayModelCompleteErrors, ThrowOnError> => (options.client ?? client).post<GatewayModelCompleteResponses, GatewayModelCompleteErrors, ThrowOnError>({
-    url: '/api/gateway/v1/chat/completions',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * List Models
- *
- * List the models the gateway forwards.
- */
-export const gatewayModelList = <ThrowOnError extends boolean = false>(options?: Options<GatewayModelListData, ThrowOnError>): RequestResult<GatewayModelListResponses, GatewayModelListErrors, ThrowOnError> => (options?.client ?? client).get<GatewayModelListResponses, GatewayModelListErrors, ThrowOnError>({ url: '/api/gateway/v1/models', ...options });
 
 /**
  * Health
@@ -497,81 +518,9 @@ export const knowledgeSearchLogList = <ThrowOnError extends boolean = false>(opt
 export const knowledgeStatusRead = <ThrowOnError extends boolean = false>(options?: Options<KnowledgeStatusReadData, ThrowOnError>): RequestResult<KnowledgeStatusReadResponses, KnowledgeStatusReadErrors, ThrowOnError> => (options?.client ?? client).get<KnowledgeStatusReadResponses, KnowledgeStatusReadErrors, ThrowOnError>({ url: '/api/knowledge/status', ...options });
 
 /**
- * List Closed Months
- *
- * List closed months, newest first.
- */
-export const spendMonthList = <ThrowOnError extends boolean = false>(options?: Options<SpendMonthListData, ThrowOnError>): RequestResult<SpendMonthListResponses, SpendMonthListErrors, ThrowOnError> => (options?.client ?? client).get<SpendMonthListResponses, SpendMonthListErrors, ThrowOnError>({ url: '/api/spend/months', ...options });
-
-/**
- * Close Month
- *
- * Close a month with a reason. Afterwards no spend for that month can be imported or voided. An agent's request waits for the person's confirmation.
- */
-export const spendMonthClose = <ThrowOnError extends boolean = false>(options: Options<SpendMonthCloseData, ThrowOnError>): RequestResult<SpendMonthCloseResponses, SpendMonthCloseErrors, ThrowOnError> => (options.client ?? client).post<SpendMonthCloseResponses, SpendMonthCloseErrors, ThrowOnError>({
-    url: '/api/spend/months/{year_month}/close',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * List Statements
- *
- * List imported card statements, newest first. Voided statements are included.
- */
-export const spendStatementList = <ThrowOnError extends boolean = false>(options?: Options<SpendStatementListData, ThrowOnError>): RequestResult<SpendStatementListResponses, SpendStatementListErrors, ThrowOnError> => (options?.client ?? client).get<SpendStatementListResponses, SpendStatementListErrors, ThrowOnError>({ url: '/api/spend/statements', ...options });
-
-/**
- * Import Statement
- *
- * Import a card statement CSV. Every row is saved, or none is when a row has an error or a duplicate.
- */
-export const spendStatementImport = <ThrowOnError extends boolean = false>(options: Options<SpendStatementImportData, ThrowOnError>): RequestResult<SpendStatementImportResponses, SpendStatementImportErrors, ThrowOnError> => (options.client ?? client).post<SpendStatementImportResponses, SpendStatementImportErrors, ThrowOnError>({
-    ...formDataBodySerializer,
-    url: '/api/spend/statements',
-    ...options,
-    headers: {
-        'Content-Type': null,
-        ...options.headers
-    }
-});
-
-/**
- * Preview Statement
- *
- * Check a card statement CSV without saving it. Lists every row error and duplicate.
- */
-export const spendStatementPreview = <ThrowOnError extends boolean = false>(options: Options<SpendStatementPreviewData, ThrowOnError>): RequestResult<SpendStatementPreviewResponses, SpendStatementPreviewErrors, ThrowOnError> => (options.client ?? client).post<SpendStatementPreviewResponses, SpendStatementPreviewErrors, ThrowOnError>({
-    ...formDataBodySerializer,
-    url: '/api/spend/statements/preview',
-    ...options,
-    headers: {
-        'Content-Type': null,
-        ...options.headers
-    }
-});
-
-/**
- * Void Statement
- *
- * Void an imported card statement with a reason. Its rows stop counting as spend but are kept. An agent's request waits for the person's confirmation.
- */
-export const spendStatementVoid = <ThrowOnError extends boolean = false>(options: Options<SpendStatementVoidData, ThrowOnError>): RequestResult<SpendStatementVoidResponses, SpendStatementVoidErrors, ThrowOnError> => (options.client ?? client).post<SpendStatementVoidResponses, SpendStatementVoidErrors, ThrowOnError>({
-    url: '/api/spend/statements/{statement_id}/void',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
  * List Departments
  *
- * List the company's departments with their ids. Budgets and card statements use these ids.
+ * List the company's departments with their ids. Budgets and claims use these ids.
  */
 export const usersDepartmentList = <ThrowOnError extends boolean = false>(options?: Options<UsersDepartmentListData, ThrowOnError>): RequestResult<UsersDepartmentListResponses, UsersDepartmentListErrors, ThrowOnError> => (options?.client ?? client).get<UsersDepartmentListResponses, UsersDepartmentListErrors, ThrowOnError>({ url: '/api/users/departments', ...options });
 

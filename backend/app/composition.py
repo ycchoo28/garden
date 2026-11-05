@@ -1,22 +1,22 @@
 """The one place that lists installed modules. `just new-module` adds new ones here."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from fastapi import APIRouter
 from sqlalchemy import MetaData
 
-from app.core import approvals, audit, confirmations, files, gateway, users
+from app.core import agent, approvals, audit, files, users
+from app.core.agent.models import Base as agent_base
 from app.core.approvals.models import Base as approvals_base
 from app.core.audit.models import Base as audit_base
-from app.core.confirmations.models import Base as confirmations_base
 from app.core.files.models import Base as files_base
-from app.core.gateway.models import Base as gateway_base
 from app.core.users.models import Base as users_base
-from app.modules import budgets, claims, knowledge, spend
+from app.modules import budgets, claims, knowledge
 from app.modules.budgets.models import Base as budgets_base
 from app.modules.claims.models import Base as claims_base
+from app.modules.claims.ports import get_closed_months as claims_closed_months
 from app.modules.knowledge.models import Base as knowledge_base
-from app.modules.spend.models import Base as spend_base
 from app.shared.permissions import Permission, Role
 
 # new-module: insert imports above this line
@@ -42,20 +42,13 @@ MODULES: tuple[InstalledModule, ...] = (
         approvals.PERMISSIONS,
         approvals_base.metadata,
     ),
-    InstalledModule(
-        "confirmations",
-        confirmations.router,
-        confirmations.ROLES,
-        confirmations.PERMISSIONS,
-        confirmations_base.metadata,
-    ),
+    InstalledModule("agent", agent.router, agent.ROLES, agent.PERMISSIONS, agent_base.metadata),
     InstalledModule(
         "claims", claims.router, claims.ROLES, claims.PERMISSIONS, claims_base.metadata
     ),
     InstalledModule(
         "budgets", budgets.router, budgets.ROLES, budgets.PERMISSIONS, budgets_base.metadata
     ),
-    InstalledModule("spend", spend.router, spend.ROLES, spend.PERMISSIONS, spend_base.metadata),
     InstalledModule(
         "knowledge",
         knowledge.router,
@@ -63,8 +56,11 @@ MODULES: tuple[InstalledModule, ...] = (
         knowledge.PERMISSIONS,
         knowledge_base.metadata,
     ),
-    InstalledModule(
-        "gateway", gateway.router, gateway.ROLES, gateway.PERMISSIONS, gateway_base.metadata
-    ),
     # new-module: insert entries above this line
+)
+
+# A port one module declares and another module implements. The app puts the provider in place of
+# the placeholder, so the module that declares the port never imports the one that provides it.
+PORTS: tuple[tuple[Callable[..., object], Callable[..., object]], ...] = (
+    (claims_closed_months, budgets.get_closed_months_for_claims),
 )

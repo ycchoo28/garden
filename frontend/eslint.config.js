@@ -31,7 +31,8 @@ export default tseslint.config(
       'boundaries/elements': [
         { type: 'api', pattern: 'src/api/**' },
         { type: 'shared', pattern: 'src/shared/**' },
-        { type: 'module', pattern: 'src/modules/*', capture: ['module'] },
+        { type: 'core', pattern: 'src/core/*/**', capture: ['core'] },
+        { type: 'module', pattern: 'src/modules/*/**', capture: ['module'] },
         { type: 'app', pattern: 'src/*' },
       ],
     },
@@ -43,7 +44,18 @@ export default tseslint.config(
           policies: [
             {
               from: { element: { type: 'app' } },
-              allow: { to: { element: { type: ['api', 'shared', 'module'] } } },
+              allow: { to: { element: { type: ['api', 'shared', 'core', 'module'] } } },
+            },
+            {
+              from: { element: { type: 'core' } },
+              allow: [
+                { to: { element: { type: ['api', 'shared'] } } },
+                {
+                  to: {
+                    element: { type: 'core', captured: { core: '{{from.element.captured.core}}' } },
+                  },
+                },
+              ],
             },
             {
               from: { element: { type: 'module' } },

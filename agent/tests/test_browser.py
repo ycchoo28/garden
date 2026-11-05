@@ -126,7 +126,7 @@ def test_a_browser_that_fails_prints_one_plain_line_and_the_noise_stays_hidden(
     browser = _browser_script(tmp_path, f'echo "{GIO_NOISE}" >&2\nexit 1')
     result, url = _login_with_browser(portal, env, browser)
     assert result.returncode == 0, result.stderr
-    assert url.startswith(portal.url + "/api/cli-logins/authorize?")
+    assert url.startswith(portal.url + "/api/agent/cli/authorize?")
     assert result.stdout.count("No browser could be opened here.") == 1
     assert "Open the link above yourself to approve the login." in result.stdout
     assert "Operation not supported" not in result.stdout + result.stderr

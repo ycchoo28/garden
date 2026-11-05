@@ -1075,28 +1075,6 @@ export type Problem = {
 };
 
 /**
- * RowIssueOut
- */
-export type RowIssueOut = {
-    /**
-     * Field
-     */
-    field: string;
-    /**
-     * Message
-     */
-    message: string;
-    /**
-     * Row
-     */
-    row: number;
-    /**
-     * Transaction Ref
-     */
-    transaction_ref?: string | null;
-};
-
-/**
  * RunOut
  */
 export type RunOut = {
@@ -1128,78 +1106,6 @@ export type RunOut = {
      * Steps
      */
     steps: Array<StepOut>;
-};
-
-/**
- * StatementOut
- */
-export type StatementOut = {
-    /**
-     * Id
-     */
-    id: string;
-    /**
-     * Imported At
-     */
-    imported_at: string;
-    /**
-     * Imported By
-     */
-    imported_by: string;
-    /**
-     * Row Count
-     */
-    row_count: number;
-    /**
-     * Source Name
-     */
-    source_name: string;
-    /**
-     * Total Amount
-     */
-    total_amount: string;
-    /**
-     * Void Reason
-     */
-    void_reason: string | null;
-    /**
-     * Voided
-     */
-    voided: boolean;
-    /**
-     * Voided At
-     */
-    voided_at: string | null;
-    /**
-     * Voided By
-     */
-    voided_by: string | null;
-};
-
-/**
- * StatementPreviewOut
- */
-export type StatementPreviewOut = {
-    /**
-     * Can Apply
-     */
-    can_apply: boolean;
-    /**
-     * Duplicates
-     */
-    duplicates: Array<RowIssueOut>;
-    /**
-     * Errors
-     */
-    errors: Array<RowIssueOut>;
-    /**
-     * Rows Read
-     */
-    rows_read: number;
-    /**
-     * Total Amount
-     */
-    total_amount: string;
 };
 
 /**
@@ -1336,16 +1242,6 @@ export type VersionIn = {
 };
 
 /**
- * VoidIn
- */
-export type VoidIn = {
-    /**
-     * Reason
-     */
-    reason: string;
-};
-
-/**
  * VoidLineIn
  */
 export type VoidLineIn = {
@@ -1383,25 +1279,311 @@ export type FastapiCompatV2BodyKnowledgeBatchUpload = {
     translation_group?: string | null;
 };
 
-/**
- * Body_spend.statement.import
- */
-export type Import = {
-    /**
-     * File
-     */
-    file: Blob | File;
+export type AgentCliApprovalCreateData = {
+    body: CliLoginIn;
+    path?: never;
+    query?: never;
+    url: '/api/agent/cli/approvals';
 };
 
-/**
- * Body_spend.statement.preview
- */
-export type Preview = {
+export type AgentCliApprovalCreateErrors = {
     /**
-     * File
+     * Validation failed
      */
-    file: Blob | File;
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
 };
+
+export type AgentCliApprovalCreateError = AgentCliApprovalCreateErrors[keyof AgentCliApprovalCreateErrors];
+
+export type AgentCliApprovalCreateResponses = {
+    /**
+     * Successful Response
+     */
+    201: CliLoginCreated;
+};
+
+export type AgentCliApprovalCreateResponse = AgentCliApprovalCreateResponses[keyof AgentCliApprovalCreateResponses];
+
+export type AgentCliApprovalStartData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Redirect Uri
+         */
+        redirect_uri: string;
+        /**
+         * State
+         */
+        state: string;
+        /**
+         * Nonce
+         */
+        nonce: string;
+        /**
+         * Code Challenge
+         */
+        code_challenge: string;
+    };
+    url: '/api/agent/cli/authorize';
+};
+
+export type AgentCliApprovalStartErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type AgentCliApprovalStartError = AgentCliApprovalStartErrors[keyof AgentCliApprovalStartErrors];
+
+export type AgentCliApprovalStartResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type AgentMyModelUsageReadData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent/model/my-usage';
+};
+
+export type AgentMyModelUsageReadErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type AgentMyModelUsageReadError = AgentMyModelUsageReadErrors[keyof AgentMyModelUsageReadErrors];
+
+export type AgentMyModelUsageReadResponses = {
+    /**
+     * Successful Response
+     */
+    200: UsageTodayOut;
+};
+
+export type AgentMyModelUsageReadResponse = AgentMyModelUsageReadResponses[keyof AgentMyModelUsageReadResponses];
+
+export type AgentModelChatCompletionData = {
+    /**
+     * Body
+     */
+    body: {
+        [key: string]: unknown;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent/model/v1/chat/completions';
+};
+
+export type AgentModelChatCompletionErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type AgentModelChatCompletionError = AgentModelChatCompletionErrors[keyof AgentModelChatCompletionErrors];
+
+export type AgentModelChatCompletionResponses = {
+    /**
+     * Response Agent.Model.Chat Completion
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type AgentModelChatCompletionResponse = AgentModelChatCompletionResponses[keyof AgentModelChatCompletionResponses];
+
+export type AgentModelListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent/model/v1/models';
+};
+
+export type AgentModelListErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type AgentModelListError = AgentModelListErrors[keyof AgentModelListErrors];
+
+export type AgentModelListResponses = {
+    /**
+     * Response Agent.Model.List
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type AgentModelListResponse = AgentModelListResponses[keyof AgentModelListResponses];
+
+export type AgentConfirmationReadData = {
+    body?: never;
+    path: {
+        /**
+         * Confirmation Id
+         */
+        confirmation_id: string;
+    };
+    query?: never;
+    url: '/api/agent/my-confirmations/{confirmation_id}';
+};
+
+export type AgentConfirmationReadErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type AgentConfirmationReadError = AgentConfirmationReadErrors[keyof AgentConfirmationReadErrors];
+
+export type AgentConfirmationReadResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConfirmationOut;
+};
+
+export type AgentConfirmationReadResponse = AgentConfirmationReadResponses[keyof AgentConfirmationReadResponses];
+
+export type AgentConfirmationDecideData = {
+    body: DecisionIn;
+    path: {
+        /**
+         * Confirmation Id
+         */
+        confirmation_id: string;
+    };
+    query?: never;
+    url: '/api/agent/my-confirmations/{confirmation_id}/decision';
+};
+
+export type AgentConfirmationDecideErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type AgentConfirmationDecideError = AgentConfirmationDecideErrors[keyof AgentConfirmationDecideErrors];
+
+export type AgentConfirmationDecideResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConfirmationOut;
+};
+
+export type AgentConfirmationDecideResponse = AgentConfirmationDecideResponses[keyof AgentConfirmationDecideResponses];
+
+export type AgentMyLoginListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent/my-logins';
+};
+
+export type AgentMyLoginListErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type AgentMyLoginListError = AgentMyLoginListErrors[keyof AgentMyLoginListErrors];
+
+export type AgentMyLoginListResponses = {
+    /**
+     * Response Agent.My Login.List
+     *
+     * Successful Response
+     */
+    200: Array<CliLoginOut>;
+};
+
+export type AgentMyLoginListResponse = AgentMyLoginListResponses[keyof AgentMyLoginListResponses];
+
+export type AgentMyLoginSignOutData = {
+    body?: never;
+    path: {
+        /**
+         * Login Id
+         */
+        login_id: string;
+    };
+    query?: never;
+    url: '/api/agent/my-logins/{login_id}/sign-out';
+};
+
+export type AgentMyLoginSignOutErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type AgentMyLoginSignOutError = AgentMyLoginSignOutErrors[keyof AgentMyLoginSignOutErrors];
+
+export type AgentMyLoginSignOutResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type AgentMyLoginSignOutResponse = AgentMyLoginSignOutResponses[keyof AgentMyLoginSignOutResponses];
 
 export type AuditEventListData = {
     body?: never;
@@ -1608,6 +1790,71 @@ export type BudgetsLineHistoryResponses = {
 };
 
 export type BudgetsLineHistoryResponse = BudgetsLineHistoryResponses[keyof BudgetsLineHistoryResponses];
+
+export type BudgetsMonthListData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/budgets/months';
+};
+
+export type BudgetsMonthListErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type BudgetsMonthListError = BudgetsMonthListErrors[keyof BudgetsMonthListErrors];
+
+export type BudgetsMonthListResponses = {
+    /**
+     * Response Budgets.Month.List
+     *
+     * Successful Response
+     */
+    200: Array<MonthOut>;
+};
+
+export type BudgetsMonthListResponse = BudgetsMonthListResponses[keyof BudgetsMonthListResponses];
+
+export type BudgetsMonthCloseData = {
+    body: CloseIn;
+    path: {
+        /**
+         * Year Month
+         */
+        year_month: string;
+    };
+    query?: never;
+    url: '/api/budgets/months/{year_month}/close';
+};
+
+export type BudgetsMonthCloseErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type BudgetsMonthCloseError = BudgetsMonthCloseErrors[keyof BudgetsMonthCloseErrors];
+
+export type BudgetsMonthCloseResponses = {
+    /**
+     * Successful Response
+     */
+    201: MonthOut;
+};
+
+export type BudgetsMonthCloseResponse = BudgetsMonthCloseResponses[keyof BudgetsMonthCloseResponses];
 
 export type BudgetsVarianceReadData = {
     body?: never;
@@ -1948,212 +2195,6 @@ export type ClaimsClaimWithdrawResponses = {
 
 export type ClaimsClaimWithdrawResponse = ClaimsClaimWithdrawResponses[keyof ClaimsClaimWithdrawResponses];
 
-export type UsersCliLoginListData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/cli-logins';
-};
-
-export type UsersCliLoginListErrors = {
-    /**
-     * Validation failed
-     */
-    422: Problem;
-    /**
-     * An error, as a problem document
-     */
-    default: Problem;
-};
-
-export type UsersCliLoginListError = UsersCliLoginListErrors[keyof UsersCliLoginListErrors];
-
-export type UsersCliLoginListResponses = {
-    /**
-     * Response Users.Cli Login.List
-     *
-     * Successful Response
-     */
-    200: Array<CliLoginOut>;
-};
-
-export type UsersCliLoginListResponse = UsersCliLoginListResponses[keyof UsersCliLoginListResponses];
-
-export type UsersCliLoginCreateData = {
-    body: CliLoginIn;
-    path?: never;
-    query?: never;
-    url: '/api/cli-logins';
-};
-
-export type UsersCliLoginCreateErrors = {
-    /**
-     * Validation failed
-     */
-    422: Problem;
-    /**
-     * An error, as a problem document
-     */
-    default: Problem;
-};
-
-export type UsersCliLoginCreateError = UsersCliLoginCreateErrors[keyof UsersCliLoginCreateErrors];
-
-export type UsersCliLoginCreateResponses = {
-    /**
-     * Successful Response
-     */
-    201: CliLoginCreated;
-};
-
-export type UsersCliLoginCreateResponse = UsersCliLoginCreateResponses[keyof UsersCliLoginCreateResponses];
-
-export type UsersCliLoginStartData = {
-    body?: never;
-    path?: never;
-    query: {
-        /**
-         * Redirect Uri
-         */
-        redirect_uri: string;
-        /**
-         * State
-         */
-        state: string;
-        /**
-         * Nonce
-         */
-        nonce: string;
-        /**
-         * Code Challenge
-         */
-        code_challenge: string;
-    };
-    url: '/api/cli-logins/authorize';
-};
-
-export type UsersCliLoginStartErrors = {
-    /**
-     * Validation failed
-     */
-    422: Problem;
-    /**
-     * An error, as a problem document
-     */
-    default: Problem;
-};
-
-export type UsersCliLoginStartError = UsersCliLoginStartErrors[keyof UsersCliLoginStartErrors];
-
-export type UsersCliLoginStartResponses = {
-    /**
-     * Successful Response
-     */
-    200: unknown;
-};
-
-export type UsersCliLoginRevokeData = {
-    body?: never;
-    path: {
-        /**
-         * Login Id
-         */
-        login_id: string;
-    };
-    query?: never;
-    url: '/api/cli-logins/{login_id}';
-};
-
-export type UsersCliLoginRevokeErrors = {
-    /**
-     * Validation failed
-     */
-    422: Problem;
-    /**
-     * An error, as a problem document
-     */
-    default: Problem;
-};
-
-export type UsersCliLoginRevokeError = UsersCliLoginRevokeErrors[keyof UsersCliLoginRevokeErrors];
-
-export type UsersCliLoginRevokeResponses = {
-    /**
-     * Successful Response
-     */
-    204: void;
-};
-
-export type UsersCliLoginRevokeResponse = UsersCliLoginRevokeResponses[keyof UsersCliLoginRevokeResponses];
-
-export type ConfirmationsRequestReadData = {
-    body?: never;
-    path: {
-        /**
-         * Confirmation Id
-         */
-        confirmation_id: string;
-    };
-    query?: never;
-    url: '/api/confirmations/{confirmation_id}';
-};
-
-export type ConfirmationsRequestReadErrors = {
-    /**
-     * Validation failed
-     */
-    422: Problem;
-    /**
-     * An error, as a problem document
-     */
-    default: Problem;
-};
-
-export type ConfirmationsRequestReadError = ConfirmationsRequestReadErrors[keyof ConfirmationsRequestReadErrors];
-
-export type ConfirmationsRequestReadResponses = {
-    /**
-     * Successful Response
-     */
-    200: ConfirmationOut;
-};
-
-export type ConfirmationsRequestReadResponse = ConfirmationsRequestReadResponses[keyof ConfirmationsRequestReadResponses];
-
-export type ConfirmationsRequestDecideData = {
-    body: DecisionIn;
-    path: {
-        /**
-         * Confirmation Id
-         */
-        confirmation_id: string;
-    };
-    query?: never;
-    url: '/api/confirmations/{confirmation_id}/decision';
-};
-
-export type ConfirmationsRequestDecideErrors = {
-    /**
-     * Validation failed
-     */
-    422: Problem;
-    /**
-     * An error, as a problem document
-     */
-    default: Problem;
-};
-
-export type ConfirmationsRequestDecideError = ConfirmationsRequestDecideErrors[keyof ConfirmationsRequestDecideErrors];
-
-export type ConfirmationsRequestDecideResponses = {
-    /**
-     * Successful Response
-     */
-    200: ConfirmationOut;
-};
-
-export type ConfirmationsRequestDecideResponse = ConfirmationsRequestDecideResponses[keyof ConfirmationsRequestDecideResponses];
-
 export type FilesFileUploadData = {
     body: FastapiCompatV2BodyFilesFileUpload;
     path?: never;
@@ -2248,106 +2289,6 @@ export type FilesFileReadResponses = {
      */
     200: unknown;
 };
-
-export type GatewayUsageReadData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/gateway/usage/today';
-};
-
-export type GatewayUsageReadErrors = {
-    /**
-     * Validation failed
-     */
-    422: Problem;
-    /**
-     * An error, as a problem document
-     */
-    default: Problem;
-};
-
-export type GatewayUsageReadError = GatewayUsageReadErrors[keyof GatewayUsageReadErrors];
-
-export type GatewayUsageReadResponses = {
-    /**
-     * Successful Response
-     */
-    200: UsageTodayOut;
-};
-
-export type GatewayUsageReadResponse = GatewayUsageReadResponses[keyof GatewayUsageReadResponses];
-
-export type GatewayModelCompleteData = {
-    /**
-     * Body
-     */
-    body: {
-        [key: string]: unknown;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/gateway/v1/chat/completions';
-};
-
-export type GatewayModelCompleteErrors = {
-    /**
-     * Validation failed
-     */
-    422: Problem;
-    /**
-     * An error, as a problem document
-     */
-    default: Problem;
-};
-
-export type GatewayModelCompleteError = GatewayModelCompleteErrors[keyof GatewayModelCompleteErrors];
-
-export type GatewayModelCompleteResponses = {
-    /**
-     * Response Gateway.Model.Complete
-     *
-     * Successful Response
-     */
-    200: {
-        [key: string]: unknown;
-    };
-};
-
-export type GatewayModelCompleteResponse = GatewayModelCompleteResponses[keyof GatewayModelCompleteResponses];
-
-export type GatewayModelListData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/gateway/v1/models';
-};
-
-export type GatewayModelListErrors = {
-    /**
-     * Validation failed
-     */
-    422: Problem;
-    /**
-     * An error, as a problem document
-     */
-    default: Problem;
-};
-
-export type GatewayModelListError = GatewayModelListErrors[keyof GatewayModelListErrors];
-
-export type GatewayModelListResponses = {
-    /**
-     * Response Gateway.Model.List
-     *
-     * Successful Response
-     */
-    200: {
-        [key: string]: unknown;
-    };
-};
-
-export type GatewayModelListResponse = GatewayModelListResponses[keyof GatewayModelListResponses];
 
 export type PlatformHealthReadData = {
     body?: never;
@@ -2983,194 +2924,6 @@ export type KnowledgeStatusReadResponses = {
 };
 
 export type KnowledgeStatusReadResponse = KnowledgeStatusReadResponses[keyof KnowledgeStatusReadResponses];
-
-export type SpendMonthListData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/spend/months';
-};
-
-export type SpendMonthListErrors = {
-    /**
-     * Validation failed
-     */
-    422: Problem;
-    /**
-     * An error, as a problem document
-     */
-    default: Problem;
-};
-
-export type SpendMonthListError = SpendMonthListErrors[keyof SpendMonthListErrors];
-
-export type SpendMonthListResponses = {
-    /**
-     * Response Spend.Month.List
-     *
-     * Successful Response
-     */
-    200: Array<MonthOut>;
-};
-
-export type SpendMonthListResponse = SpendMonthListResponses[keyof SpendMonthListResponses];
-
-export type SpendMonthCloseData = {
-    body: CloseIn;
-    path: {
-        /**
-         * Year Month
-         */
-        year_month: string;
-    };
-    query?: never;
-    url: '/api/spend/months/{year_month}/close';
-};
-
-export type SpendMonthCloseErrors = {
-    /**
-     * Validation failed
-     */
-    422: Problem;
-    /**
-     * An error, as a problem document
-     */
-    default: Problem;
-};
-
-export type SpendMonthCloseError = SpendMonthCloseErrors[keyof SpendMonthCloseErrors];
-
-export type SpendMonthCloseResponses = {
-    /**
-     * Successful Response
-     */
-    201: MonthOut;
-};
-
-export type SpendMonthCloseResponse = SpendMonthCloseResponses[keyof SpendMonthCloseResponses];
-
-export type SpendStatementListData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/spend/statements';
-};
-
-export type SpendStatementListErrors = {
-    /**
-     * Validation failed
-     */
-    422: Problem;
-    /**
-     * An error, as a problem document
-     */
-    default: Problem;
-};
-
-export type SpendStatementListError = SpendStatementListErrors[keyof SpendStatementListErrors];
-
-export type SpendStatementListResponses = {
-    /**
-     * Response Spend.Statement.List
-     *
-     * Successful Response
-     */
-    200: Array<StatementOut>;
-};
-
-export type SpendStatementListResponse = SpendStatementListResponses[keyof SpendStatementListResponses];
-
-export type SpendStatementImportData = {
-    body: Import;
-    path?: never;
-    query?: never;
-    url: '/api/spend/statements';
-};
-
-export type SpendStatementImportErrors = {
-    /**
-     * Validation failed
-     */
-    422: Problem;
-    /**
-     * An error, as a problem document
-     */
-    default: Problem;
-};
-
-export type SpendStatementImportError = SpendStatementImportErrors[keyof SpendStatementImportErrors];
-
-export type SpendStatementImportResponses = {
-    /**
-     * Successful Response
-     */
-    201: StatementOut;
-};
-
-export type SpendStatementImportResponse = SpendStatementImportResponses[keyof SpendStatementImportResponses];
-
-export type SpendStatementPreviewData = {
-    body: Preview;
-    path?: never;
-    query?: never;
-    url: '/api/spend/statements/preview';
-};
-
-export type SpendStatementPreviewErrors = {
-    /**
-     * Validation failed
-     */
-    422: Problem;
-    /**
-     * An error, as a problem document
-     */
-    default: Problem;
-};
-
-export type SpendStatementPreviewError = SpendStatementPreviewErrors[keyof SpendStatementPreviewErrors];
-
-export type SpendStatementPreviewResponses = {
-    /**
-     * Successful Response
-     */
-    200: StatementPreviewOut;
-};
-
-export type SpendStatementPreviewResponse = SpendStatementPreviewResponses[keyof SpendStatementPreviewResponses];
-
-export type SpendStatementVoidData = {
-    body: VoidIn;
-    path: {
-        /**
-         * Statement Id
-         */
-        statement_id: string;
-    };
-    query?: never;
-    url: '/api/spend/statements/{statement_id}/void';
-};
-
-export type SpendStatementVoidErrors = {
-    /**
-     * Validation failed
-     */
-    422: Problem;
-    /**
-     * An error, as a problem document
-     */
-    default: Problem;
-};
-
-export type SpendStatementVoidError = SpendStatementVoidErrors[keyof SpendStatementVoidErrors];
-
-export type SpendStatementVoidResponses = {
-    /**
-     * Successful Response
-     */
-    200: StatementOut;
-};
-
-export type SpendStatementVoidResponse = SpendStatementVoidResponses[keyof SpendStatementVoidResponses];
 
 export type UsersDepartmentListData = {
     body?: never;

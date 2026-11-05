@@ -15,5 +15,5 @@ No foreign key may cross schemas, and modules refer to each other by ID only.
 ## Consequences
 
 - An architecture test fails when a table references another module's schema.
-- The users, audit, files and confirmations schemas are created by their own migrations.
+- The users, audit, files and agent schemas are created by their own migrations.
 - A module that needs another module's data asks that module's public interface for it.

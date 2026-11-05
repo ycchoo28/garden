@@ -77,12 +77,12 @@ class FakePortal:
                     "parameters": item_params,
                 },
             },
-            "/api/gateway/v1/chat/completions": {
+            "/api/agent/model/v1/chat/completions": {
                 "post": {
-                    "operationId": "gateway.model.complete",
+                    "operationId": "agent.model.chat_completion",
                     "description": "Chat with a model.",
                     "x-agent": {"confirm": False, "tool": False, "save": True},
-                    "x-permission": "gateway.model.use",
+                    "x-permission": "agent.model.use",
                 }
             },
         }
@@ -141,7 +141,7 @@ class _Handler(BaseHTTPRequestHandler):
         if parts.path == "/openapi.json":
             self._send(200, self.fake.contract())
             return
-        if parts.path == "/api/cli-logins/authorize":
+        if parts.path == "/api/agent/cli/authorize":
             self._authorize(parse_qs(parts.query))
             return
         if not self._bearer_ok():
@@ -157,7 +157,7 @@ class _Handler(BaseHTTPRequestHandler):
                 },
             )
             return
-        if parts.path.startswith("/api/confirmations/"):
+        if parts.path.startswith("/api/agent/my-confirmations/"):
             confirmation_id = parts.path.rsplit("/", 1)[1]
             status = self.fake.confirmations.get(confirmation_id, "pending")
             self._send(200, {"id": confirmation_id, "status": status})
@@ -172,7 +172,7 @@ class _Handler(BaseHTTPRequestHandler):
         self._problem(404, "Not Found")
 
     def do_POST(self) -> None:
-        if urlsplit(self.path).path == "/api/cli-logins":
+        if urlsplit(self.path).path == "/api/agent/cli/approvals":
             self._create_login(self._body())
             return
         self._problem(404, "Not Found")
@@ -198,7 +198,7 @@ class _Handler(BaseHTTPRequestHandler):
                 "Confirmation Required",
                 detail="The person must approve this action in the browser first.",
                 confirmation_id=confirmation_id,
-                confirmation_url=f"{self.fake.url}/confirm/{confirmation_id}",
+                confirmation_url=f"{self.fake.url}/agent/confirmations/{confirmation_id}",
                 expires_at=EXPIRES_AT,
             )
             return

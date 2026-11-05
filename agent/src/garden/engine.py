@@ -122,7 +122,7 @@ class Engine:
                 f"  {needed.approve_url}\n"
                 "It runs once they approve it, and not before."
             )
-        status_path = f"/api/confirmations/{_path_segment(needed.confirmation_id)}"
+        status_path = f"/api/agent/my-confirmations/{_path_segment(needed.confirmation_id)}"
         deadline = _deadline(needed.expires_at, self._clock())
         while True:
             reply = as_object(self._send("GET", status_path).body)

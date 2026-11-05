@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from app.core.users.identity import IdentityClaims, IdentityRejected, TokenSet
-from app.modules.knowledge.embedding import EMBEDDING_DIMENSIONS
+from app.modules.knowledge.reading.embedding import EMBEDDING_DIMENSIONS
 
 GOOD_CODE = "good-code"
 

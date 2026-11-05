@@ -461,43 +461,6 @@ export const zProblem = z.object({
 });
 
 /**
- * RowIssueOut
- */
-export const zRowIssueOut = z.object({
-    field: z.string(),
-    message: z.string(),
-    row: z.int(),
-    transaction_ref: z.string().nullish()
-});
-
-/**
- * StatementOut
- */
-export const zStatementOut = z.object({
-    id: z.uuid(),
-    imported_at: z.iso.datetime(),
-    imported_by: z.uuid(),
-    row_count: z.int(),
-    source_name: z.string(),
-    total_amount: z.string(),
-    void_reason: z.string().nullable(),
-    voided: z.boolean(),
-    voided_at: z.iso.datetime().nullable(),
-    voided_by: z.uuid().nullable()
-});
-
-/**
- * StatementPreviewOut
- */
-export const zStatementPreviewOut = z.object({
-    can_apply: z.boolean(),
-    duplicates: z.array(zRowIssueOut),
-    errors: z.array(zRowIssueOut),
-    rows_read: z.int(),
-    total_amount: z.string()
-});
-
-/**
  * StatusOut
  */
 export const zStatusOut = z.object({
@@ -582,13 +545,6 @@ export const zVersionIn = z.object({
 });
 
 /**
- * VoidIn
- */
-export const zVoidIn = z.object({
-    reason: z.string().min(1).max(500)
-});
-
-/**
  * VoidLineIn
  */
 export const zVoidLineIn = z.object({
@@ -611,19 +567,79 @@ export const zFastapiCompatV2BodyKnowledgeBatchUpload = z.object({
     translation_group: z.string().max(200).nullish()
 });
 
+export const zAgentCliApprovalCreateBody = zCliLoginIn;
+
 /**
- * Body_spend.statement.import
+ * Successful Response
  */
-export const zImport = z.object({
-    file: z.string()
+export const zAgentCliApprovalCreateResponse = zCliLoginCreated;
+
+export const zAgentCliApprovalStartQuery = z.object({
+    redirect_uri: z.string().max(300),
+    state: z.string().min(16).max(128),
+    nonce: z.string().min(16).max(128),
+    code_challenge: z.string().min(43).max(128)
 });
 
 /**
- * Body_spend.statement.preview
+ * Successful Response
  */
-export const zPreview = z.object({
-    file: z.string()
+export const zAgentMyModelUsageReadResponse = zUsageTodayOut;
+
+/**
+ * Body
+ */
+export const zAgentModelChatCompletionBody = z.record(z.string(), z.unknown());
+
+/**
+ * Response Agent.Model.Chat Completion
+ *
+ * Successful Response
+ */
+export const zAgentModelChatCompletionResponse = z.record(z.string(), z.unknown());
+
+/**
+ * Response Agent.Model.List
+ *
+ * Successful Response
+ */
+export const zAgentModelListResponse = z.record(z.string(), z.unknown());
+
+export const zAgentConfirmationReadPath = z.object({
+    confirmation_id: z.uuid()
 });
+
+/**
+ * Successful Response
+ */
+export const zAgentConfirmationReadResponse = zConfirmationOut;
+
+export const zAgentConfirmationDecideBody = zDecisionIn;
+
+export const zAgentConfirmationDecidePath = z.object({
+    confirmation_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zAgentConfirmationDecideResponse = zConfirmationOut;
+
+/**
+ * Response Agent.My Login.List
+ *
+ * Successful Response
+ */
+export const zAgentMyLoginListResponse = z.array(zCliLoginOut);
+
+export const zAgentMyLoginSignOutPath = z.object({
+    login_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zAgentMyLoginSignOutResponse = z.void();
 
 export const zAuditEventListQuery = z.object({
     limit: z.int().gte(1).lte(100).optional().default(50)
@@ -683,6 +699,24 @@ export const zBudgetsLineHistoryPath = z.object({
  * Successful Response
  */
 export const zBudgetsLineHistoryResponse = z.array(zBudgetLineOut);
+
+/**
+ * Response Budgets.Month.List
+ *
+ * Successful Response
+ */
+export const zBudgetsMonthListResponse = z.array(zMonthOut);
+
+export const zBudgetsMonthCloseBody = zCloseIn;
+
+export const zBudgetsMonthClosePath = z.object({
+    year_month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/)
+});
+
+/**
+ * Successful Response
+ */
+export const zBudgetsMonthCloseResponse = zMonthOut;
 
 export const zBudgetsVarianceReadQuery = z.object({
     from: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
@@ -782,56 +816,6 @@ export const zClaimsClaimWithdrawPath = z.object({
  */
 export const zClaimsClaimWithdrawResponse = zClaimDetailOut;
 
-/**
- * Response Users.Cli Login.List
- *
- * Successful Response
- */
-export const zUsersCliLoginListResponse = z.array(zCliLoginOut);
-
-export const zUsersCliLoginCreateBody = zCliLoginIn;
-
-/**
- * Successful Response
- */
-export const zUsersCliLoginCreateResponse = zCliLoginCreated;
-
-export const zUsersCliLoginStartQuery = z.object({
-    redirect_uri: z.string().max(300),
-    state: z.string().min(16).max(128),
-    nonce: z.string().min(16).max(128),
-    code_challenge: z.string().min(43).max(128)
-});
-
-export const zUsersCliLoginRevokePath = z.object({
-    login_id: z.uuid()
-});
-
-/**
- * Successful Response
- */
-export const zUsersCliLoginRevokeResponse = z.void();
-
-export const zConfirmationsRequestReadPath = z.object({
-    confirmation_id: z.uuid()
-});
-
-/**
- * Successful Response
- */
-export const zConfirmationsRequestReadResponse = zConfirmationOut;
-
-export const zConfirmationsRequestDecideBody = zDecisionIn;
-
-export const zConfirmationsRequestDecidePath = z.object({
-    confirmation_id: z.uuid()
-});
-
-/**
- * Successful Response
- */
-export const zConfirmationsRequestDecideResponse = zConfirmationOut;
-
 export const zFilesFileUploadBody = zFastapiCompatV2BodyFilesFileUpload;
 
 /**
@@ -851,30 +835,6 @@ export const zFilesFileDeleteResponse = z.void();
 export const zFilesFileReadPath = z.object({
     sha256: z.string()
 });
-
-/**
- * Successful Response
- */
-export const zGatewayUsageReadResponse = zUsageTodayOut;
-
-/**
- * Body
- */
-export const zGatewayModelCompleteBody = z.record(z.string(), z.unknown());
-
-/**
- * Response Gateway.Model.Complete
- *
- * Successful Response
- */
-export const zGatewayModelCompleteResponse = z.record(z.string(), z.unknown());
-
-/**
- * Response Gateway.Model.List
- *
- * Successful Response
- */
-export const zGatewayModelListResponse = z.record(z.string(), z.unknown());
 
 /**
  * Response Platform.Health.Read
@@ -1053,56 +1013,6 @@ export const zKnowledgeSearchLogListResponse = z.array(zKnowledgeSearchLogOut);
  * Successful Response
  */
 export const zKnowledgeStatusReadResponse = zStatusOut;
-
-/**
- * Response Spend.Month.List
- *
- * Successful Response
- */
-export const zSpendMonthListResponse = z.array(zMonthOut);
-
-export const zSpendMonthCloseBody = zCloseIn;
-
-export const zSpendMonthClosePath = z.object({
-    year_month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/)
-});
-
-/**
- * Successful Response
- */
-export const zSpendMonthCloseResponse = zMonthOut;
-
-/**
- * Response Spend.Statement.List
- *
- * Successful Response
- */
-export const zSpendStatementListResponse = z.array(zStatementOut);
-
-export const zSpendStatementImportBody = zImport;
-
-/**
- * Successful Response
- */
-export const zSpendStatementImportResponse = zStatementOut;
-
-export const zSpendStatementPreviewBody = zPreview;
-
-/**
- * Successful Response
- */
-export const zSpendStatementPreviewResponse = zStatementPreviewOut;
-
-export const zSpendStatementVoidBody = zVoidIn;
-
-export const zSpendStatementVoidPath = z.object({
-    statement_id: z.uuid()
-});
-
-/**
- * Successful Response
- */
-export const zSpendStatementVoidResponse = zStatementOut;
 
 /**
  * Response Users.Department.List

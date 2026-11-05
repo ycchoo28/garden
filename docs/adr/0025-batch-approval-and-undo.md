@@ -29,5 +29,5 @@ Erase is person-only: it removes the document's batch files, its chunks and span
 
 - A batch that was approved cannot change under the reviewer's feet, and a stale approval is refused rather than silently applied.
 - Undo has a limit: the ordering check compares applied times, so two batches applied in the same instant cannot be ordered, and the tests advance the clock to avoid this.
-- The starter of a batch needs a second knowledge admin to apply it, which slows small fixes but keeps the live content reviewed.
+- The starter of a batch needs a second admin to apply it, which slows small fixes but keeps the live content reviewed.
 - Agents can prepare, submit and search, and they cannot approve, reject or erase, which keeps the decision to change knowledge with a person.

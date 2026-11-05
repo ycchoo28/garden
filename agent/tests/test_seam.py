@@ -87,7 +87,7 @@ def test_a_critical_call_waits_for_approval_then_runs_once(
     assert portal.deleted == [SHA]
     # The first request had no confirmation; the retry names the approved one, and it ran once.
     assert portal.retries == ["conf-1"]
-    assert messages and f"{portal.url}/confirm/conf-1" in messages[0]
+    assert messages and f"{portal.url}/agent/confirmations/conf-1" in messages[0]
 
 
 def test_a_rejected_critical_call_does_not_run(
@@ -145,7 +145,7 @@ def test_mcp_critical_call_sends_the_approval_link_as_a_notice(
     )
     assert reply is not None
     assert reply["result"]["isError"] is False
-    assert any(f"{portal.url}/confirm/conf-1" in notice for notice in notices)
+    assert any(f"{portal.url}/agent/confirmations/conf-1" in notice for notice in notices)
     assert portal.deleted == [SHA]
 
 
@@ -156,7 +156,7 @@ def _sign_in_link(capsys: CaptureFixture[str]) -> str:
     while time.monotonic() < deadline:
         seen += capsys.readouterr().out
         for line in seen.splitlines():
-            if "/api/cli-logins/authorize?" in line:
+            if "/api/agent/cli/authorize?" in line:
                 return line.strip()
         time.sleep(0.05)
     raise AssertionError(f"no sign-in link was printed: {seen!r}")
@@ -196,4 +196,4 @@ def test_the_sign_in_fails_when_the_verifier_does_not_match(portal: FakePortal) 
         "device": "laptop",
     }
     with pytest.raises(GardenError):
-        PortalClient(portal.url).request("POST", "/api/cli-logins", body=body)
+        PortalClient(portal.url).request("POST", "/api/agent/cli/approvals", body=body)

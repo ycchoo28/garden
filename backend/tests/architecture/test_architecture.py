@@ -25,16 +25,15 @@ PUBLIC_ROUTES = {
     ("GET", "/auth/callback"),
     ("POST", "/api/users/sign-out"),
     # The CLI starts and finishes its sign-in before it holds a token, so these take no person.
-    ("GET", "/api/cli-logins/authorize"),
-    ("POST", "/api/cli-logins"),
+    ("GET", "/api/agent/cli/authorize"),
+    ("POST", "/api/agent/cli/approvals"),
 }
 
 # Routes an agent may only call after the person approves, listed explicitly.
 CRITICAL_ROUTES: frozenset[str] = frozenset(
     {
         "/api/claims/{claim_id}/withdraw",
-        "/api/spend/statements/{statement_id}/void",
-        "/api/spend/months/{year_month}/close",
+        "/api/budgets/months/{year_month}/close",
         "/api/files/{sha256}",
         "/api/knowledge/batches/{batch_id}/undo",
     }
@@ -101,8 +100,8 @@ def test_agent_only_permissions_exclude_browser_acts() -> None:
     declared: dict[str, Permission] = {
         permission.name: permission for installed in MODULES for permission in installed.permissions
     }
-    assert declared["confirmations.decide"].agent_allowed is False
-    assert declared["cli_logins.revoke"].agent_allowed is False
+    assert declared["agent.confirmations.decide"].agent_allowed is False
+    assert declared["agent.logins.revoke"].agent_allowed is False
     assert declared["users.self"].agent_allowed is True
     assert USER_PERMISSIONS
 

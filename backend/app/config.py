@@ -33,17 +33,19 @@ class Settings(BaseSettings):
     # The llama.cpp server that serves bge-m3 for embeddings. Started by `just embedding-up`.
     embedding_url: str = "http://127.0.0.1:55083"
     # The model gateway forwards to this OpenAI-compatible base URL. Empty means it answers 503.
-    gateway_upstream_url: str = ""
+    agent_model_upstream_url: str = ""
     # Sent to the upstream as a bearer token when set. Not needed by a local or fake upstream.
-    gateway_api_key: SecretStr = SecretStr("")
+    agent_model_api_key: SecretStr = SecretStr("")
     # The only models the gateway forwards, as a comma-separated list. Empty allows none.
-    gateway_models: str = ""
-    gateway_requests_per_minute: int = 20
-    gateway_tokens_per_day: int = 200_000
+    agent_model_models: str = ""
+    agent_model_requests_per_minute: int = 20
+    agent_model_tokens_per_day: int = 200_000
 
     @property
     def allowed_models(self) -> frozenset[str]:
-        return frozenset(name.strip() for name in self.gateway_models.split(",") if name.strip())
+        return frozenset(
+            name.strip() for name in self.agent_model_models.split(",") if name.strip()
+        )
 
     @model_validator(mode="after")
     def refuse_fake_oidc_outside_dev(self) -> Self:

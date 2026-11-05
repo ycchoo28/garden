@@ -3,23 +3,13 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel
 
+from app.core.audit.schemas import AuditEventOut
 from app.core.audit.service import AuditService, get_audit_service
 from app.core.users import CurrentPerson, require
 from app.shared.operations import op
 
 router = APIRouter()
-
-
-class AuditEventOut(BaseModel):
-    id: str
-    occurred_at: str
-    actor_id: str
-    acting_as_agent: bool
-    operation: str
-    target: str
-    summary: str
 
 
 @router.get(

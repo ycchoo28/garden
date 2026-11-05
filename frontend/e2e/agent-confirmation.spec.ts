@@ -81,7 +81,7 @@ test('an agent deletes a file only after the person approves it in the browser',
   // The device signs in through the same browser: the link opens the fake provider, and the person signs in there.
   const login = garden(['login', '--device', 'e2e-laptop', '--no-open'], env);
   try {
-    const signInLink = await lineWith(login.child, '/api/cli-logins/authorize?');
+    const signInLink = await lineWith(login.child, '/api/agent/cli/authorize?');
     await page.goto(signInLink);
     await signInAtProvider(page, PERSON, 'Dev Admin');
     expect(await login.exit).toBe(0);
@@ -89,7 +89,7 @@ test('an agent deletes a file only after the person approves it in the browser',
     // The delete is critical: the command waits, prints the approval link, and runs once the person approves.
     const remove = garden(['files', 'file', 'delete', '--sha256', sha256], env);
     try {
-      const approvalLink = await lineWith(remove.child, '/confirm/');
+      const approvalLink = await lineWith(remove.child, '/agent/confirmations/');
       await page.goto(approvalLink);
       await expect(page.getByRole('heading', { name: 'Approve this action' })).toBeVisible();
       await expect(page.getByText('files.file.delete', { exact: true })).toBeVisible();

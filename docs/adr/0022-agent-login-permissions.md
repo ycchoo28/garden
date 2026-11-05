@@ -13,7 +13,7 @@ Some actions, such as revoking a device's sign-in, must always be the person's o
 A CLI login is a token tied to one person and one device.
 It holds the person's permissions minus every permission the owner declares with `agent_allowed=False`.
 Every permission declares `agent_allowed`, with no default, so a new permission is never granted to an agent by accident.
-`cli_logins.revoke` is person-only, so an agent cannot sign its own device or another device out.
+`agent.logins.revoke` is person-only, so an agent cannot sign its own device or another device out.
 Browser sessions keep all of the person's permissions.
 
 ## Consequences

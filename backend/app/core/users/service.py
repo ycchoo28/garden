@@ -190,7 +190,7 @@ class UserService:
         )
 
     async def departments(self) -> list[DepartmentView]:
-        """Every department. Budgets and card statements refer to departments by their id."""
+        """Every department. Budgets and claims refer to departments by their id."""
         rows = await self._repo.departments()
         return [DepartmentView(id=row.id, code=row.code, name=row.name) for row in rows]
 

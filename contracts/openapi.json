@@ -1684,40 +1684,6 @@
         "title": "Problem",
         "type": "object"
       },
-      "RowIssueOut": {
-        "properties": {
-          "field": {
-            "title": "Field",
-            "type": "string"
-          },
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "row": {
-            "title": "Row",
-            "type": "integer"
-          },
-          "transaction_ref": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Transaction Ref"
-          }
-        },
-        "required": [
-          "row",
-          "field",
-          "message"
-        ],
-        "title": "RowIssueOut",
-        "type": "object"
-      },
       "RunOut": {
         "properties": {
           "cancel_reason": {
@@ -1779,129 +1745,6 @@
           "steps"
         ],
         "title": "RunOut",
-        "type": "object"
-      },
-      "StatementOut": {
-        "properties": {
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "imported_at": {
-            "format": "date-time",
-            "title": "Imported At",
-            "type": "string"
-          },
-          "imported_by": {
-            "format": "uuid",
-            "title": "Imported By",
-            "type": "string"
-          },
-          "row_count": {
-            "title": "Row Count",
-            "type": "integer"
-          },
-          "source_name": {
-            "title": "Source Name",
-            "type": "string"
-          },
-          "total_amount": {
-            "title": "Total Amount",
-            "type": "string"
-          },
-          "void_reason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Void Reason"
-          },
-          "voided": {
-            "title": "Voided",
-            "type": "boolean"
-          },
-          "voided_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Voided At"
-          },
-          "voided_by": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Voided By"
-          }
-        },
-        "required": [
-          "id",
-          "source_name",
-          "row_count",
-          "total_amount",
-          "imported_at",
-          "imported_by",
-          "voided",
-          "voided_at",
-          "voided_by",
-          "void_reason"
-        ],
-        "title": "StatementOut",
-        "type": "object"
-      },
-      "StatementPreviewOut": {
-        "properties": {
-          "can_apply": {
-            "title": "Can Apply",
-            "type": "boolean"
-          },
-          "duplicates": {
-            "items": {
-              "$ref": "#/components/schemas/RowIssueOut"
-            },
-            "title": "Duplicates",
-            "type": "array"
-          },
-          "errors": {
-            "items": {
-              "$ref": "#/components/schemas/RowIssueOut"
-            },
-            "title": "Errors",
-            "type": "array"
-          },
-          "rows_read": {
-            "title": "Rows Read",
-            "type": "integer"
-          },
-          "total_amount": {
-            "title": "Total Amount",
-            "type": "string"
-          }
-        },
-        "required": [
-          "rows_read",
-          "total_amount",
-          "can_apply",
-          "errors",
-          "duplicates"
-        ],
-        "title": "StatementPreviewOut",
         "type": "object"
       },
       "StatusOut": {
@@ -2099,21 +1942,6 @@
         "title": "VersionIn",
         "type": "object"
       },
-      "VoidIn": {
-        "properties": {
-          "reason": {
-            "maxLength": 500,
-            "minLength": 1,
-            "title": "Reason",
-            "type": "string"
-          }
-        },
-        "required": [
-          "reason"
-        ],
-        "title": "VoidIn",
-        "type": "object"
-      },
       "VoidLineIn": {
         "properties": {
           "expected_version": {
@@ -2179,34 +2007,6 @@
         ],
         "title": "Body_knowledge.batch.upload",
         "type": "object"
-      },
-      "import": {
-        "properties": {
-          "file": {
-            "contentMediaType": "application/octet-stream",
-            "title": "File",
-            "type": "string"
-          }
-        },
-        "required": [
-          "file"
-        ],
-        "title": "Body_spend.statement.import",
-        "type": "object"
-      },
-      "preview": {
-        "properties": {
-          "file": {
-            "contentMediaType": "application/octet-stream",
-            "title": "File",
-            "type": "string"
-          }
-        },
-        "required": [
-          "file"
-        ],
-        "title": "Body_spend.statement.preview",
-        "type": "object"
       }
     }
   },
@@ -2216,6 +2016,521 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/agent/cli/approvals": {
+      "post": {
+        "description": "Finish a CLI login with the code the browser returned. The token is shown once.",
+        "operationId": "agent.cli_approval.create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CliLoginIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CliLoginCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Create Cli Login",
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": false
+        }
+      }
+    },
+    "/api/agent/cli/authorize": {
+      "get": {
+        "description": "Start a CLI login. Redirects the browser to the identity provider, which returns the code to a listener on this machine.",
+        "operationId": "agent.cli_approval.start",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "redirect_uri",
+            "required": true,
+            "schema": {
+              "maxLength": 300,
+              "title": "Redirect Uri",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "title": "State",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "nonce",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "title": "Nonce",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "code_challenge",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 43,
+              "title": "Code Challenge",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Start Cli Login",
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": false
+        }
+      }
+    },
+    "/api/agent/model/my-usage": {
+      "get": {
+        "description": "Read today's model requests and tokens for the signed-in person. Counts only.",
+        "operationId": "agent.my_model_usage.read",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageTodayOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Usage Today",
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": true
+        },
+        "x-permission": "agent.model_usage.view"
+      }
+    },
+    "/api/agent/model/v1/chat/completions": {
+      "post": {
+        "description": "Send an OpenAI-compatible chat completion to a model on the gateway allowlist.",
+        "operationId": "agent.model.chat_completion",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Agent.Model.Chat Completion",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Chat Completions",
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": false
+        },
+        "x-permission": "agent.model.use"
+      }
+    },
+    "/api/agent/model/v1/models": {
+      "get": {
+        "description": "List the models the gateway forwards.",
+        "operationId": "agent.model.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Agent.Model.List",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "List Models",
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": false
+        },
+        "x-permission": "agent.model.use"
+      }
+    },
+    "/api/agent/my-confirmations/{confirmation_id}": {
+      "get": {
+        "description": "Check whether the person has approved a confirmation.",
+        "operationId": "agent.confirmation.read",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "confirmation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Confirmation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Read Confirmation",
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": true
+        },
+        "x-permission": "users.self"
+      }
+    },
+    "/api/agent/my-confirmations/{confirmation_id}/decision": {
+      "post": {
+        "description": "Approve or reject a pending confirmation. Only a browser sign-in may do this.",
+        "operationId": "agent.confirmation.decide",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "confirmation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Confirmation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecisionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Decide Confirmation",
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": false
+        },
+        "x-permission": "agent.confirmations.decide"
+      }
+    },
+    "/api/agent/my-logins": {
+      "get": {
+        "description": "List the caller's CLI logins, newest first, with their state.",
+        "operationId": "agent.my_login.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CliLoginOut"
+                  },
+                  "title": "Response Agent.My Login.List",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "List Cli Logins",
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": true
+        },
+        "x-permission": "agent.logins.view"
+      }
+    },
+    "/api/agent/my-logins/{login_id}/sign-out": {
+      "post": {
+        "description": "Revoke one of the caller's CLI logins. Only a browser sign-in may do this.",
+        "operationId": "agent.my_login.sign_out",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "login_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Login Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Revoke Cli Login",
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": false
+        },
+        "x-permission": "agent.logins.revoke"
+      }
+    },
     "/api/audit/events": {
       "get": {
         "description": "List the most recent saved changes, newest first.",
@@ -2281,7 +2596,7 @@
     },
     "/api/budgets/categories": {
       "get": {
-        "description": "List the spend categories that budget lines and card rows use.",
+        "description": "List the spend categories that budget lines and claim lines use.",
         "operationId": "budgets.category.list",
         "responses": {
           "200": {
@@ -2600,6 +2915,128 @@
           "tool": true
         },
         "x-permission": "budgets.view"
+      }
+    },
+    "/api/budgets/months": {
+      "get": {
+        "description": "List closed months, newest first. Finance and admin only.",
+        "operationId": "budgets.month.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MonthOut"
+                  },
+                  "title": "Response Budgets.Month.List",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "List Closed Months",
+        "tags": [
+          "budgets"
+        ],
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": true
+        },
+        "x-permission": "budgets.month.close"
+      }
+    },
+    "/api/budgets/months/{year_month}/close": {
+      "post": {
+        "description": "Close a month with a reason. Afterwards no claim line for that month can be added or changed, and a closed month never reopens. An agent's request waits for the person's confirmation.",
+        "operationId": "budgets.month.close",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "year_month",
+            "required": true,
+            "schema": {
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+              "title": "Year Month",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloseIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonthOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Close Month",
+        "tags": [
+          "budgets"
+        ],
+        "x-agent": {
+          "confirm": true,
+          "save": true,
+          "tool": true
+        },
+        "x-permission": "budgets.month.close"
       }
     },
     "/api/budgets/variance": {
@@ -3256,368 +3693,6 @@
         "x-permission": "claims.withdraw"
       }
     },
-    "/api/cli-logins": {
-      "get": {
-        "description": "List the caller's CLI logins, newest first, with their state.",
-        "operationId": "users.cli_login.list",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/CliLoginOut"
-                  },
-                  "title": "Response Users.Cli Login.List",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Validation failed"
-          },
-          "default": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "An error, as a problem document"
-          }
-        },
-        "summary": "List Cli Logins",
-        "x-agent": {
-          "confirm": false,
-          "save": true,
-          "tool": true
-        },
-        "x-permission": "cli_logins.view"
-      },
-      "post": {
-        "description": "Finish a CLI login with the code the browser returned. The token is shown once.",
-        "operationId": "users.cli_login.create",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CliLoginIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CliLoginCreated"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Validation failed"
-          },
-          "default": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "An error, as a problem document"
-          }
-        },
-        "summary": "Create Cli Login",
-        "x-agent": {
-          "confirm": false,
-          "save": true,
-          "tool": false
-        }
-      }
-    },
-    "/api/cli-logins/authorize": {
-      "get": {
-        "description": "Start a CLI login. Redirects the browser to the identity provider, which returns the code to a listener on this machine.",
-        "operationId": "users.cli_login.start",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "redirect_uri",
-            "required": true,
-            "schema": {
-              "maxLength": 300,
-              "title": "Redirect Uri",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "state",
-            "required": true,
-            "schema": {
-              "maxLength": 128,
-              "minLength": 16,
-              "title": "State",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "nonce",
-            "required": true,
-            "schema": {
-              "maxLength": 128,
-              "minLength": 16,
-              "title": "Nonce",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "code_challenge",
-            "required": true,
-            "schema": {
-              "maxLength": 128,
-              "minLength": 43,
-              "title": "Code Challenge",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Validation failed"
-          },
-          "default": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "An error, as a problem document"
-          }
-        },
-        "summary": "Start Cli Login",
-        "x-agent": {
-          "confirm": false,
-          "save": true,
-          "tool": false
-        }
-      }
-    },
-    "/api/cli-logins/{login_id}": {
-      "delete": {
-        "description": "Revoke one of the caller's CLI logins. Only a browser sign-in may do this.",
-        "operationId": "users.cli_login.revoke",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "login_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Login Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Validation failed"
-          },
-          "default": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "An error, as a problem document"
-          }
-        },
-        "summary": "Revoke Cli Login",
-        "x-agent": {
-          "confirm": false,
-          "save": true,
-          "tool": false
-        },
-        "x-permission": "cli_logins.revoke"
-      }
-    },
-    "/api/confirmations/{confirmation_id}": {
-      "get": {
-        "description": "Check whether the person has approved a confirmation.",
-        "operationId": "confirmations.request.read",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "confirmation_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Confirmation Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConfirmationOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Validation failed"
-          },
-          "default": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "An error, as a problem document"
-          }
-        },
-        "summary": "Read Confirmation",
-        "x-agent": {
-          "confirm": false,
-          "save": true,
-          "tool": true
-        },
-        "x-permission": "users.self"
-      }
-    },
-    "/api/confirmations/{confirmation_id}/decision": {
-      "post": {
-        "description": "Approve or reject a pending confirmation. Only a browser sign-in may do this.",
-        "operationId": "confirmations.request.decide",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "confirmation_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Confirmation Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DecisionIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConfirmationOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Validation failed"
-          },
-          "default": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "An error, as a problem document"
-          }
-        },
-        "summary": "Decide Confirmation",
-        "x-agent": {
-          "confirm": false,
-          "save": true,
-          "tool": false
-        },
-        "x-permission": "confirmations.decide"
-      }
-    },
     "/api/files": {
       "post": {
         "description": "Upload one file. Accepts PDF, PNG, JPEG or plain text.",
@@ -3772,157 +3847,6 @@
           "tool": true
         },
         "x-permission": "files.view"
-      }
-    },
-    "/api/gateway/usage/today": {
-      "get": {
-        "description": "Read today's model requests and tokens for the signed-in person. Counts only.",
-        "operationId": "gateway.usage.read",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UsageTodayOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Validation failed"
-          },
-          "default": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "An error, as a problem document"
-          }
-        },
-        "summary": "Usage Today",
-        "x-agent": {
-          "confirm": false,
-          "save": true,
-          "tool": true
-        },
-        "x-permission": "gateway.usage.view"
-      }
-    },
-    "/api/gateway/v1/chat/completions": {
-      "post": {
-        "description": "Send an OpenAI-compatible chat completion to a model on the gateway allowlist.",
-        "operationId": "gateway.model.complete",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "additionalProperties": true,
-                "title": "Body",
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Gateway.Model.Complete",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Validation failed"
-          },
-          "default": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "An error, as a problem document"
-          }
-        },
-        "summary": "Chat Completions",
-        "x-agent": {
-          "confirm": false,
-          "save": true,
-          "tool": false
-        },
-        "x-permission": "gateway.model.use"
-      }
-    },
-    "/api/gateway/v1/models": {
-      "get": {
-        "description": "List the models the gateway forwards.",
-        "operationId": "gateway.model.list",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Gateway.Model.List",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Validation failed"
-          },
-          "default": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "An error, as a problem document"
-          }
-        },
-        "summary": "List Models",
-        "x-agent": {
-          "confirm": false,
-          "save": true,
-          "tool": false
-        },
-        "x-permission": "gateway.model.use"
       }
     },
     "/api/health": {
@@ -5127,367 +5051,9 @@
         "x-permission": "knowledge.collection.view"
       }
     },
-    "/api/spend/months": {
-      "get": {
-        "description": "List closed months, newest first.",
-        "operationId": "spend.month.list",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/MonthOut"
-                  },
-                  "title": "Response Spend.Month.List",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Validation failed"
-          },
-          "default": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "An error, as a problem document"
-          }
-        },
-        "summary": "List Closed Months",
-        "tags": [
-          "spend"
-        ],
-        "x-agent": {
-          "confirm": false,
-          "save": true,
-          "tool": true
-        },
-        "x-permission": "spend.statement.view"
-      }
-    },
-    "/api/spend/months/{year_month}/close": {
-      "post": {
-        "description": "Close a month with a reason. Afterwards no spend for that month can be imported or voided. An agent's request waits for the person's confirmation.",
-        "operationId": "spend.month.close",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "year_month",
-            "required": true,
-            "schema": {
-              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
-              "title": "Year Month",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CloseIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MonthOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Validation failed"
-          },
-          "default": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "An error, as a problem document"
-          }
-        },
-        "summary": "Close Month",
-        "tags": [
-          "spend"
-        ],
-        "x-agent": {
-          "confirm": true,
-          "save": true,
-          "tool": true
-        },
-        "x-permission": "spend.month.close"
-      }
-    },
-    "/api/spend/statements": {
-      "get": {
-        "description": "List imported card statements, newest first. Voided statements are included.",
-        "operationId": "spend.statement.list",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/StatementOut"
-                  },
-                  "title": "Response Spend.Statement.List",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Validation failed"
-          },
-          "default": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "An error, as a problem document"
-          }
-        },
-        "summary": "List Statements",
-        "tags": [
-          "spend"
-        ],
-        "x-agent": {
-          "confirm": false,
-          "save": true,
-          "tool": true
-        },
-        "x-permission": "spend.statement.view"
-      },
-      "post": {
-        "description": "Import a card statement CSV. Every row is saved, or none is when a row has an error or a duplicate.",
-        "operationId": "spend.statement.import",
-        "requestBody": {
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "$ref": "#/components/schemas/import"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StatementOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Validation failed"
-          },
-          "default": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "An error, as a problem document"
-          }
-        },
-        "summary": "Import Statement",
-        "tags": [
-          "spend"
-        ],
-        "x-agent": {
-          "confirm": false,
-          "save": true,
-          "tool": true
-        },
-        "x-permission": "spend.statement.import"
-      }
-    },
-    "/api/spend/statements/preview": {
-      "post": {
-        "description": "Check a card statement CSV without saving it. Lists every row error and duplicate.",
-        "operationId": "spend.statement.preview",
-        "requestBody": {
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "$ref": "#/components/schemas/preview"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StatementPreviewOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Validation failed"
-          },
-          "default": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "An error, as a problem document"
-          }
-        },
-        "summary": "Preview Statement",
-        "tags": [
-          "spend"
-        ],
-        "x-agent": {
-          "confirm": false,
-          "save": false,
-          "tool": true
-        },
-        "x-permission": "spend.statement.import"
-      }
-    },
-    "/api/spend/statements/{statement_id}/void": {
-      "post": {
-        "description": "Void an imported card statement with a reason. Its rows stop counting as spend but are kept. An agent's request waits for the person's confirmation.",
-        "operationId": "spend.statement.void",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "statement_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Statement Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/VoidIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StatementOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Validation failed"
-          },
-          "default": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "An error, as a problem document"
-          }
-        },
-        "summary": "Void Statement",
-        "tags": [
-          "spend"
-        ],
-        "x-agent": {
-          "confirm": true,
-          "save": true,
-          "tool": true
-        },
-        "x-permission": "spend.statement.void"
-      }
-    },
     "/api/users/departments": {
       "get": {
-        "description": "List the company's departments with their ids. Budgets and card statements use these ids.",
+        "description": "List the company's departments with their ids. Budgets and claims use these ids.",
         "operationId": "users.department.list",
         "responses": {
           "200": {

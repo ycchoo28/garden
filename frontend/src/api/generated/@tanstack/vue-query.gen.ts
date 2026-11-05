@@ -3,8 +3,27 @@
 import { queryOptions, type UseMutationOptions } from '@tanstack/vue-query';
 
 import { client } from '../client.gen';
-import { auditEventList, budgetsCategoryList, budgetsLineCreate, budgetsLineHistory, budgetsLineList, budgetsLineReplace, budgetsVarianceRead, claimsClaimCreate, claimsClaimDecide, claimsClaimList, claimsClaimRead, claimsClaimSubmit, claimsClaimWithdraw, claimsDecisionQueue, claimsLineAdd, claimsLineVoid, confirmationsRequestDecide, confirmationsRequestRead, filesFileDelete, filesFileRead, filesFileUpload, gatewayModelComplete, gatewayModelList, gatewayUsageRead, knowledgeBatchApprove, knowledgeBatchCancel, knowledgeBatchCreate, knowledgeBatchList, knowledgeBatchPrepare, knowledgeBatchPreview, knowledgeBatchRead, knowledgeBatchReject, knowledgeBatchSubmit, knowledgeBatchUndo, knowledgeBatchUpload, knowledgeCollectionCreate, knowledgeCollectionList, knowledgeCollectionRead, knowledgeDocumentErase, knowledgeSearchLogList, knowledgeSearchRun, knowledgeStatusRead, type Options, platformHealthRead, spendMonthClose, spendMonthList, spendStatementImport, spendStatementList, spendStatementPreview, spendStatementVoid, usersCliLoginCreate, usersCliLoginList, usersCliLoginRevoke, usersCliLoginStart, usersDepartmentList, usersDirectoryList, usersSelfRead, usersSessionEnd, usersSessionFinish, usersSessionStart } from '../sdk.gen';
-import type { AuditEventListData, AuditEventListError, AuditEventListResponse, BudgetsCategoryListData, BudgetsCategoryListError, BudgetsCategoryListResponse, BudgetsLineCreateData, BudgetsLineCreateError, BudgetsLineCreateResponse, BudgetsLineHistoryData, BudgetsLineHistoryError, BudgetsLineHistoryResponse, BudgetsLineListData, BudgetsLineListError, BudgetsLineListResponse, BudgetsLineReplaceData, BudgetsLineReplaceError, BudgetsLineReplaceResponse, BudgetsVarianceReadData, BudgetsVarianceReadError, BudgetsVarianceReadResponse, ClaimsClaimCreateData, ClaimsClaimCreateError, ClaimsClaimCreateResponse, ClaimsClaimDecideData, ClaimsClaimDecideError, ClaimsClaimDecideResponse, ClaimsClaimListData, ClaimsClaimListError, ClaimsClaimListResponse, ClaimsClaimReadData, ClaimsClaimReadError, ClaimsClaimReadResponse, ClaimsClaimSubmitData, ClaimsClaimSubmitError, ClaimsClaimSubmitResponse, ClaimsClaimWithdrawData, ClaimsClaimWithdrawError, ClaimsClaimWithdrawResponse, ClaimsDecisionQueueData, ClaimsDecisionQueueError, ClaimsDecisionQueueResponse, ClaimsLineAddData, ClaimsLineAddError, ClaimsLineAddResponse, ClaimsLineVoidData, ClaimsLineVoidError, ClaimsLineVoidResponse, ConfirmationsRequestDecideData, ConfirmationsRequestDecideError, ConfirmationsRequestDecideResponse, ConfirmationsRequestReadData, ConfirmationsRequestReadError, ConfirmationsRequestReadResponse, FilesFileDeleteData, FilesFileDeleteError, FilesFileDeleteResponse, FilesFileReadData, FilesFileReadError, FilesFileUploadData, FilesFileUploadError, FilesFileUploadResponse, GatewayModelCompleteData, GatewayModelCompleteError, GatewayModelCompleteResponse, GatewayModelListData, GatewayModelListError, GatewayModelListResponse, GatewayUsageReadData, GatewayUsageReadError, GatewayUsageReadResponse, KnowledgeBatchApproveData, KnowledgeBatchApproveError, KnowledgeBatchApproveResponse, KnowledgeBatchCancelData, KnowledgeBatchCancelError, KnowledgeBatchCancelResponse, KnowledgeBatchCreateData, KnowledgeBatchCreateError, KnowledgeBatchCreateResponse, KnowledgeBatchListData, KnowledgeBatchListError, KnowledgeBatchListResponse, KnowledgeBatchPrepareData, KnowledgeBatchPrepareError, KnowledgeBatchPrepareResponse, KnowledgeBatchPreviewData, KnowledgeBatchPreviewError, KnowledgeBatchPreviewResponse, KnowledgeBatchReadData, KnowledgeBatchReadError, KnowledgeBatchReadResponse, KnowledgeBatchRejectData, KnowledgeBatchRejectError, KnowledgeBatchRejectResponse, KnowledgeBatchSubmitData, KnowledgeBatchSubmitError, KnowledgeBatchSubmitResponse, KnowledgeBatchUndoData, KnowledgeBatchUndoError, KnowledgeBatchUndoResponse, KnowledgeBatchUploadData, KnowledgeBatchUploadError, KnowledgeBatchUploadResponse, KnowledgeCollectionCreateData, KnowledgeCollectionCreateError, KnowledgeCollectionCreateResponse, KnowledgeCollectionListData, KnowledgeCollectionListError, KnowledgeCollectionListResponse, KnowledgeCollectionReadData, KnowledgeCollectionReadError, KnowledgeCollectionReadResponse, KnowledgeDocumentEraseData, KnowledgeDocumentEraseError, KnowledgeDocumentEraseResponse, KnowledgeSearchLogListData, KnowledgeSearchLogListError, KnowledgeSearchLogListResponse, KnowledgeSearchRunData, KnowledgeSearchRunError, KnowledgeSearchRunResponse, KnowledgeStatusReadData, KnowledgeStatusReadError, KnowledgeStatusReadResponse, PlatformHealthReadData, PlatformHealthReadError, PlatformHealthReadResponse, SpendMonthCloseData, SpendMonthCloseError, SpendMonthCloseResponse, SpendMonthListData, SpendMonthListError, SpendMonthListResponse, SpendStatementImportData, SpendStatementImportError, SpendStatementImportResponse, SpendStatementListData, SpendStatementListError, SpendStatementListResponse, SpendStatementPreviewData, SpendStatementPreviewError, SpendStatementPreviewResponse, SpendStatementVoidData, SpendStatementVoidError, SpendStatementVoidResponse, UsersCliLoginCreateData, UsersCliLoginCreateError, UsersCliLoginCreateResponse, UsersCliLoginListData, UsersCliLoginListError, UsersCliLoginListResponse, UsersCliLoginRevokeData, UsersCliLoginRevokeError, UsersCliLoginRevokeResponse, UsersCliLoginStartData, UsersCliLoginStartError, UsersDepartmentListData, UsersDepartmentListError, UsersDepartmentListResponse, UsersDirectoryListData, UsersDirectoryListError, UsersDirectoryListResponse, UsersSelfReadData, UsersSelfReadError, UsersSelfReadResponse, UsersSessionEndData, UsersSessionEndError, UsersSessionEndResponse, UsersSessionFinishData, UsersSessionFinishError, UsersSessionStartData, UsersSessionStartError } from '../types.gen';
+import { agentCliApprovalCreate, agentCliApprovalStart, agentConfirmationDecide, agentConfirmationRead, agentModelChatCompletion, agentModelList, agentMyLoginList, agentMyLoginSignOut, agentMyModelUsageRead, auditEventList, budgetsCategoryList, budgetsLineCreate, budgetsLineHistory, budgetsLineList, budgetsLineReplace, budgetsMonthClose, budgetsMonthList, budgetsVarianceRead, claimsClaimCreate, claimsClaimDecide, claimsClaimList, claimsClaimRead, claimsClaimSubmit, claimsClaimWithdraw, claimsDecisionQueue, claimsLineAdd, claimsLineVoid, filesFileDelete, filesFileRead, filesFileUpload, knowledgeBatchApprove, knowledgeBatchCancel, knowledgeBatchCreate, knowledgeBatchList, knowledgeBatchPrepare, knowledgeBatchPreview, knowledgeBatchRead, knowledgeBatchReject, knowledgeBatchSubmit, knowledgeBatchUndo, knowledgeBatchUpload, knowledgeCollectionCreate, knowledgeCollectionList, knowledgeCollectionRead, knowledgeDocumentErase, knowledgeSearchLogList, knowledgeSearchRun, knowledgeStatusRead, type Options, platformHealthRead, usersDepartmentList, usersDirectoryList, usersSelfRead, usersSessionEnd, usersSessionFinish, usersSessionStart } from '../sdk.gen';
+import type { AgentCliApprovalCreateData, AgentCliApprovalCreateError, AgentCliApprovalCreateResponse, AgentCliApprovalStartData, AgentCliApprovalStartError, AgentConfirmationDecideData, AgentConfirmationDecideError, AgentConfirmationDecideResponse, AgentConfirmationReadData, AgentConfirmationReadError, AgentConfirmationReadResponse, AgentModelChatCompletionData, AgentModelChatCompletionError, AgentModelChatCompletionResponse, AgentModelListData, AgentModelListError, AgentModelListResponse, AgentMyLoginListData, AgentMyLoginListError, AgentMyLoginListResponse, AgentMyLoginSignOutData, AgentMyLoginSignOutError, AgentMyLoginSignOutResponse, AgentMyModelUsageReadData, AgentMyModelUsageReadError, AgentMyModelUsageReadResponse, AuditEventListData, AuditEventListError, AuditEventListResponse, BudgetsCategoryListData, BudgetsCategoryListError, BudgetsCategoryListResponse, BudgetsLineCreateData, BudgetsLineCreateError, BudgetsLineCreateResponse, BudgetsLineHistoryData, BudgetsLineHistoryError, BudgetsLineHistoryResponse, BudgetsLineListData, BudgetsLineListError, BudgetsLineListResponse, BudgetsLineReplaceData, BudgetsLineReplaceError, BudgetsLineReplaceResponse, BudgetsMonthCloseData, BudgetsMonthCloseError, BudgetsMonthCloseResponse, BudgetsMonthListData, BudgetsMonthListError, BudgetsMonthListResponse, BudgetsVarianceReadData, BudgetsVarianceReadError, BudgetsVarianceReadResponse, ClaimsClaimCreateData, ClaimsClaimCreateError, ClaimsClaimCreateResponse, ClaimsClaimDecideData, ClaimsClaimDecideError, ClaimsClaimDecideResponse, ClaimsClaimListData, ClaimsClaimListError, ClaimsClaimListResponse, ClaimsClaimReadData, ClaimsClaimReadError, ClaimsClaimReadResponse, ClaimsClaimSubmitData, ClaimsClaimSubmitError, ClaimsClaimSubmitResponse, ClaimsClaimWithdrawData, ClaimsClaimWithdrawError, ClaimsClaimWithdrawResponse, ClaimsDecisionQueueData, ClaimsDecisionQueueError, ClaimsDecisionQueueResponse, ClaimsLineAddData, ClaimsLineAddError, ClaimsLineAddResponse, ClaimsLineVoidData, ClaimsLineVoidError, ClaimsLineVoidResponse, FilesFileDeleteData, FilesFileDeleteError, FilesFileDeleteResponse, FilesFileReadData, FilesFileReadError, FilesFileUploadData, FilesFileUploadError, FilesFileUploadResponse, KnowledgeBatchApproveData, KnowledgeBatchApproveError, KnowledgeBatchApproveResponse, KnowledgeBatchCancelData, KnowledgeBatchCancelError, KnowledgeBatchCancelResponse, KnowledgeBatchCreateData, KnowledgeBatchCreateError, KnowledgeBatchCreateResponse, KnowledgeBatchListData, KnowledgeBatchListError, KnowledgeBatchListResponse, KnowledgeBatchPrepareData, KnowledgeBatchPrepareError, KnowledgeBatchPrepareResponse, KnowledgeBatchPreviewData, KnowledgeBatchPreviewError, KnowledgeBatchPreviewResponse, KnowledgeBatchReadData, KnowledgeBatchReadError, KnowledgeBatchReadResponse, KnowledgeBatchRejectData, KnowledgeBatchRejectError, KnowledgeBatchRejectResponse, KnowledgeBatchSubmitData, KnowledgeBatchSubmitError, KnowledgeBatchSubmitResponse, KnowledgeBatchUndoData, KnowledgeBatchUndoError, KnowledgeBatchUndoResponse, KnowledgeBatchUploadData, KnowledgeBatchUploadError, KnowledgeBatchUploadResponse, KnowledgeCollectionCreateData, KnowledgeCollectionCreateError, KnowledgeCollectionCreateResponse, KnowledgeCollectionListData, KnowledgeCollectionListError, KnowledgeCollectionListResponse, KnowledgeCollectionReadData, KnowledgeCollectionReadError, KnowledgeCollectionReadResponse, KnowledgeDocumentEraseData, KnowledgeDocumentEraseError, KnowledgeDocumentEraseResponse, KnowledgeSearchLogListData, KnowledgeSearchLogListError, KnowledgeSearchLogListResponse, KnowledgeSearchRunData, KnowledgeSearchRunError, KnowledgeSearchRunResponse, KnowledgeStatusReadData, KnowledgeStatusReadError, KnowledgeStatusReadResponse, PlatformHealthReadData, PlatformHealthReadError, PlatformHealthReadResponse, UsersDepartmentListData, UsersDepartmentListError, UsersDepartmentListResponse, UsersDirectoryListData, UsersDirectoryListError, UsersDirectoryListResponse, UsersSelfReadData, UsersSelfReadError, UsersSelfReadResponse, UsersSessionEndData, UsersSessionEndError, UsersSessionEndResponse, UsersSessionFinishData, UsersSessionFinishError, UsersSessionStartData, UsersSessionStartError } from '../types.gen';
+
+/**
+ * Create Cli Login
+ *
+ * Finish a CLI login with the code the browser returned. The token is shown once.
+ */
+export const agentCliApprovalCreateMutation = (options?: Partial<Options<AgentCliApprovalCreateData>>): UseMutationOptions<AgentCliApprovalCreateResponse, AgentCliApprovalCreateError, Options<AgentCliApprovalCreateData>> => {
+    const mutationOptions: UseMutationOptions<AgentCliApprovalCreateResponse, AgentCliApprovalCreateError, Options<AgentCliApprovalCreateData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await agentCliApprovalCreate({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
 
 export type QueryKey<TOptions extends Options> = [
     Pick<TOptions, 'baseUrl' | 'body' | 'headers' | 'path' | 'query'> & {
@@ -39,6 +58,163 @@ const createQueryKey = <TOptions extends Options>(id: string, options?: TOptions
     return [params];
 };
 
+export const agentCliApprovalStartQueryKey = (options: Options<AgentCliApprovalStartData>) => createQueryKey('agentCliApprovalStart', options);
+
+/**
+ * Start Cli Login
+ *
+ * Start a CLI login. Redirects the browser to the identity provider, which returns the code to a listener on this machine.
+ */
+export const agentCliApprovalStartOptions = (options: Options<AgentCliApprovalStartData>) => queryOptions<unknown, AgentCliApprovalStartError, unknown, ReturnType<typeof agentCliApprovalStartQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await agentCliApprovalStart({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: agentCliApprovalStartQueryKey(options)
+});
+
+export const agentMyModelUsageReadQueryKey = (options?: Options<AgentMyModelUsageReadData>) => createQueryKey('agentMyModelUsageRead', options);
+
+/**
+ * Usage Today
+ *
+ * Read today's model requests and tokens for the signed-in person. Counts only.
+ */
+export const agentMyModelUsageReadOptions = (options?: Options<AgentMyModelUsageReadData>) => queryOptions<AgentMyModelUsageReadResponse, AgentMyModelUsageReadError, AgentMyModelUsageReadResponse, ReturnType<typeof agentMyModelUsageReadQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await agentMyModelUsageRead({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: agentMyModelUsageReadQueryKey(options)
+});
+
+/**
+ * Chat Completions
+ *
+ * Send an OpenAI-compatible chat completion to a model on the gateway allowlist.
+ */
+export const agentModelChatCompletionMutation = (options?: Partial<Options<AgentModelChatCompletionData>>): UseMutationOptions<AgentModelChatCompletionResponse, AgentModelChatCompletionError, Options<AgentModelChatCompletionData>> => {
+    const mutationOptions: UseMutationOptions<AgentModelChatCompletionResponse, AgentModelChatCompletionError, Options<AgentModelChatCompletionData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await agentModelChatCompletion({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+export const agentModelListQueryKey = (options?: Options<AgentModelListData>) => createQueryKey('agentModelList', options);
+
+/**
+ * List Models
+ *
+ * List the models the gateway forwards.
+ */
+export const agentModelListOptions = (options?: Options<AgentModelListData>) => queryOptions<AgentModelListResponse, AgentModelListError, AgentModelListResponse, ReturnType<typeof agentModelListQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await agentModelList({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: agentModelListQueryKey(options)
+});
+
+export const agentConfirmationReadQueryKey = (options: Options<AgentConfirmationReadData>) => createQueryKey('agentConfirmationRead', options);
+
+/**
+ * Read Confirmation
+ *
+ * Check whether the person has approved a confirmation.
+ */
+export const agentConfirmationReadOptions = (options: Options<AgentConfirmationReadData>) => queryOptions<AgentConfirmationReadResponse, AgentConfirmationReadError, AgentConfirmationReadResponse, ReturnType<typeof agentConfirmationReadQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await agentConfirmationRead({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: agentConfirmationReadQueryKey(options)
+});
+
+/**
+ * Decide Confirmation
+ *
+ * Approve or reject a pending confirmation. Only a browser sign-in may do this.
+ */
+export const agentConfirmationDecideMutation = (options?: Partial<Options<AgentConfirmationDecideData>>): UseMutationOptions<AgentConfirmationDecideResponse, AgentConfirmationDecideError, Options<AgentConfirmationDecideData>> => {
+    const mutationOptions: UseMutationOptions<AgentConfirmationDecideResponse, AgentConfirmationDecideError, Options<AgentConfirmationDecideData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await agentConfirmationDecide({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+export const agentMyLoginListQueryKey = (options?: Options<AgentMyLoginListData>) => createQueryKey('agentMyLoginList', options);
+
+/**
+ * List Cli Logins
+ *
+ * List the caller's CLI logins, newest first, with their state.
+ */
+export const agentMyLoginListOptions = (options?: Options<AgentMyLoginListData>) => queryOptions<AgentMyLoginListResponse, AgentMyLoginListError, AgentMyLoginListResponse, ReturnType<typeof agentMyLoginListQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await agentMyLoginList({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: agentMyLoginListQueryKey(options)
+});
+
+/**
+ * Revoke Cli Login
+ *
+ * Revoke one of the caller's CLI logins. Only a browser sign-in may do this.
+ */
+export const agentMyLoginSignOutMutation = (options?: Partial<Options<AgentMyLoginSignOutData>>): UseMutationOptions<AgentMyLoginSignOutResponse, AgentMyLoginSignOutError, Options<AgentMyLoginSignOutData>> => {
+    const mutationOptions: UseMutationOptions<AgentMyLoginSignOutResponse, AgentMyLoginSignOutError, Options<AgentMyLoginSignOutData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await agentMyLoginSignOut({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
 export const auditEventListQueryKey = (options?: Options<AuditEventListData>) => createQueryKey('auditEventList', options);
 
 /**
@@ -64,7 +240,7 @@ export const budgetsCategoryListQueryKey = (options?: Options<BudgetsCategoryLis
 /**
  * List Categories
  *
- * List the spend categories that budget lines and card rows use.
+ * List the spend categories that budget lines and claim lines use.
  */
 export const budgetsCategoryListOptions = (options?: Options<BudgetsCategoryListData>) => queryOptions<BudgetsCategoryListResponse, BudgetsCategoryListError, BudgetsCategoryListResponse, ReturnType<typeof budgetsCategoryListQueryKey>>({
     queryFn: async ({ queryKey, signal }) => {
@@ -156,6 +332,45 @@ export const budgetsLineHistoryOptions = (options: Options<BudgetsLineHistoryDat
     },
     queryKey: budgetsLineHistoryQueryKey(options)
 });
+
+export const budgetsMonthListQueryKey = (options?: Options<BudgetsMonthListData>) => createQueryKey('budgetsMonthList', options);
+
+/**
+ * List Closed Months
+ *
+ * List closed months, newest first. Finance and admin only.
+ */
+export const budgetsMonthListOptions = (options?: Options<BudgetsMonthListData>) => queryOptions<BudgetsMonthListResponse, BudgetsMonthListError, BudgetsMonthListResponse, ReturnType<typeof budgetsMonthListQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await budgetsMonthList({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: budgetsMonthListQueryKey(options)
+});
+
+/**
+ * Close Month
+ *
+ * Close a month with a reason. Afterwards no claim line for that month can be added or changed, and a closed month never reopens. An agent's request waits for the person's confirmation.
+ */
+export const budgetsMonthCloseMutation = (options?: Partial<Options<BudgetsMonthCloseData>>): UseMutationOptions<BudgetsMonthCloseResponse, BudgetsMonthCloseError, Options<BudgetsMonthCloseData>> => {
+    const mutationOptions: UseMutationOptions<BudgetsMonthCloseResponse, BudgetsMonthCloseError, Options<BudgetsMonthCloseData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await budgetsMonthClose({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
 
 export const budgetsVarianceReadQueryKey = (options: Options<BudgetsVarianceReadData>) => createQueryKey('budgetsVarianceRead', options);
 
@@ -351,123 +566,6 @@ export const claimsClaimWithdrawMutation = (options?: Partial<Options<ClaimsClai
     return mutationOptions;
 };
 
-export const usersCliLoginListQueryKey = (options?: Options<UsersCliLoginListData>) => createQueryKey('usersCliLoginList', options);
-
-/**
- * List Cli Logins
- *
- * List the caller's CLI logins, newest first, with their state.
- */
-export const usersCliLoginListOptions = (options?: Options<UsersCliLoginListData>) => queryOptions<UsersCliLoginListResponse, UsersCliLoginListError, UsersCliLoginListResponse, ReturnType<typeof usersCliLoginListQueryKey>>({
-    queryFn: async ({ queryKey, signal }) => {
-        const { data } = await usersCliLoginList({
-            ...options,
-            ...queryKey[0],
-            signal,
-            throwOnError: true
-        });
-        return data;
-    },
-    queryKey: usersCliLoginListQueryKey(options)
-});
-
-/**
- * Create Cli Login
- *
- * Finish a CLI login with the code the browser returned. The token is shown once.
- */
-export const usersCliLoginCreateMutation = (options?: Partial<Options<UsersCliLoginCreateData>>): UseMutationOptions<UsersCliLoginCreateResponse, UsersCliLoginCreateError, Options<UsersCliLoginCreateData>> => {
-    const mutationOptions: UseMutationOptions<UsersCliLoginCreateResponse, UsersCliLoginCreateError, Options<UsersCliLoginCreateData>> = {
-        mutationFn: async (fnOptions) => {
-            const { data } = await usersCliLoginCreate({
-                ...options,
-                ...fnOptions,
-                throwOnError: true
-            });
-            return data;
-        }
-    };
-    return mutationOptions;
-};
-
-export const usersCliLoginStartQueryKey = (options: Options<UsersCliLoginStartData>) => createQueryKey('usersCliLoginStart', options);
-
-/**
- * Start Cli Login
- *
- * Start a CLI login. Redirects the browser to the identity provider, which returns the code to a listener on this machine.
- */
-export const usersCliLoginStartOptions = (options: Options<UsersCliLoginStartData>) => queryOptions<unknown, UsersCliLoginStartError, unknown, ReturnType<typeof usersCliLoginStartQueryKey>>({
-    queryFn: async ({ queryKey, signal }) => {
-        const { data } = await usersCliLoginStart({
-            ...options,
-            ...queryKey[0],
-            signal,
-            throwOnError: true
-        });
-        return data;
-    },
-    queryKey: usersCliLoginStartQueryKey(options)
-});
-
-/**
- * Revoke Cli Login
- *
- * Revoke one of the caller's CLI logins. Only a browser sign-in may do this.
- */
-export const usersCliLoginRevokeMutation = (options?: Partial<Options<UsersCliLoginRevokeData>>): UseMutationOptions<UsersCliLoginRevokeResponse, UsersCliLoginRevokeError, Options<UsersCliLoginRevokeData>> => {
-    const mutationOptions: UseMutationOptions<UsersCliLoginRevokeResponse, UsersCliLoginRevokeError, Options<UsersCliLoginRevokeData>> = {
-        mutationFn: async (fnOptions) => {
-            const { data } = await usersCliLoginRevoke({
-                ...options,
-                ...fnOptions,
-                throwOnError: true
-            });
-            return data;
-        }
-    };
-    return mutationOptions;
-};
-
-export const confirmationsRequestReadQueryKey = (options: Options<ConfirmationsRequestReadData>) => createQueryKey('confirmationsRequestRead', options);
-
-/**
- * Read Confirmation
- *
- * Check whether the person has approved a confirmation.
- */
-export const confirmationsRequestReadOptions = (options: Options<ConfirmationsRequestReadData>) => queryOptions<ConfirmationsRequestReadResponse, ConfirmationsRequestReadError, ConfirmationsRequestReadResponse, ReturnType<typeof confirmationsRequestReadQueryKey>>({
-    queryFn: async ({ queryKey, signal }) => {
-        const { data } = await confirmationsRequestRead({
-            ...options,
-            ...queryKey[0],
-            signal,
-            throwOnError: true
-        });
-        return data;
-    },
-    queryKey: confirmationsRequestReadQueryKey(options)
-});
-
-/**
- * Decide Confirmation
- *
- * Approve or reject a pending confirmation. Only a browser sign-in may do this.
- */
-export const confirmationsRequestDecideMutation = (options?: Partial<Options<ConfirmationsRequestDecideData>>): UseMutationOptions<ConfirmationsRequestDecideResponse, ConfirmationsRequestDecideError, Options<ConfirmationsRequestDecideData>> => {
-    const mutationOptions: UseMutationOptions<ConfirmationsRequestDecideResponse, ConfirmationsRequestDecideError, Options<ConfirmationsRequestDecideData>> = {
-        mutationFn: async (fnOptions) => {
-            const { data } = await confirmationsRequestDecide({
-                ...options,
-                ...fnOptions,
-                throwOnError: true
-            });
-            return data;
-        }
-    };
-    return mutationOptions;
-};
-
 /**
  * Upload File
  *
@@ -524,65 +622,6 @@ export const filesFileReadOptions = (options: Options<FilesFileReadData>) => que
         return data;
     },
     queryKey: filesFileReadQueryKey(options)
-});
-
-export const gatewayUsageReadQueryKey = (options?: Options<GatewayUsageReadData>) => createQueryKey('gatewayUsageRead', options);
-
-/**
- * Usage Today
- *
- * Read today's model requests and tokens for the signed-in person. Counts only.
- */
-export const gatewayUsageReadOptions = (options?: Options<GatewayUsageReadData>) => queryOptions<GatewayUsageReadResponse, GatewayUsageReadError, GatewayUsageReadResponse, ReturnType<typeof gatewayUsageReadQueryKey>>({
-    queryFn: async ({ queryKey, signal }) => {
-        const { data } = await gatewayUsageRead({
-            ...options,
-            ...queryKey[0],
-            signal,
-            throwOnError: true
-        });
-        return data;
-    },
-    queryKey: gatewayUsageReadQueryKey(options)
-});
-
-/**
- * Chat Completions
- *
- * Send an OpenAI-compatible chat completion to a model on the gateway allowlist.
- */
-export const gatewayModelCompleteMutation = (options?: Partial<Options<GatewayModelCompleteData>>): UseMutationOptions<GatewayModelCompleteResponse, GatewayModelCompleteError, Options<GatewayModelCompleteData>> => {
-    const mutationOptions: UseMutationOptions<GatewayModelCompleteResponse, GatewayModelCompleteError, Options<GatewayModelCompleteData>> = {
-        mutationFn: async (fnOptions) => {
-            const { data } = await gatewayModelComplete({
-                ...options,
-                ...fnOptions,
-                throwOnError: true
-            });
-            return data;
-        }
-    };
-    return mutationOptions;
-};
-
-export const gatewayModelListQueryKey = (options?: Options<GatewayModelListData>) => createQueryKey('gatewayModelList', options);
-
-/**
- * List Models
- *
- * List the models the gateway forwards.
- */
-export const gatewayModelListOptions = (options?: Options<GatewayModelListData>) => queryOptions<GatewayModelListResponse, GatewayModelListError, GatewayModelListResponse, ReturnType<typeof gatewayModelListQueryKey>>({
-    queryFn: async ({ queryKey, signal }) => {
-        const { data } = await gatewayModelList({
-            ...options,
-            ...queryKey[0],
-            signal,
-            throwOnError: true
-        });
-        return data;
-    },
-    queryKey: gatewayModelListQueryKey(options)
 });
 
 export const platformHealthReadQueryKey = (options?: Options<PlatformHealthReadData>) => createQueryKey('platformHealthRead', options);
@@ -953,128 +992,12 @@ export const knowledgeStatusReadOptions = (options?: Options<KnowledgeStatusRead
     queryKey: knowledgeStatusReadQueryKey(options)
 });
 
-export const spendMonthListQueryKey = (options?: Options<SpendMonthListData>) => createQueryKey('spendMonthList', options);
-
-/**
- * List Closed Months
- *
- * List closed months, newest first.
- */
-export const spendMonthListOptions = (options?: Options<SpendMonthListData>) => queryOptions<SpendMonthListResponse, SpendMonthListError, SpendMonthListResponse, ReturnType<typeof spendMonthListQueryKey>>({
-    queryFn: async ({ queryKey, signal }) => {
-        const { data } = await spendMonthList({
-            ...options,
-            ...queryKey[0],
-            signal,
-            throwOnError: true
-        });
-        return data;
-    },
-    queryKey: spendMonthListQueryKey(options)
-});
-
-/**
- * Close Month
- *
- * Close a month with a reason. Afterwards no spend for that month can be imported or voided. An agent's request waits for the person's confirmation.
- */
-export const spendMonthCloseMutation = (options?: Partial<Options<SpendMonthCloseData>>): UseMutationOptions<SpendMonthCloseResponse, SpendMonthCloseError, Options<SpendMonthCloseData>> => {
-    const mutationOptions: UseMutationOptions<SpendMonthCloseResponse, SpendMonthCloseError, Options<SpendMonthCloseData>> = {
-        mutationFn: async (fnOptions) => {
-            const { data } = await spendMonthClose({
-                ...options,
-                ...fnOptions,
-                throwOnError: true
-            });
-            return data;
-        }
-    };
-    return mutationOptions;
-};
-
-export const spendStatementListQueryKey = (options?: Options<SpendStatementListData>) => createQueryKey('spendStatementList', options);
-
-/**
- * List Statements
- *
- * List imported card statements, newest first. Voided statements are included.
- */
-export const spendStatementListOptions = (options?: Options<SpendStatementListData>) => queryOptions<SpendStatementListResponse, SpendStatementListError, SpendStatementListResponse, ReturnType<typeof spendStatementListQueryKey>>({
-    queryFn: async ({ queryKey, signal }) => {
-        const { data } = await spendStatementList({
-            ...options,
-            ...queryKey[0],
-            signal,
-            throwOnError: true
-        });
-        return data;
-    },
-    queryKey: spendStatementListQueryKey(options)
-});
-
-/**
- * Import Statement
- *
- * Import a card statement CSV. Every row is saved, or none is when a row has an error or a duplicate.
- */
-export const spendStatementImportMutation = (options?: Partial<Options<SpendStatementImportData>>): UseMutationOptions<SpendStatementImportResponse, SpendStatementImportError, Options<SpendStatementImportData>> => {
-    const mutationOptions: UseMutationOptions<SpendStatementImportResponse, SpendStatementImportError, Options<SpendStatementImportData>> = {
-        mutationFn: async (fnOptions) => {
-            const { data } = await spendStatementImport({
-                ...options,
-                ...fnOptions,
-                throwOnError: true
-            });
-            return data;
-        }
-    };
-    return mutationOptions;
-};
-
-/**
- * Preview Statement
- *
- * Check a card statement CSV without saving it. Lists every row error and duplicate.
- */
-export const spendStatementPreviewMutation = (options?: Partial<Options<SpendStatementPreviewData>>): UseMutationOptions<SpendStatementPreviewResponse, SpendStatementPreviewError, Options<SpendStatementPreviewData>> => {
-    const mutationOptions: UseMutationOptions<SpendStatementPreviewResponse, SpendStatementPreviewError, Options<SpendStatementPreviewData>> = {
-        mutationFn: async (fnOptions) => {
-            const { data } = await spendStatementPreview({
-                ...options,
-                ...fnOptions,
-                throwOnError: true
-            });
-            return data;
-        }
-    };
-    return mutationOptions;
-};
-
-/**
- * Void Statement
- *
- * Void an imported card statement with a reason. Its rows stop counting as spend but are kept. An agent's request waits for the person's confirmation.
- */
-export const spendStatementVoidMutation = (options?: Partial<Options<SpendStatementVoidData>>): UseMutationOptions<SpendStatementVoidResponse, SpendStatementVoidError, Options<SpendStatementVoidData>> => {
-    const mutationOptions: UseMutationOptions<SpendStatementVoidResponse, SpendStatementVoidError, Options<SpendStatementVoidData>> = {
-        mutationFn: async (fnOptions) => {
-            const { data } = await spendStatementVoid({
-                ...options,
-                ...fnOptions,
-                throwOnError: true
-            });
-            return data;
-        }
-    };
-    return mutationOptions;
-};
-
 export const usersDepartmentListQueryKey = (options?: Options<UsersDepartmentListData>) => createQueryKey('usersDepartmentList', options);
 
 /**
  * List Departments
  *
- * List the company's departments with their ids. Budgets and card statements use these ids.
+ * List the company's departments with their ids. Budgets and claims use these ids.
  */
 export const usersDepartmentListOptions = (options?: Options<UsersDepartmentListData>) => queryOptions<UsersDepartmentListResponse, UsersDepartmentListError, UsersDepartmentListResponse, ReturnType<typeof usersDepartmentListQueryKey>>({
     queryFn: async ({ queryKey, signal }) => {

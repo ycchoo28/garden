@@ -3,22 +3,15 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response, UploadFile
-from pydantic import BaseModel
 
 from app.config import Settings, get_settings
-from app.core.confirmations import confirm_agent_action
+from app.core.agent import confirm_agent_action
+from app.core.files.schemas import UploadedFileOut
 from app.core.files.service import FileService, get_file_service
 from app.core.users import CurrentPerson, require
 from app.shared.operations import op
 
 router = APIRouter()
-
-
-class UploadedFileOut(BaseModel):
-    sha256: str
-    size_bytes: int
-    content_type: str
-    url: str
 
 
 @router.post(

@@ -24,8 +24,8 @@ from garden.jsonio import as_object, as_text
 from garden.pkce import challenge_for, new_verifier
 from garden.portal import PortalClient
 
-AUTHORIZE_PATH = "/api/cli-logins/authorize"
-CREATE_PATH = "/api/cli-logins"
+AUTHORIZE_PATH = "/api/agent/cli/authorize"
+CREATE_PATH = "/api/agent/cli/approvals"
 CALLBACK_PATH = "/callback"
 DEFAULT_TIMEOUT_SECONDS = 300
 
