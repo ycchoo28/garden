@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+import urllib.request
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
@@ -92,3 +93,57 @@ def store_token(
 
 def as_json(text: str) -> Any:
     return json.loads(text)
+
+
+def _read_line(fd: int) -> bytes:
+    raw = bytearray()
+    while True:
+        byte = os.read(fd, 1)
+        if not byte:
+            break
+        raw += byte
+        if byte == b"\n":
+            break
+    return bytes(raw)
+
+
+def open_sign_in(
+    env: dict[str, str], device: str, *flags: str
+) -> tuple[subprocess.Popen[str], str, str]:
+    """Start `garden login` and read its output up to the sign-in link.
+
+    Returns the process, the lines printed before the link, and the link. The pipe is read one byte
+    at a time. A buffered reader can read ahead past the link, and the lines it keeps are then
+    lost, because finish_login() reads the pipe itself. Reading the pipe directly keeps every line.
+    """
+    process = subprocess.Popen(
+        [sys.executable, "-m", "garden", "login", "--device", device, *flags],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=env,
+        cwd=ROOT,
+    )
+    assert process.stdout is not None
+    fd = process.stdout.fileno()
+    head = ""
+    while True:
+        line = _read_line(fd).decode("utf-8")
+        if not line:
+            raise AssertionError(f"`garden login` ended before the link was printed: {head!r}")
+        head += line
+        if line.startswith("  http"):
+            return process, head, line.strip()
+
+
+def finish_login(process: subprocess.Popen[str], head: str) -> subprocess.CompletedProcess[str]:
+    """The rest of `garden login`'s output, with the lines read before the link in front."""
+    rest, err = process.communicate(timeout=60)
+    return subprocess.CompletedProcess(process.args, process.returncode, head + rest, err)
+
+
+def sign_in(env: dict[str, str], device: str = "laptop-1") -> subprocess.CompletedProcess[str]:
+    """`garden login` with the browser step played: the link is followed as a browser would."""
+    process, head, link = open_sign_in(env, device, "--no-open")
+    urllib.request.urlopen(link, timeout=30).read()
+    return finish_login(process, head)

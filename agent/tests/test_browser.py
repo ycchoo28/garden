@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import os
 import subprocess
-import sys
 import urllib.request
 import webbrowser
 from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-from conftest import ROOT
+from conftest import finish_login, open_sign_in
 from fake_portal import FakePortal
 
 from garden.browser import open_link
@@ -96,28 +95,9 @@ def _login_with_browser(
     script's folder, so no other opener is found on this machine and the outcome is the script's.
     """
     run_env = dict(env, BROWSER=str(browser), PATH=str(browser.parent))
-    process = subprocess.Popen(
-        [sys.executable, "-m", "garden", "login", "--device", "laptop-3"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        env=run_env,
-        cwd=ROOT,
-    )
-    assert process.stdout is not None
-    head: list[str] = []
-    url = ""
-    for line in process.stdout:
-        head.append(line)
-        if line.startswith("  http"):
-            url = line.strip()
-            break
+    process, head, url = open_sign_in(run_env, "laptop-3")
     urllib.request.urlopen(url, timeout=30).read()
-    rest, err = process.communicate(timeout=60)
-    result = subprocess.CompletedProcess(
-        process.args, process.returncode, "".join(head) + rest, err
-    )
-    return result, url
+    return finish_login(process, head), url
 
 
 def test_a_browser_that_fails_prints_one_plain_line_and_the_noise_stays_hidden(
