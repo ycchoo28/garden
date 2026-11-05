@@ -49,3 +49,14 @@ class BudgetLine(Base):
     created_by: Mapped[uuid.UUID]
     superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     superseded_by: Mapped[uuid.UUID | None]
+
+
+class MonthClose(Base):
+    """A closed month. Once it exists, no claim line for that month can be added or changed."""
+
+    __tablename__ = "month_close"
+
+    year_month: Mapped[str] = mapped_column(String(7), primary_key=True)
+    closed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    closed_by: Mapped[uuid.UUID]
+    reason: Mapped[str] = mapped_column(Text)

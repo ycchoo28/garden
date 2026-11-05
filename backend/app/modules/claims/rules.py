@@ -1,4 +1,4 @@
-"""The claim rules that need no database: the fixed categories, the status and the month of a line.
+"""The claim rules that need no database: the status and the month of a line.
 
 A claim's status is computed from its latest approval run, so a claim cannot disagree with its
 recorded decisions.
@@ -8,10 +8,6 @@ from datetime import date
 from enum import StrEnum
 
 from app.core.approvals import RunState
-from app.modules.spend import CATEGORIES as SPEND_CATEGORIES
-
-# A line uses the spend categories, so claims and card spend count against the same budget lines.
-CATEGORIES: tuple[str, ...] = SPEND_CATEGORIES
 
 
 class ClaimStatus(StrEnum):

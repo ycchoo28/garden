@@ -22,7 +22,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from app.modules.knowledge.embedding import EMBEDDING_DIMENSIONS
+from app.modules.knowledge.reading.embedding import EMBEDDING_DIMENSIONS
 from app.shared.db import NAMING_CONVENTION
 from app.shared.ids import new_id
 

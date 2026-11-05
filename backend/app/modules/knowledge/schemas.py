@@ -9,12 +9,8 @@ from typing import Any, Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
 
-from app.modules.knowledge.permissions import KNOWLEDGE_ADMIN
-
 # The roles a collection rule may name. Only roles that exist in the portal can grant reading.
-ASSIGNABLE_ROLES: frozenset[str] = frozenset(
-    {"employee", "manager", "finance", KNOWLEDGE_ADMIN, "admin"}
-)
+ASSIGNABLE_ROLES: frozenset[str] = frozenset({"employee", "manager", "finance", "admin"})
 
 
 class StatusOut(BaseModel):

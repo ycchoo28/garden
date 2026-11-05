@@ -3,11 +3,11 @@ import { expect, test } from "@playwright/test";
 import { signIn } from "./fake-sign-in";
 import { WEB_URL } from "./urls";
 
-// Seeded with the knowledge_admin role, so it may manage collections and batches.
-const ADMIN = "noor.haddad@fernhill.example";
-// Seeded with the knowledge_admin role too. A batch must be approved by someone other than its starter.
-const APPROVER = "dev.admin@fernhill.example";
-// Seeded with no roles, so the knowledge pages are not for it.
+// Seeded with the admin role, so it may manage collections and decide batches.
+const ADMIN = "dev.admin@fernhill.example";
+// Seeded with the finance role, so it may start a batch but not decide one.
+const STARTER = "lena.fischer@fernhill.example";
+// Seeded with the employee role only, so the collection form is not for it.
 const PLAIN = "marcus.lee@fernhill.example";
 
 test("a person without the knowledge role does not see the collection form", async ({
@@ -23,7 +23,7 @@ test("a person without the knowledge role does not see the collection form", asy
   ).toHaveCount(0);
 });
 
-test("an admin creates a collection, another admin approves the batch, and search finds it", async ({
+test("an admin creates a collection, finance starts the batch, an admin approves it, and search finds it", async ({
   page,
 }) => {
   // Preparing waits on the background worker, so this test needs more than the default 30s.
@@ -34,17 +34,23 @@ test("an admin creates a collection, another admin approves the batch, and searc
   // The run number makes this passage, and a search for it, unique in a shared dev database.
   const passage = `Records are kept for seven years after the account closes. Ledger ${run}.`;
 
-  await signIn(page, ADMIN, "Noor Haddad");
+  await signIn(page, ADMIN, "Dev Admin");
   await page.goto("/collections");
   await expect(
     page.getByRole("heading", { name: "Knowledge collections" }),
   ).toBeVisible();
 
   await page.getByLabel("Name").fill(name);
-  // Preview shows only what the caller may read, so the collection must grant a role the admin holds.
-  await page.getByLabel("Role that may read it").fill("knowledge_admin");
+  // Preview shows only what the caller may read, so the collection must grant a role the starter holds.
+  await page.getByLabel("Role that may read it").fill("admin");
   await page.getByRole("button", { name: "Create collection" }).click();
+  await expect(page.getByRole("listitem").filter({ hasText: name })).toBeVisible();
 
+  // Finance starts the batch, because only finance and admin may upload it and only admin decides.
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page).toHaveURL(`${WEB_URL}/signed-out`);
+  await signIn(page, STARTER, "Lena Fischer");
+  await page.goto("/collections");
   const row = page.getByRole("listitem").filter({ hasText: name });
   await expect(row).toBeVisible();
   await row.getByRole("button", { name: "Start an import batch" }).click();
@@ -80,10 +86,10 @@ test("an admin creates a collection, another admin approves the batch, and searc
   await page.getByRole("button", { name: "Ask for approval" }).click();
   await expect(page.getByText("State: awaiting approval")).toBeVisible();
 
-  // The starter cannot decide their own batch, so they sign out and the approver signs in.
+  // The starter cannot decide their own batch, so they sign out and the admin signs in.
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(`${WEB_URL}/signed-out`);
-  await signIn(page, APPROVER, "Dev Admin");
+  await signIn(page, ADMIN, "Dev Admin");
   await page.goto(batchUrl);
   await expect(page.getByText("State: awaiting approval")).toBeVisible();
   await page.getByRole("button", { name: "Approve and apply" }).click();

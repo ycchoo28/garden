@@ -1,42 +1,17 @@
-"""Request and response shapes for the claims routes. Money goes out as a two-decimal string."""
+"""Response shapes shared by the claims features. Money goes out as a two-decimal string."""
 
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
-from app.core.approvals import Outcome
-from app.modules.claims.service import ClaimDetail, ClaimSummary, DecisionView, RunRecord
-
-Money = Annotated[Decimal, Field(gt=Decimal("0"), max_digits=14, decimal_places=2)]
-Sha256 = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
-
-
-class CreateClaimIn(BaseModel):
-    title: str = Field(min_length=1, max_length=200)
+from app.core.approvals import DecisionView
+from app.modules.claims.views import ClaimDetail, ClaimSummary, RunRecord
 
 
 class VersionIn(BaseModel):
     expected_version: int = Field(ge=1)
-
-
-class AddLineIn(VersionIn):
-    category: str = Field(min_length=1, max_length=40)
-    spent_on: date
-    amount: Money
-    description: str = Field(min_length=1, max_length=300)
-    receipt_sha256: Sha256
-
-
-class VoidLineIn(VersionIn):
-    reason: str | None = Field(default=None, max_length=300)
-
-
-class ClaimDecisionIn(VersionIn):
-    decision: Literal["approve", "reject"]
-    reason: str | None = Field(default=None, max_length=500)
 
 
 class DecisionOut(BaseModel):
@@ -165,7 +140,3 @@ class ClaimDetailOut(BaseModel):
                 can_decide=detail.can_decide,
             ),
         )
-
-
-def outcome_of(decision: Literal["approve", "reject"]) -> Outcome:
-    return Outcome.APPROVED if decision == "approve" else Outcome.REJECTED

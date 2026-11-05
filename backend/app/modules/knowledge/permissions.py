@@ -1,17 +1,30 @@
 """Roles and permissions of the knowledge module, checked by the portal."""
 
+from app.core.users import ADMIN, EMPLOYEE, FINANCE
 from app.shared.permissions import Permission, Role
-
-KNOWLEDGE_ADMIN = "knowledge_admin"
 
 # Every signed-in person holds `employee`, so every person may search. Collection rules then decide
 # which documents the search may return.
+# Finance starts batches (uploads the expense policies) but cannot decide them: the admin approves.
+# Admin manages collections, decides batches and erases documents.
 ROLES: tuple[Role, ...] = (
-    Role("employee", frozenset({"knowledge.search"})),
+    Role(EMPLOYEE, frozenset({"knowledge.search"})),
     Role(
-        KNOWLEDGE_ADMIN,
+        FINANCE,
         frozenset(
             {
+                "knowledge.collection.view",
+                "knowledge.batch.prepare",
+                "knowledge.batch.submit",
+                "knowledge.batch.cancel",
+            }
+        ),
+    ),
+    Role(
+        ADMIN,
+        frozenset(
+            {
+                "knowledge.search",
                 "knowledge.collection.view",
                 "knowledge.collection.manage",
                 "knowledge.batch.prepare",

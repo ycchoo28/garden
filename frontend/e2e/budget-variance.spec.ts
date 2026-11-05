@@ -5,26 +5,33 @@ import { WEB_URL } from './urls';
 
 const MANAGER = 'priya.nair@fernhill.example';
 const FINANCE = 'lena.fischer@fernhill.example';
-const HEADER = 'transaction_ref,posted_on,department_code,category,merchant,amount_usd';
 
-function today(): string {
+function thisMonth(): string {
   const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
-// A fresh database has no spend, so finance imports one card row per department this month first.
-// Each run uses its own references, so a database that keeps rows from earlier runs still imports.
+// A fresh database has no budget lines, so finance sets one software budget per department this month
+// first. A line from an earlier run already exists, which is fine.
 test.beforeAll(async ({ browser }) => {
   const context = await browser.newContext({ baseURL: WEB_URL });
   const page = await context.newPage();
   await signIn(page, FINANCE, 'Lena Fischer');
-  for (const department of ['design', 'engineering']) {
-    const ref = `variance-${department}-${Date.now()}`;
-    const csv = `${HEADER}\n${ref},${today()},${department},software,Figma,12.34\n`;
-    const response = await page.request.post('/api/spend/statements', {
-      multipart: { file: { name: 'variance.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) } },
+  const departments: { id: string; code: string }[] = await (
+    await page.request.get('/api/users/departments')
+  ).json();
+  for (const code of ['design', 'operations']) {
+    const department = departments.find((item) => item.code === code);
+    expect(department).toBeDefined();
+    const response = await page.request.post('/api/budgets/lines', {
+      data: {
+        department_id: department?.id,
+        year_month: thisMonth(),
+        category: 'software',
+        amount: '1200.00',
+      },
     });
-    expect(response.status()).toBe(201);
+    expect([201, 409]).toContain(response.status());
   }
   await context.close();
 });
@@ -35,7 +42,7 @@ test('a design manager sees only the design department on the variance page', as
   const table = page.getByRole('table', { name: /Budget variance from/ });
   await expect(table).toBeVisible();
   await expect(table.getByRole('row', { name: /Design/ }).first()).toBeVisible();
-  await expect(table.getByRole('row', { name: /Engineering/ })).toHaveCount(0);
+  await expect(table.getByRole('row', { name: /Operations/ })).toHaveCount(0);
 });
 
 test('finance sees every department on the variance page', async ({ page }) => {
@@ -43,5 +50,5 @@ test('finance sees every department on the variance page', async ({ page }) => {
   await page.goto('/budgets/variance');
   const table = page.getByRole('table', { name: /Budget variance from/ });
   await expect(table).toBeVisible();
-  await expect(table.getByRole('row', { name: /Engineering/ }).first()).toBeVisible();
+  await expect(table.getByRole('row', { name: /Operations/ }).first()).toBeVisible();
 });

@@ -79,3 +79,25 @@ type = "forbidden"
 source_modules = ["app.core.**.service", "app.core.**.access", "app.core.**.gate", "app.modules.**.service"]
 forbidden_modules = ["sqlalchemy", "app.shared.db"]
 allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Feature repositories stay private to their feature"
+type = "forbidden"
+source_modules = ["app.modules.**"]
+forbidden_modules = [
+    "app.modules.budgets.lines.repository",
+    "app.modules.budgets.months.repository",
+    "app.modules.claims.drafting.repository",
+    "app.modules.knowledge.collections.repository",
+    "app.modules.knowledge.batches.repository",
+    "app.modules.knowledge.search.repository",
+]
+# A feature may import its own repository. Nothing else may import another feature's repository.
+ignore_imports = [
+    "app.modules.budgets.lines.* -> app.modules.budgets.lines.repository",
+    "app.modules.budgets.months.* -> app.modules.budgets.months.repository",
+    "app.modules.claims.drafting.* -> app.modules.claims.drafting.repository",
+    "app.modules.knowledge.collections.* -> app.modules.knowledge.collections.repository",
+    "app.modules.knowledge.batches.* -> app.modules.knowledge.batches.repository",
+    "app.modules.knowledge.search.* -> app.modules.knowledge.search.repository",
+]
