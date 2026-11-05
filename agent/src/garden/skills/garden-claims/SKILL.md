@@ -25,8 +25,9 @@ Each command below is the operation id as words, and the MCP tool name is the sa
 
 1. Create the draft: `garden claims claim create --body '{"title": "<title>"}' --json` (`claims.claim.create`).
    Keep the returned id and `version`.
-2. Check the receipt is stored.
-   Pass the receipt's SHA-256 to `files.file.read` (`garden files file read --sha256 <hash>`).
+2. Get the receipt's SHA-256.
+   If the receipt is a file on this computer, upload it: `garden files file upload --path <receipt> --json` (`files.file.upload`), and use the `sha256` it returns.
+   To check a receipt that is already stored, pass its SHA-256 to `files.file.read` (`garden files file read --sha256 <hash>`).
    A receipt that is not stored cannot be attached.
 3. Add each line: `garden claims line add --claim-id <id> --expected-version <version> --category <category> --spent-on <YYYY-MM-DD> --amount <amount> --description "<text>" --receipt-sha256 <hash> --json` (`claims.line.add`).
 4. Read the claim again after each change, because every change moves its `version` on.
@@ -65,5 +66,6 @@ Tell the person the claim is ready, and that they must certify and submit it in 
   Tell the person the month is closed, and do not try to date the line elsewhere to get round it.
 - Amounts are money strings with two decimals, such as `"42.50"`.
   Do not send floats.
-- The `garden` command sends JSON only, so it cannot upload a receipt through `files.file.upload`.
-  Ask the person to attach the receipt in the portal, and then use its SHA-256.
+- Upload a receipt with `--path`, never inside `--body`.
+- A 403 on the upload means the person lacks `files.upload`.
+  Say so, and ask the person to attach the receipt in the portal, then give you its SHA-256.

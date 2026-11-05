@@ -10,6 +10,8 @@ import json
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -27,6 +29,34 @@ class Response:
     status: int
     headers: dict[str, str]
     body: Any
+
+
+@dataclass(frozen=True)
+class FormPart:
+    """One part of a multipart/form-data body. A file part has a filename and a content type."""
+
+    name: str
+    data: bytes
+    filename: str | None = None
+    content_type: str | None = None
+
+
+def encode_multipart(parts: Sequence[FormPart]) -> tuple[bytes, str]:
+    """The body and its Content-Type. The boundary is random, so no part's bytes can end it."""
+    boundary = uuid.uuid4().hex
+    chunks: list[bytes] = []
+    for part in parts:
+        disposition = f'form-data; name="{part.name}"'
+        if part.filename is not None:
+            # A quote or a line break in a name would end the header early, so each becomes "_".
+            safe = "".join("_" if char in '"\r\n' else char for char in part.filename)
+            disposition += f'; filename="{safe}"'
+        header = f"--{boundary}\r\nContent-Disposition: {disposition}\r\n"
+        if part.content_type is not None:
+            header += f"Content-Type: {part.content_type}\r\n"
+        chunks.append(header.encode("utf-8") + b"\r\n" + part.data + b"\r\n")
+    chunks.append(f"--{boundary}--\r\n".encode())
+    return b"".join(chunks), f"multipart/form-data; boundary={boundary}"
 
 
 def _lower_headers(message: Any) -> dict[str, str]:
@@ -60,6 +90,7 @@ class PortalClient:
         *,
         query: dict[str, Any] | None = None,
         body: Any | None = None,
+        form: Sequence[FormPart] | None = None,
         headers: dict[str, str] | None = None,
     ) -> Response:
         request_headers = {
@@ -68,7 +99,9 @@ class PortalClient:
             **(headers or {}),
         }
         data: bytes | None = None
-        if body is not None:
+        if form is not None:
+            data, request_headers["Content-Type"] = encode_multipart(form)
+        elif body is not None:
             request_headers["Content-Type"] = "application/json"
             data = json.dumps(body).encode("utf-8")
         if self.token:
@@ -122,6 +155,7 @@ _FIXES: dict[int, str] = {
     403: "Your access does not include this. Ask the person to give you the permission in Garden.",
     404: "Check the id. List the items first to find the right one.",
     409: "The item changed or the approval was already used. Read it again, then retry.",
+    413: "Use a smaller file. The problem says how large a file may be.",
     428: "Ask the person to approve this action at the link, in the browser. The command waits.",
     422: "Fix the fields listed under errors, then retry.",
     429: "Wait a minute and try again. The portal limits requests for each CLI login.",

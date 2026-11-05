@@ -6,6 +6,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import re
 import threading
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -15,6 +16,20 @@ from urllib.parse import parse_qs, urlsplit
 CONFIRMATION_HEADER = "x-garden-confirmation"
 GOOD_TOKEN = "good-token"
 EXPIRES_AT = "2099-01-01T00:00:00+00:00"
+BATCH_UPLOAD = re.compile(r"/api/knowledge/batches/([^/]+)/files")
+
+
+@dataclass
+class Upload:
+    """One multipart upload the portal received, and the status it answered with."""
+
+    route: str
+    status: int
+    field: str
+    filename: str
+    content_type: str
+    data: bytes
+    fields: dict[str, str]
 
 
 def _b64url(raw: bytes) -> str:
@@ -25,7 +40,17 @@ def _b64url(raw: bytes) -> str:
 class FakePortal:
     version: str = "v1"
     min_cli: str = "0.1.0"
-    permissions: list[str] = field(default_factory=lambda: ["files.view", "files.delete"])
+    permissions: list[str] = field(
+        default_factory=lambda: [
+            "files.view",
+            "files.delete",
+            "files.upload",
+            "knowledge.batch.prepare",
+        ]
+    )
+    # Makes the file upload gated, as a critical route is. The real contract does not gate uploads.
+    gate_uploads: bool = False
+    uploads: list[Upload] = field(default_factory=lambda: list[Upload]())
     name: str = "Marcus Lee"
     confirmations: dict[str, str] = field(default_factory=lambda: dict[str, str]())
     retries: list[str] = field(default_factory=lambda: list[str]())
@@ -64,7 +89,73 @@ class FakePortal:
         item_params = [
             {"name": "sha256", "in": "path", "required": True, "schema": {"type": "string"}}
         ]
+        file_upload = {
+            "operationId": "files.file.upload",
+            "description": "Upload one file. Accepts PDF, PNG, JPEG or plain text.",
+            "x-agent": {"confirm": self.gate_uploads, "tool": True, "save": True},
+            "x-permission": "files.upload",
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "multipart/form-data": {
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "file": {
+                                    "type": "string",
+                                    "contentMediaType": "application/octet-stream",
+                                    "title": "File",
+                                }
+                            },
+                            "required": ["file"],
+                        }
+                    }
+                },
+            },
+        }
+        batch_upload = {
+            "operationId": "knowledge.batch.upload",
+            "description": "Add one Markdown, text or PDF file to a batch that is still uploading.",
+            "x-agent": {"confirm": False, "tool": True, "save": True},
+            "x-permission": "knowledge.batch.prepare",
+            "parameters": [
+                {
+                    "name": "batch_id",
+                    "in": "path",
+                    "required": True,
+                    "schema": {"type": "string", "format": "uuid"},
+                }
+            ],
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "multipart/form-data": {
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "file": {
+                                    "type": "string",
+                                    "contentMediaType": "application/octet-stream",
+                                    "title": "File",
+                                },
+                                "translation_group": {
+                                    "anyOf": [
+                                        {"maxLength": 200, "type": "string"},
+                                        {"type": "null"},
+                                    ],
+                                    "title": "Translation Group",
+                                },
+                            },
+                            "required": ["file"],
+                        }
+                    }
+                },
+            },
+        }
+        files_path: dict[str, Any] = {"post": file_upload}
         paths: dict[str, Any] = {
+            "/api/knowledge/batches/{batch_id}/files": {"post": batch_upload},
+            "/api/files": files_path,
             "/api/files/{sha256}": {
                 "get": {
                     "operationId": "files.file.read",
@@ -91,19 +182,29 @@ class FakePortal:
             },
         }
         if self.version == "v2":
-            paths["/api/files"] = {
-                "get": {
-                    "operationId": "files.file.list",
-                    "description": "List files.",
-                    "x-agent": {"confirm": False, "tool": True, "save": True},
-                    "x-permission": "files.view",
-                }
+            files_path["get"] = {
+                "operationId": "files.file.list",
+                "description": "List files.",
+                "x-agent": {"confirm": False, "tool": True, "save": True},
+                "x-permission": "files.view",
             }
         return {"openapi": "3.1.0", "info": {"title": "garden", "version": "1"}, "paths": paths}
 
 
+def _boundary(content_type: str) -> bytes | None:
+    match = re.search(r'boundary="?([^";]+)"?', content_type)
+    return match.group(1).encode() if match else None
+
+
+def _header_param(headers: str, key: str) -> str | None:
+    match = re.search(rf'\b{key}="([^"]*)"', headers)
+    return match.group(1) if match else None
+
+
 class _Handler(BaseHTTPRequestHandler):
     fake: FakePortal
+    # The status of the last answer, so an upload records the gate's answer (428, 403 or 200).
+    sent_status: int = 0
 
     def log_message(self, format: str, *args: Any) -> None:
         return
@@ -117,6 +218,7 @@ class _Handler(BaseHTTPRequestHandler):
         problem: bool = False,
     ) -> None:
         raw = b"" if body is None else json.dumps(body).encode("utf-8")
+        self.sent_status = status
         self.send_response(status)
         self.send_header(
             "Content-Type", "application/problem+json" if problem else "application/json"
@@ -192,10 +294,80 @@ class _Handler(BaseHTTPRequestHandler):
         self._problem(404, "Not Found")
 
     def do_POST(self) -> None:
-        if urlsplit(self.path).path == "/api/agent/cli/approvals":
+        path = urlsplit(self.path).path
+        if path == "/api/agent/cli/approvals":
             self._create_login(self._body())
             return
+        if path == "/api/files":
+            self._upload(path, "files.upload", 200)
+            return
+        batch = BATCH_UPLOAD.fullmatch(path)
+        if batch is not None:
+            self._upload(path, "knowledge.batch.prepare", 201)
+            return
         self._problem(404, "Not Found")
+
+    def _upload(self, route: str, permission: str, status: int) -> None:
+        """Accepts a multipart upload the way the portal does: the same gate, and the file kept."""
+        length = int(self.headers.get("Content-Length", "0") or 0)
+        raw: bytes = self.rfile.read(length) if length else b""
+        if not self._bearer_ok():
+            self._problem(401, "Unauthorized")
+            return
+        if permission not in self.fake.permissions:
+            self._problem(403, "Forbidden")
+            return
+        boundary = _boundary(self.headers.get("Content-Type", ""))
+        if boundary is None:
+            self._problem(422, "Validation failed", detail="The body is not multipart.")
+            return
+        file_part: tuple[str, str, str, bytes] | None = None
+        texts: dict[str, str] = {}
+        for chunk in raw.split(b"--" + boundary):
+            if not chunk.strip() or chunk.startswith(b"--"):
+                continue
+            part_head, _, part_body = chunk.removeprefix(b"\r\n").partition(b"\r\n\r\n")
+            part_body = part_body.removesuffix(b"\r\n")
+            headers = part_head.decode("utf-8")
+            name = _header_param(headers, "name") or ""
+            filename = _header_param(headers, "filename")
+            type_match = re.search(r"Content-Type: (\S+)", headers)
+            content_type = type_match.group(1) if type_match else "text/plain"
+            if filename is not None:
+                file_part = (name, filename, content_type, part_body)
+            else:
+                texts[name] = part_body.decode("utf-8")
+        if file_part is None:
+            self._problem(
+                422, "Validation failed", errors=[{"field": "file", "message": "Missing"}]
+            )
+            return
+        field_name, filename, content_type, data = file_part
+        upload = Upload(
+            route=route,
+            status=0,
+            field=field_name,
+            filename=filename,
+            content_type=content_type,
+            data=data,
+            fields=texts,
+        )
+        self.fake.uploads.append(upload)
+        if self.fake.gate_uploads and not self._confirmed():
+            upload.status = self.sent_status
+            return
+        digest = hashlib.sha256(data).hexdigest()
+        upload.status = status
+        if route == "/api/files":
+            body: dict[str, Any] = {
+                "sha256": digest,
+                "size_bytes": len(data),
+                "content_type": content_type,
+                "url": f"/api/files/{digest}",
+            }
+        else:
+            body = {"batch_id": route.split("/")[4], "name": filename, "sha256": digest}
+        self._send(status, body)
 
     def do_DELETE(self) -> None:
         if not self._bearer_ok():
@@ -208,7 +380,14 @@ class _Handler(BaseHTTPRequestHandler):
         if "files.delete" not in self.fake.permissions:
             self._problem(403, "Forbidden")
             return
-        sha = path.rsplit("/", 1)[1]
+        if not self._confirmed():
+            return
+        self.fake.deleted.append(path.rsplit("/", 1)[1])
+        self._send(204)
+
+    def _confirmed(self) -> bool:
+        """The gate for a critical action. Without an approved confirmation it answers the problem
+        (428, or 403 for a retry that is not approved) and returns False, as the portal does."""
         presented = self.headers.get(CONFIRMATION_HEADER)
         if presented is None:
             confirmation_id = f"conf-{len(self.fake.confirmations) + 1}"
@@ -221,14 +400,13 @@ class _Handler(BaseHTTPRequestHandler):
                 confirmation_url=f"{self.fake.url}/agent/confirmations/{confirmation_id}",
                 expires_at=EXPIRES_AT,
             )
-            return
+            return False
         self.fake.retries.append(presented)
         if self.fake.confirmations.get(presented) != "approved":
             self._problem(403, "Forbidden", detail="This confirmation is not approved.")
-            return
+            return False
         self.fake.confirmations[presented] = "used"
-        self.fake.deleted.append(sha)
-        self._send(204)
+        return True
 
     def _manifest(self) -> dict[str, Any]:
         return {

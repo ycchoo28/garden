@@ -368,7 +368,7 @@ def _tool_arguments(parser: argparse.ArgumentParser, tool: Tool) -> None:
     parser.add_argument(
         "--json", action="store_true", help="Print JSON, and JSON errors, for agents."
     )
-    for param in (*tool.path_params, *tool.query_params):
+    for param in tool.params:
         _add_param(parser, param, required=param.required)
     if tool.body_schema is not None:
         for name, schema in as_object(tool.body_schema.get("properties")).items():
@@ -423,7 +423,7 @@ def _bool(text: str) -> bool:
 
 def _run_tool(context: _Context, tool: Tool, args: argparse.Namespace) -> None:
     arguments: dict[str, Any] = {}
-    for param in (*tool.path_params, *tool.query_params):
+    for param in tool.params:
         arguments[param.name] = getattr(args, param.name, None)
     if tool.body_schema is not None:
         arguments["body"] = _body_from(args, tool)

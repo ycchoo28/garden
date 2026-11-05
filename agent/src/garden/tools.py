@@ -14,6 +14,7 @@ from garden.jsonio import as_list, as_object, as_text, is_list, is_object
 
 HTTP_METHODS = ("get", "post", "put", "patch", "delete")
 _MAX_REF_DEPTH = 8
+_FILE_HELP = "Path to a local file to upload."
 
 
 @dataclass(frozen=True)
@@ -23,6 +24,16 @@ class Param:
     required: bool
     schema: dict[str, Any]
     description: str = ""
+
+
+@dataclass(frozen=True)
+class FormField:
+    """One field of a multipart body. A binary field takes a local file path, read at call time."""
+
+    name: str
+    binary: bool
+    # How the field appears as a tool argument. For a binary field, the argument is the path.
+    param: Param
 
 
 @dataclass(frozen=True)
@@ -37,6 +48,7 @@ class Tool:
     query_params: tuple[Param, ...] = ()
     body_schema: dict[str, Any] | None = None
     body_required: bool = False
+    form_fields: tuple[FormField, ...] = ()
 
     @property
     def name(self) -> str:
@@ -53,10 +65,15 @@ class Tool:
             return {"readOnlyHint": True}
         return {"readOnlyHint": False, "destructiveHint": self.critical}
 
+    @property
+    def params(self) -> tuple[Param, ...]:
+        """Every argument except the JSON body: path, query and form fields, in that order."""
+        return (*self.path_params, *self.query_params, *(field.param for field in self.form_fields))
+
     def input_schema(self) -> dict[str, Any]:
         properties: dict[str, Any] = {}
         required: list[str] = []
-        for param in (*self.path_params, *self.query_params):
+        for param in self.params:
             properties[param.name] = {**param.schema, "description": param.description}
             if param.required:
                 required.append(param.name)
@@ -115,6 +132,7 @@ def _tool_for(
         else:
             query_params.append(param)
     body_schema, body_required = _body(openapi, operation)
+    form_fields = _form_fields(openapi, operation)
     return Tool(
         op_id=op_id,
         method=method,
@@ -126,6 +144,7 @@ def _tool_for(
         query_params=tuple(query_params),
         body_schema=body_schema,
         body_required=body_required,
+        form_fields=form_fields,
     )
 
 
@@ -150,6 +169,49 @@ def _body(openapi: dict[str, Any], operation: dict[str, Any]) -> tuple[dict[str,
         return None, False
     schema = as_object(resolve(openapi, json_body["schema"], 0))
     return schema, bool(request_body.get("required", False))
+
+
+def _form_fields(openapi: dict[str, Any], operation: dict[str, Any]) -> tuple[FormField, ...]:
+    """The fields of a multipart/form-data body. Each binary field becomes a path argument.
+
+    A single binary field is `path`. With several, each is named after its field, as `<field>_path`.
+    """
+    request_body = as_object(operation.get("requestBody"))
+    multipart = as_object(as_object(request_body.get("content")).get("multipart/form-data"))
+    if "schema" not in multipart:
+        return ()
+    schema = as_object(resolve(openapi, multipart["schema"], 0))
+    properties = {name: as_object(raw) for name, raw in as_object(schema.get("properties")).items()}
+    required = {as_text(name) for name in as_list(schema.get("required"))}
+    binary = [name for name, prop in properties.items() if _is_binary(prop)]
+    fields: list[FormField] = []
+    for name, prop in properties.items():
+        is_required = name in required
+        if name in binary:
+            argument = "path" if len(binary) == 1 else f"{name}_path"
+            param = Param(
+                name=argument,
+                location="form",
+                required=is_required,
+                schema={"type": "string"},
+                description=_FILE_HELP,
+            )
+            fields.append(FormField(name=name, binary=True, param=param))
+        else:
+            param = Param(
+                name=name,
+                location="form",
+                required=is_required,
+                schema=prop,
+                description=as_text(prop.get("description")),
+            )
+            fields.append(FormField(name=name, binary=False, param=param))
+    return tuple(fields)
+
+
+def _is_binary(schema: dict[str, Any]) -> bool:
+    """The portal's contract marks a file with `format: binary`, or with a content media type."""
+    return schema.get("format") == "binary" or "contentMediaType" in schema
 
 
 def resolve(openapi: dict[str, Any], node: object, depth: int) -> object:

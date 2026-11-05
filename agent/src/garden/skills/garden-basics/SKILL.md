@@ -23,6 +23,19 @@ Tool names are the operation ids with dots, such as `files.file.upload`, as a co
 - Pass path and query values as flags, such as `--sha256 <value>`.
 - Pass a request body as `--body '<json>'`, `--body @file.json`, or `--body -` for stdin.
 
+## Upload a file
+
+Some tools take a file, such as `files.file.upload` and `knowledge.batch.upload`.
+Give the file as a local path, and `garden` reads it and sends it to the portal.
+
+- `garden files file upload --path <file> --json` uploads one file and returns its `sha256`, which other tools use to refer to it.
+- In MCP the tool is `files_file_upload`, and its argument is `path`.
+- Give an absolute path.
+  A relative path is read from the folder the command runs in.
+- A missing file, a folder, or a file that cannot be read is refused before anything is sent.
+- The portal checks each file's bytes, and it refuses a type it does not accept and a file over its size limit.
+  The error names the limit, so tell the person which one applies.
+
 ## Approval for critical actions
 
 Some tools are marked `approval needed`.

@@ -156,7 +156,7 @@ Use a private window for each person, because each browser keeps one session.
    The `create` command makes a draft.
    `submit` is not a command for the agent, because the route is marked `tool: false` and certifying and submitting are person-only, so the command stops with an argument error.
    Through MCP, the same call returns `Tool not available`.
-   The agent cannot add a claim line either, because the receipt must be uploaded first and the command cannot upload files yet (see the gaps below).
+   The agent can add a claim line too, once it has uploaded the receipt with `garden files file upload --path <receipt> --json`.
    The person adds the line in the browser.
 4. **A gated month close in Budgets (about 40 seconds).**
    On a terminal as Lena Fischer, close last month, which the demo seed leaves open (here 2026-10):
@@ -276,8 +276,6 @@ Add a button there when you add a person to the seed.
 
 ## Known gaps
 
-- The `garden` command cannot send a file, so an agent cannot upload a receipt.
-  The upload routes take multipart bodies, and the command only sends JSON.
 - The model gateway forwards nothing until an upstream is configured, so the live agent chat is not part of the demo.
 
 ## Where to read next

@@ -44,7 +44,12 @@ def test_tools_come_from_the_contract_and_only_for_held_permissions(
     engine: Engine, portal: FakePortal
 ) -> None:
     # The gateway route is `tool: false`, so it never becomes a command or an MCP tool.
-    assert {tool.op_id for tool in engine.tools()} == {"files.file.read", "files.file.delete"}
+    assert {tool.op_id for tool in engine.tools()} == {
+        "files.file.read",
+        "files.file.delete",
+        "files.file.upload",
+        "knowledge.batch.upload",
+    }
     portal.permissions = ["files.view"]
     assert {tool.op_id for tool in engine.tools()} == {"files.file.read"}
 
@@ -108,7 +113,12 @@ def test_mcp_lists_the_tools_with_their_hints(engine: Engine) -> None:
     reply = handle(engine, {"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
     assert reply is not None
     tools = {tool["name"]: tool for tool in reply["result"]["tools"]}
-    assert set(tools) == {"files_file_read", "files_file_delete"}
+    assert set(tools) == {
+        "files_file_read",
+        "files_file_delete",
+        "files_file_upload",
+        "knowledge_batch_upload",
+    }
     assert tools["files_file_read"]["annotations"]["readOnlyHint"] is True
     assert tools["files_file_delete"]["annotations"]["destructiveHint"] is True
 

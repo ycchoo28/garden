@@ -1,6 +1,6 @@
 ---
 name: garden-knowledge
-description: Search Garden's knowledge base, and prepare, preview, submit, cancel or undo import batches of documents with the garden command. Use when asked to find something in company documents, to check a collection's access rules, or to prepare a batch of documents for approval.
+description: Search Garden's knowledge base, and prepare, upload files to, preview, submit, cancel or undo import batches of documents with the garden command. Use when asked to find something in company documents, to check a collection's access rules, or to prepare a batch of documents for approval.
 ---
 
 # Garden knowledge
@@ -34,8 +34,10 @@ Each command below is the operation id as words, and the MCP tool name is the sa
 1. Open one for a collection: `garden knowledge batch create --collection-id <id> --mode partial --json` (`knowledge.batch.create`).
    Use `full_set` only when the batch should replace the whole collection, because it also closes the live documents the batch does not name.
    Only one batch may be open per collection.
-2. Add the files.
-   The batch takes Markdown, text or PDF, and the person must add them in the portal (see Pitfalls).
+2. Add each file while the batch is still open for uploads: `garden knowledge batch upload --batch-id <id> --path <file> --json` (`knowledge.batch.upload`).
+   Its MCP tool is `knowledge_batch_upload`, with `batch_id`, `path`, and an optional `translation_group`.
+   A file with no `--translation-group` is its own group.
+   The batch takes Markdown, text or PDF.
 3. Start preparing: `garden knowledge batch prepare --batch-id <id> --json` (`knowledge.batch.prepare`).
    It runs in the background, so read the batch until its state is `prepared`, or `failed`.
 4. Check the result: `garden knowledge batch preview --batch-id <id> --query "<question>" --json` (`knowledge.batch.preview`).
@@ -68,9 +70,9 @@ Say so when the person asks for one, and do not look for another route.
 
 ## Pitfalls
 
-- The `garden` command sends JSON only, and the file upload routes (`knowledge.batch.upload` and `files.file.upload`) need a multipart body.
-  Do not pass a file path inside `--body`.
-  Ask the person to add the files in the portal, then carry on from preparing.
+- Pass a file with `--path`, never inside `--body`.
+- Files are accepted only while the batch is `uploaded`, so once it is prepared, a new file needs a new batch.
+- A file over the portal's size limit is refused, and the error names the limit.
 - A batch file replaces the live document with the same name.
 - Approval is the person's, and the approver must not be the one who started the batch.
 - Access rules are enforced in the search itself, and agents cannot change them.

@@ -9,6 +9,7 @@ call again.
 from __future__ import annotations
 
 import json
+import mimetypes
 import os
 import time
 from collections.abc import Callable
@@ -19,8 +20,8 @@ from urllib.parse import quote
 
 from garden.errors import ConfirmationRequired, GardenError, NotSignedIn
 from garden.jsonio import as_list, as_object, as_text
-from garden.portal import CONTRACT_HEADER, PortalClient, Response
-from garden.tools import Tool, build_tools
+from garden.portal import CONTRACT_HEADER, FormPart, PortalClient, Response
+from garden.tools import FormField, Tool, build_tools
 
 CONTRACT_PATH = "/api/openapi.json"
 ME_PATH = "/api/users/me"
@@ -94,10 +95,13 @@ class Engine:
             raise GardenError(
                 title="Missing body", detail="This call needs a body.", fix="Pass body."
             )
+        # The files are read once, before the first request, so a retry after an approval sends the
+        # same bytes again without reading the disk a second time.
+        form = _form_parts(tool.form_fields, arguments)
         method = tool.method.upper()
 
         def send(headers: dict[str, str] | None = None) -> Any:
-            return self._send(method, path, query=query, body=body, headers=headers).body
+            return self._send(method, path, query=query, body=body, form=form, headers=headers).body
 
         try:
             return send()
@@ -179,11 +183,14 @@ class Engine:
         *,
         query: dict[str, Any] | None = None,
         body: Any | None = None,
+        form: list[FormPart] | None = None,
         headers: dict[str, str] | None = None,
     ) -> Response:
         if self._client.token is None:
             raise NotSignedIn()
-        reply = self._client.request(method, path, query=query, body=body, headers=headers)
+        reply = self._client.request(
+            method, path, query=query, body=body, form=form, headers=headers
+        )
         seen = reply.headers.get(CONTRACT_HEADER)
         if seen is not None and seen != self._version:
             self._refresh()
@@ -207,6 +214,70 @@ class Engine:
 
 def _path_segment(value: Any) -> str:
     return quote(str(value), safe="")
+
+
+def _form_parts(fields: tuple[FormField, ...], arguments: dict[str, Any]) -> list[FormPart] | None:
+    """The multipart body for a call, or None when the operation has no form."""
+    if not fields:
+        return None
+    parts: list[FormPart] = []
+    for field in fields:
+        value = arguments.get(field.param.name)
+        if value is None:
+            if field.param.required:
+                raise GardenError(
+                    title="Missing argument",
+                    detail=f"{field.param.name} is required.",
+                    fix=f"Pass {field.param.name}.",
+                )
+            continue
+        if field.binary:
+            parts.append(_file_part(field, value))
+        else:
+            parts.append(FormPart(name=field.name, data=_text(value).encode("utf-8")))
+    return parts
+
+
+def _file_part(field: FormField, value: Any) -> FormPart:
+    argument = field.param.name
+    if not isinstance(value, str) or not value:
+        raise GardenError(
+            title="The file path is missing",
+            detail=f"{argument} must be the path to a file on this computer.",
+            fix=f"Pass {argument} as the path of the file to upload.",
+        )
+    path = Path(value).expanduser()
+    if path.is_dir():
+        raise GardenError(
+            title="The path is a folder",
+            detail=f"{value} is a folder, so there is no file to upload.",
+            fix=f"Pass {argument} as the path of one file inside it.",
+        )
+    if not path.is_file():
+        raise GardenError(
+            title="The file does not exist",
+            detail=f"No file at {value}.",
+            fix=f"Check the spelling of {argument}, or pass an absolute path to the file.",
+        )
+    try:
+        data = path.read_bytes()
+    except OSError as error:
+        raise GardenError(
+            title="The file cannot be read",
+            detail=f"{value}: {error.strerror or error}",
+            fix="Check that this login may read the file, then try again.",
+        ) from error
+    content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    return FormPart(name=field.name, data=data, filename=path.name, content_type=content_type)
+
+
+def _text(value: Any) -> str:
+    """A form field's text: booleans as true or false, and objects and lists as JSON."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, dict | list):
+        return json.dumps(value)
+    return str(value)
 
 
 def _deadline(expires_at: str, now: float) -> float:

@@ -284,28 +284,6 @@ def wait_for(url: str, timeout: float = 120.0) -> None:
     raise StepFailed(f"Nothing answered at {url} within {int(timeout)} seconds.")
 
 
-def upload_file(token: str, name: str, data: bytes) -> tuple[int, str]:
-    """One multipart upload to the portal, as the CLI login. Returns the status and the body."""
-    boundary = uuid.uuid4().hex
-    body = (
-        (
-            f"--{boundary}\r\n"
-            f'Content-Disposition: form-data; name="file"; filename="{name}"\r\n'
-            "Content-Type: text/plain\r\n\r\n"
-        ).encode()
-        + data
-        + f"\r\n--{boundary}--\r\n".encode()
-    )
-    request = urllib.request.Request(f"{PORTAL}/api/files", data=body, method="POST")
-    request.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
-    request.add_header("Authorization", f"Bearer {token}")
-    try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            return response.status, response.read().decode("utf-8", "replace")
-    except urllib.error.HTTPError as error:
-        return error.code, error.read().decode("utf-8", "replace")
-
-
 def _tokens_today(token: str) -> int:
     """The person's total tokens today, as the gateway counts them."""
     status, text = api("GET", "/api/agent/model/my-usage", token=token)
@@ -923,10 +901,17 @@ def _run(
         status,
     )
     run.check(status == 403, "an agent login cannot decide a confirmation")
-    upload_status, upload_text = upload_file(token, "e2e-audit.txt", f"e2e {uuid.uuid4()}".encode())
-    run.record("POST /api/files with the CLI login (an agent's upload)", upload_text, upload_status)
-    run.check(upload_status == 200, "the agent uploads a file through its CLI login")
-    upload_sha = str(json.loads(upload_text).get("sha256", PROBE_SHA))
+    audit_file = media / "e2e-audit.txt"
+    audit_file.write_text(f"e2e {uuid.uuid4()}", encoding="utf-8")
+    uploaded = mcp.request(
+        "tools/call", {"name": "files_file_upload", "arguments": {"path": str(audit_file)}}
+    )["result"]
+    run.record(
+        "tools/call files_file_upload with a local path (an agent's upload)",
+        json.dumps(uploaded, indent=2),
+    )
+    run.check(uploaded["isError"] is False, "the agent uploads a file through the garden MCP tool")
+    upload_sha = str(uploaded.get("structuredContent", {}).get("sha256", PROBE_SHA))
     delete_id = mcp.start(
         "tools/call", {"name": CRITICAL_TOOL, "arguments": {"sha256": upload_sha}}
     )
@@ -979,10 +964,26 @@ def _run(
 
     run.heading("8. dsh, through the portal's model gateway")
     overlay = dsh_overlay(launcher, secrets_file, dsh_home / "cordis.patch.yml", out)
-    dsh_status, dsh_text = upload_file(token, "e2e-dsh.txt", f"e2e dsh {uuid.uuid4()}".encode())
-    run.record("POST /api/files with the CLI login (the file dsh deletes)", dsh_text, dsh_status)
-    run.check(dsh_status == 200, "the agent uploads the file dsh deletes through its CLI login")
-    dsh_sha = str(json.loads(dsh_text).get("sha256", PROBE_SHA))
+    dsh_file = media / "e2e-dsh.txt"
+    dsh_file.write_text(f"e2e dsh {uuid.uuid4()}", encoding="utf-8")
+    dsh_upload = subprocess.run(
+        [str(launcher), "files", "file", "upload", "--path", str(dsh_file), "--json"],
+        env=cli_env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    run.record(
+        "garden files file upload --path <file> --json (the file dsh deletes)",
+        dsh_upload.stdout + dsh_upload.stderr,
+        dsh_upload.returncode,
+    )
+    run.check(
+        dsh_upload.returncode == 0, "the agent uploads the file dsh deletes through the garden CLI"
+    )
+    dsh_reply = json.loads(dsh_upload.stdout) if dsh_upload.returncode == 0 else {}
+    dsh_sha = str(dsh_reply.get("sha256", PROBE_SHA))
     task = (
         "Use the garden tools. Delete the file with SHA-256 "
         f"{dsh_sha}, then say what the portal answered."
