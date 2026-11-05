@@ -22,8 +22,7 @@ Records are numbered in the order they were made, and a later record may replace
 | [0015](0015-single-currency.md) | One currency, USD, with no exchange rates |
 | [0016](0016-approval-flows-as-data.md) | Approval flows are rows, and runs copy their steps |
 | [0017](0017-separation-of-duties.md) | Nobody decides their own request, and nobody decides two steps of one run |
-| [0018](0018-statement-import.md) | Statement import is a dry run, then all or nothing |
-| [0019](0019-month-close.md) | Closing a month freezes its spend |
+| [0019](0019-month-close.md) | Closing a month freezes its actual spend |
 | [0020](0020-pgvector-and-local-embeddings.md) | Vectors in pgvector, and embeddings from a local model |
 | [0021](0021-hybrid-search-with-rrf.md) | Hybrid search fused with reciprocal rank fusion |
 | [0022](0022-agent-login-permissions.md) | A CLI login holds the person's permissions minus the person-only ones |

@@ -32,19 +32,47 @@ flowchart LR
   cli -->|"bearer CLI login"| api
   api --> db[("Postgres 17 with pgvector :55432")]
   api --> oidc["Fake OIDC provider :55081"]
-  api --> gateway["Model gateway /api/gateway/v1"]
+  api --> gateway["Model gateway /api/agent/model/v1"]
   gateway -.->|"off until an upstream is set"| upstream["Model upstream"]
   worker["Procrastinate worker"] --> db
   worker -.-> embed["llama.cpp bge-m3 :55083, optional"]
 ```
 
 The API is one FastAPI app with one Postgres database, split into modules.
-Core modules are users, audit, files, approvals, confirmations and gateway.
-Business modules are claims, budgets, spend and knowledge.
+Core modules are users, audit, files, approvals and agent.
+Business modules are claims, budgets and knowledge.
 Each module owns one Postgres schema, and no foreign key crosses schemas.
 The worker runs the same code as the API and handles the background jobs of the knowledge module.
 The web app is a Vue 3 single-page app that calls the API through a client generated from the contract.
 The `garden` command and its MCP server use the same contract, and they show only the tools the signed-in person may use.
+
+## Where to look
+
+The key design lives in the module folders, so start there.
+
+- `backend/app/composition.py` is the one module registry, and it lists every installed module.
+- Each module has a `README.md` that says what it owns.
+- A module's `permissions.py` names its roles, and its `flows.py` holds the approval steps as data.
+- A module's `ports.py` says what it needs from another module.
+- Large modules split into feature folders, as [docs/code-patterns.md](docs/code-patterns.md#feature-folders) describes.
+- `backend/app/core/` is the foundation that every module uses.
+- `backend/tests/architecture/` and the import contracts in `backend/pyproject.toml` hold the rules that the checks enforce.
+- To read one module end to end, start with `backend/app/modules/claims/`.
+  Its drafting and review features, the approvals core and the closed-months port show the whole pattern.
+
+## One contract, many clients
+
+`contracts/openapi.json` is generated from the routes by `just api`, and nobody edits it by hand.
+Three things come from it.
+
+- The typed frontend client in `frontend/src/api/generated/`, with Vue Query hooks and Zod schemas.
+- The `garden` command and its MCP server.
+  A route becomes a tool when it carries `x-agent` metadata and names an `x-permission` that the person holds.
+- The contract version, a fingerprint that every response carries in the `X-Garden-Contract-Version` header.
+
+When a response shows a new version, the `garden` command fetches the contract again and rebuilds its tools.
+When the portal's minimum CLI version is newer than the command, the command stops with an error that says how to install a newer `garden`.
+`just api-check` fails when the committed contract or client is stale, and `just quick` runs it, so CI catches drift.
 
 ## Hardware
 
@@ -57,7 +85,7 @@ The `garden` command and its MCP server use the same contract, and they show onl
   `just models` downloads it and checks its SHA-256, and `just embedding-up` starts the server.
   Preparing a knowledge batch and searching the knowledge both call that server, so the policy search in the demo needs it running.
 - No model API key is needed for anything in this README.
-  The model gateway stays off until `GARDEN_GATEWAY_UPSTREAM_URL` is set.
+  The model gateway stays off until `GARDEN_AGENT_MODEL_UPSTREAM_URL` is set.
 
 ## Setup
 
@@ -103,13 +131,8 @@ Each signed-in person also holds `employee`, which the table does not repeat.
 | --- | --- | --- | --- | --- |
 | Marcus Lee | `marcus.lee@fernhill.example` | Design | none | claimant, and the agent's person |
 | Priya Nair | `priya.nair@fernhill.example` | Design | manager | approves Design claims at the first step |
-| Ana Costa | `ana.costa@fernhill.example` | Engineering | manager | approves Engineering claims |
-| Tomas Berg | `tomas.berg@fernhill.example` | Engineering | none | a second claimant |
-| Mei Tan | `mei.tan@fernhill.example` | Marketing | manager | approves Marketing claims |
-| Sam Okafor | `sam.okafor@fernhill.example` | Marketing | none | a second claimant |
-| Lena Fischer | `lena.fischer@fernhill.example` | Operations | finance | second-step approver, budgets, card statements, month close |
-| Dev Admin | `dev.admin@fernhill.example` | Operations | admin, knowledge_admin | administration and a second knowledge approver |
-| Noor Haddad | `noor.haddad@fernhill.example` | Operations | knowledge_admin | knowledge batches |
+| Lena Fischer | `lena.fischer@fernhill.example` | Operations | finance | second-step approver, budgets, month close, starts knowledge batches |
+| Dev Admin | `dev.admin@fernhill.example` | Operations | admin, manager | approves Operations claims, manages collections, approves knowledge batches |
 
 The fake sign-in page lists these people, so you sign in with one click and type nothing.
 Use a private window for each person, because each browser keeps one session.
@@ -135,16 +158,16 @@ Use a private window for each person, because each browser keeps one session.
    Through MCP, the same call returns `Tool not available`.
    The agent cannot add a claim line either, because the receipt must be uploaded first and the command cannot upload files yet (see the gaps below).
    The person adds the line in the browser.
-4. **A gated month close (about 40 seconds).**
+4. **A gated month close in Budgets (about 40 seconds).**
    On a terminal as Lena Fischer, close last month, which the demo seed leaves open (here 2026-10):
 
    ```sh
-   garden spend month close --year-month 2026-10 --reason "October books final"
+   garden budgets month close --year-month 2026-10 --reason "October books final"
    ```
 
    The command prints a link and waits.
    Open the link in the browser, signed in as Lena Fischer, and approve the request on the confirmation page.
-   The command then closes the month once, and `garden spend month list` shows it.
+   The command then closes the month once, and `garden budgets month list` shows it.
    If nobody approves within ten minutes, the close does not run.
 5. **Access-filtered policy search (about 40 seconds).**
    As Marcus Lee, search the expense policy:
@@ -157,8 +180,8 @@ Use a private window for each person, because each browser keeps one session.
    Marcus Lee gets the expense policy and no finance procedure, because each collection's rules name the roles and departments that may read it.
    Lena Fischer, who holds `finance`, gets the finance procedure.
 
-The demo seed adds twelve months of budget lines and card statements ending in the current month, with all but the last two months closed.
-It also adds claims in every status, including "Build farm hardware" waiting for the finance step, and ten policy documents in two collections.
+The demo seed adds twelve months of budget lines ending in the current month, and closes all but the last two of those months.
+It also adds eight claims in every status, including "Render farm hardware" waiting for the finance step, and nine policy documents in two collections.
 
 ## Plug the MCP server into Claude Code
 
@@ -230,7 +253,7 @@ Add a button there when you add a person to the seed.
 
 ## Known gaps
 
-- The `garden` command cannot send a file, so an agent cannot upload a receipt or import a card statement.
+- The `garden` command cannot send a file, so an agent cannot upload a receipt.
   The upload routes take multipart bodies, and the command only sends JSON.
 - The model gateway forwards nothing until an upstream is configured, so the live agent chat is not part of the demo.
 

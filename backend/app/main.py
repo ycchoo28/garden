@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.composition import MODULES, InstalledModule
+from app.composition import MODULES, PORTS, InstalledModule
 from app.core.users import ROLE_NAMES, advertise_permissions
 from app.shared.contract import install_contract_headers
 from app.shared.errors import PROBLEM_RESPONSES, install_problem_handlers
@@ -55,6 +55,8 @@ def create_app(modules: tuple[InstalledModule, ...] = MODULES) -> FastAPI:
     app.state.permissions = permissions
     for installed in modules:
         app.include_router(installed.router)
+    for placeholder, provider in PORTS:
+        app.dependency_overrides[placeholder] = provider
     return app
 
 

@@ -75,11 +75,38 @@ Each module owns one Postgres schema and one Alembic branch, named after the mod
 Migrations create their schema, and no table may reference a table in another schema.
 Primary keys are UUIDv7 from `app.shared.ids.new_id`.
 
+## Feature folders
+
+A business module with more than one area of work splits into feature folders, one per area, such as `budgets/lines/` and `knowledge/search/`.
+Each feature folder holds its own `api.py`, `service.py`, `repository.py` and `schemas.py`, as far as that feature needs them.
+The module root keeps what the features share: `api.py` mounts the feature routers, `permissions.py` and `__init__.py` export the public interface, and `models.py` holds the tables when several features share them.
+A module's tests stay in its own `tests/` folder, and they may import the module's internals.
+Garden has these feature folders: `budgets/` has `lines`, `months` and `variance`, `claims/` has `drafting` and `review`, and `knowledge/` has `collections`, `batches`, `search` and `reading`.
+Not every feature has every file.
+`reading/` holds pure helpers only, and `claims/review/` has no repository, because it reads and versions claims through the drafting service.
+
+The rules are these.
+
+- A feature repository is private to its feature.
+  The import-linter contract "Feature repositories stay private to their feature" forbids any other module code from importing it, so a feature reads another feature through that feature's service or port.
+- Read-only helpers with no database access go at the module root, such as `views.py` and `rules.py` in claims.
+- The module's `__init__.py` is the only import point for other modules.
+  The architecture test in `backend/tests/architecture/test_module_interfaces.py` fails when another module imports anything deeper.
+- Each table has one owning feature repository, and only that feature writes it.
+  Other features read that table through the owner's service, except the search exception below.
+- The search repository in knowledge is the one repository whose SQL reads another feature's tables.
+  It reads them read-only, and it writes only `search_log`, which it owns.
+- Features call each other's service and get plain views back.
+  They never get another feature's repository or ORM rows.
+
+The frontend mirrors the same split.
+`frontend/src/modules/<module>/<feature>/` holds the pages of one feature, and the module's `index.ts` exports the routes.
+
 ## Frontend modules
 
 Each frontend module lives in `frontend/src/modules/<name>` and exports its pages and routes from `index.ts`.
-It may import from `api` and `shared`, but never from another module or from `app`.
-Boundaries lint enforces this.
+It may import from `api` and `shared`, and from itself, but never from another module or from `app`.
+Boundaries lint enforces this, and a module's feature folders count as part of that module.
 Server calls use the generated query options, such as `usersSelfReadOptions()`, and never a hand-written URL.
 
 ## Adding a module

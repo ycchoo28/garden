@@ -20,7 +20,9 @@ COMPOSITION = BACKEND / "app" / "composition.py"
 IMPORTS_ANCHOR = "# new-module: insert imports above this line"
 ENTRIES_ANCHOR = "# new-module: insert entries above this line"
 NAME_PATTERN = re.compile(r"[a-z][a-z0-9_]{1,30}")
-CORE_NAMES = frozenset({"users", "audit", "files", "confirmations", "core", "shared", "app"})
+CORE_NAMES = frozenset(
+    {"users", "audit", "files", "agent", "approvals", "core", "shared", "app"}
+)
 
 
 def fill(text: str, values: dict[str, str]) -> str:

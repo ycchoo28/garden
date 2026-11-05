@@ -15,7 +15,7 @@ Read it before you change anything, then read the folder you work in.
 ## Layout
 
 - `backend/app/shared` holds plumbing that every module uses: errors, operations, permissions, database helpers and the contract headers.
-- `backend/app/core` holds the foundation modules: users, audit, files and confirmations.
+- `backend/app/core` holds the foundation modules: users, audit, files, approvals and agent.
   Core never imports business modules.
 - `backend/app/modules` holds business modules, one folder each, created with `just new-module`.
 - `backend/app/composition.py` lists the installed modules.

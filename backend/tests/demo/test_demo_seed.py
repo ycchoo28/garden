@@ -21,10 +21,11 @@ async def test_the_demo_seed_twice_changes_no_row(clean_database: None) -> None:
 
     assert counts_after_second == counts_after_first
     assert second.claim_statuses == first.claim_statuses
-    assert counts_after_first["spend.statement"] == 12
-    assert counts_after_first["budgets.line"] >= 4 * 8 * 12
+    # Every month but the last two is closed.
+    assert counts_after_first["budgets.month_close"] == 10
+    assert counts_after_first["budgets.line"] >= 2 * 8 * 12
     assert counts_after_first["claims.claim"] == len(first.claim_statuses)
-    assert counts_after_first["claims.claim"] >= 7
+    assert counts_after_first["claims.claim"] >= 8
 
 
 @pytest.mark.asyncio
@@ -34,7 +35,7 @@ async def test_claims_exist_in_every_state_including_one_awaiting_finance(
     summary = await seed_demo(create_app(), identity=DemoIdentity(), embedder=FakeEmbedder())
 
     assert set(summary.claim_statuses.values()) == EVERY_CLAIM_STATE
-    assert summary.awaiting_second_approval == frozenset({"Build farm hardware"})
+    assert summary.awaiting_second_approval == frozenset({"Render farm hardware"})
     assert summary.collections == ("Expense policy", "Finance procedures")
 
 

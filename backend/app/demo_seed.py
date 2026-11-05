@@ -1,4 +1,4 @@
-"""Demo data for Fernhill Studio: budgets, card statements, claims and the policy library.
+"""Demo data for Fernhill Studio: budgets, closed months, claims and the policy library.
 
 Run `just demo`, or `uv run python -m app.demo_seed` on a migrated database.
 The seed drives the same HTTP routes the browser uses, in process, signing in as each persona.
@@ -9,12 +9,9 @@ and not on this module.
 """
 
 import asyncio
-import csv
-import io
 import logging
-import random
 import uuid
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -31,11 +28,11 @@ from app.config import get_settings
 from app.core.users.identity import IdentityClaims, IdentityRejected, TokenSet
 from app.core.users.oidc import get_identity_provider
 from app.main import create_app
-from app.modules.knowledge.embedding import Embedder, get_embedder
-from app.modules.knowledge.jobs import get_batch_queue, run_prepare_job
-from app.modules.knowledge.lifecycle import OPEN_STATES, BatchState
-from app.modules.spend import CATEGORIES
+from app.modules.knowledge.batches.jobs import get_batch_queue, run_prepare_job
+from app.modules.knowledge.batches.lifecycle import OPEN_STATES, BatchState
+from app.modules.knowledge.reading.embedding import Embedder, get_embedder
 from app.seed import seed
+from app.shared.categories import CATEGORIES
 from app.shared.db import session_factory
 
 logger = logging.getLogger(__name__)
@@ -51,30 +48,17 @@ EXPENSE_RULES: tuple[dict[str, object], ...] = ({"role": "employee", "all_depart
 FINANCE_RULES: tuple[dict[str, object], ...] = ({"role": "finance", "all_departments": True},)
 
 LENA = "lena.fischer@fernhill.example"
-NOOR = "noor.haddad@fernhill.example"
 DEV_ADMIN = "dev.admin@fernhill.example"
 MARCUS = "marcus.lee@fernhill.example"
 PRIYA = "priya.nair@fernhill.example"
-TOMAS = "tomas.berg@fernhill.example"
-ANA = "ana.costa@fernhill.example"
-SAM = "sam.okafor@fernhill.example"
-MEI = "mei.tan@fernhill.example"
 
-DEPARTMENT_CODES: tuple[str, ...] = ("design", "engineering", "marketing", "operations")
+DEPARTMENT_CODES: tuple[str, ...] = ("design", "operations")
 
-# Monthly budget in US dollars per department and spend category. Card rows are drawn around these.
+# Monthly budget in US dollars per department and spend category.
 MONTHLY_BASE: Mapping[str, Mapping[str, int]] = {
     "design": {
         "equipment": 2400, "marketing": 3500, "meals": 700, "office": 900,
         "other": 400, "services": 4200, "software": 1800, "travel": 2200,
-    },
-    "engineering": {
-        "equipment": 4800, "marketing": 300, "meals": 600, "office": 700,
-        "other": 350, "services": 3100, "software": 5200, "travel": 2600,
-    },
-    "marketing": {
-        "equipment": 900, "marketing": 9500, "meals": 1400, "office": 600,
-        "other": 500, "services": 6200, "software": 1900, "travel": 3400,
     },
     "operations": {
         "equipment": 1200, "marketing": 400, "meals": 500, "office": 2600,
@@ -82,38 +66,11 @@ MONTHLY_BASE: Mapping[str, Mapping[str, int]] = {
     },
 }  # fmt: skip
 
-MERCHANTS: Mapping[str, tuple[str, ...]] = {
-    "equipment": (
-        "Corner Tech Supply",
-        "Harbour Office Furniture",
-        "Northgate Electronics",
-        "Pinecrest Hardware",
-    ),
-    "marketing": (
-        "Lantern Print House", "Brightwater Ads", "Sparrow Social Agency", "Foxglove Media",
-    ),
-    "meals": ("Juniper Kitchen", "Cafe Meridian", "The Copper Pot", "Market Lane Bistro"),
-    "office": ("Stationery Works", "Ledger Office Supplies", "Paper and Pencil Co"),
-    "other": ("Post Office Counter", "City Parking", "Laundry Express", "Courier Hub"),
-    "services": (
-        "Keystone Legal Advisory",
-        "Northstar Accounting",
-        "Harbourline Cleaning",
-        "Willow Recruitment",
-    ),
-    "software": (
-        "Canvas Suite Annual", "Syncmate Team Plan", "DevKit Cloud Credits", "Mailroom Pro",
-    ),
-    "travel": (
-        "Regional Rail", "Skyline Air", "Harbourside Hotel", "Metro Ride Hire", "Pathway Car Park",
-    ),
-}  # fmt: skip
-
-# One budget line is replaced once, so its history has a reason. Engineering seats grew.
-REPLACED_DEPARTMENT = "engineering"
+# One budget line is replaced once, so its history has a reason. Design software grew.
+REPLACED_DEPARTMENT = "design"
 REPLACED_CATEGORY = "software"
-REPLACED_AMOUNT = Decimal("5800.00")
-REPLACED_REASON = "Two engineers joined, so the licence seats went up."
+REPLACED_AMOUNT = Decimal("2400.00")
+REPLACED_REASON = "A licence seat was added for the design team, so the software budget went up."
 
 
 class DemoSeedError(RuntimeError):
@@ -149,13 +106,20 @@ class ClaimSpec:
 CLAIMS: tuple[ClaimSpec, ...] = (
     ClaimSpec(
         title="Team offsite travel",
-        claimant=TOMAS,
+        claimant=LENA,
         lines=(
             ClaimLine("travel", 9, "214.80", "Train tickets for the offsite"),
             ClaimLine("meals", 10, "96.50", "Team dinner on arrival"),
         ),
         steps=(),
         final="draft",
+    ),
+    ClaimSpec(
+        title="Office supplies",
+        claimant=LENA,
+        lines=(ClaimLine("office", 11, "180.00", "Printer paper and toner for the office"),),
+        steps=(ClaimStep(LENA, "submit"), ClaimStep(DEV_ADMIN, "approve")),
+        final="approved",
     ),
     ClaimSpec(
         title="Design tool renewals",
@@ -169,12 +133,12 @@ CLAIMS: tuple[ClaimSpec, ...] = (
     ),
     ClaimSpec(
         title="Trade show travel",
-        claimant=SAM,
+        claimant=MARCUS,
         lines=(
             ClaimLine("travel", 15, "312.40", "Train and taxi to the trade show"),
             ClaimLine("meals", 16, "118.75", "Working lunch with the stand team"),
         ),
-        steps=(ClaimStep(SAM, "submit"), ClaimStep(MEI, "approve")),
+        steps=(ClaimStep(MARCUS, "submit"), ClaimStep(PRIYA, "approve")),
         final="approved",
     ),
     ClaimSpec(
@@ -193,28 +157,30 @@ CLAIMS: tuple[ClaimSpec, ...] = (
     ),
     ClaimSpec(
         title="Replacement keyboards",
-        claimant=TOMAS,
-        lines=(
-            ClaimLine("equipment", 18, "260.00", "Two replacement keyboards for the build room"),
-        ),
-        steps=(ClaimStep(TOMAS, "submit"), ClaimStep(TOMAS, "withdraw")),
+        claimant=MARCUS,
+        lines=(ClaimLine("equipment", 18, "260.00", "Two replacement keyboards for the studio"),),
+        steps=(ClaimStep(MARCUS, "submit"), ClaimStep(MARCUS, "withdraw")),
         final="withdrawn",
     ),
     ClaimSpec(
-        title="Build farm hardware",
-        claimant=TOMAS,
-        lines=(ClaimLine("equipment", 20, "1240.00", "Memory and storage for the build farm"),),
-        steps=(ClaimStep(TOMAS, "submit"), ClaimStep(ANA, "approve")),
+        title="Render farm hardware",
+        claimant=MARCUS,
+        lines=(ClaimLine("equipment", 20, "1240.00", "Memory and storage for the render farm"),),
+        steps=(ClaimStep(MARCUS, "submit"), ClaimStep(PRIYA, "approve")),
         final="submitted",
     ),
     ClaimSpec(
         title="Launch event venue",
-        claimant=SAM,
+        claimant=MARCUS,
         lines=(
             ClaimLine("other", 22, "780.00", "Venue deposit for the launch evening"),
             ClaimLine("travel", 23, "210.00", "Ride hire for the launch crew"),
         ),
-        steps=(ClaimStep(SAM, "submit"), ClaimStep(MEI, "approve"), ClaimStep(LENA, "approve")),
+        steps=(
+            ClaimStep(MARCUS, "submit"),
+            ClaimStep(PRIYA, "approve"),
+            ClaimStep(LENA, "approve"),
+        ),
         final="approved",
     ),
 )
@@ -223,7 +189,7 @@ CLAIMS: tuple[ClaimSpec, ...] = (
 @dataclass(frozen=True)
 class DemoSummary:
     budget_lines: int
-    statements: int
+    months: int
     claim_statuses: dict[str, str]
     awaiting_second_approval: frozenset[str]
     collections: tuple[str, ...]
@@ -337,14 +303,13 @@ async def seed_demo(
         months = _last_twelve_months(today)
         departments = await _department_ids(api)
         budget_lines = await _budgets(api, departments, months)
-        await _statements(api, months, today)
         await _close_months(api, months[:-2])
         statuses, awaiting = await _claims(api, months[-2])
         collections = await _knowledge(api, embedder)
         await _check_search(api)
     return DemoSummary(
         budget_lines=budget_lines,
-        statements=len(months),
+        months=len(months),
         claim_statuses=statuses,
         awaiting_second_approval=awaiting,
         collections=collections,
@@ -411,88 +376,16 @@ async def _budgets(api: _Api, departments: Mapping[str, str], months: Sequence[s
     return count
 
 
-def _month_rows(year_month: str, today: date) -> list[dict[str, str]]:
-    """The card rows of one month. Each month has its own seed, so every run repeats them."""
-    year, month = (int(part) for part in year_month.split("-"))
-    if year_month == f"{today.year:04d}-{today.month:02d}":
-        last_day = today.day
-    else:
-        last_day = _days_in_month(year, month)
-    rng = random.Random(f"card-statement:{year_month}")
-    rows: list[dict[str, str]] = []
-    for department in DEPARTMENT_CODES:
-        for category in CATEGORIES:
-            # Between 78 and 122 percent of the budget, so some categories run over and some under.
-            factor = Decimal(str(round(rng.uniform(0.78, 1.22), 4)))
-            total = Decimal(MONTHLY_BASE[department][category]) * factor
-            count = rng.randint(2, 4)
-            weights = [rng.uniform(0.5, 1.5) for _ in range(count)]
-            weight_sum = sum(weights)
-            for index, weight in enumerate(weights, start=1):
-                share = Decimal(str(round(weight / weight_sum, 6)))
-                amount = (total * share).quantize(Decimal("0.01"))
-                posted = date(year, month, rng.randint(1, last_day))
-                rows.append(
-                    {
-                        "transaction_ref": f"{year_month}-{department}-{category}-{index:02d}",
-                        "posted_on": posted.isoformat(),
-                        "department_code": department,
-                        "category": category,
-                        "merchant": rng.choice(MERCHANTS[category]),
-                        "amount_usd": f"{amount:.2f}",
-                    }
-                )
-    return rows
-
-
-def _days_in_month(year: int, month: int) -> int:
-    following = date(year + (month // 12), month % 12 + 1, 1)
-    return (following - date(year, month, 1)).days
-
-
-def _statement_csv(rows: Iterable[Mapping[str, str]]) -> bytes:
-    header = (
-        "transaction_ref",
-        "posted_on",
-        "department_code",
-        "category",
-        "merchant",
-        "amount_usd",
-    )
-    buffer = io.StringIO()
-    writer = csv.writer(buffer)
-    _ = writer.writerow(header)
-    for row in rows:
-        _ = writer.writerow([row[column] for column in header])
-    return buffer.getvalue().encode("utf-8")
-
-
-async def _statements(api: _Api, months: Sequence[str], today: date) -> None:
-    """One card statement CSV per month. The rows carry department codes that the import matches."""
-    await api.sign_in(LENA)
-    saved = {row["source_name"] for row in await api.get("/api/spend/statements")}
-    for year_month in months:
-        source = f"card-statement-{year_month}.csv"
-        if source in saved:
-            continue
-        data = _statement_csv(_month_rows(year_month, today))
-        _ = await api.post(
-            "/api/spend/statements",
-            files={"file": (source, data, "text/csv")},
-            expected=201,
-        )
-
-
 async def _close_months(api: _Api, months: Sequence[str]) -> None:
     """Close every month that is passed in. The caller passes all but the last two months."""
     await api.sign_in(LENA)
-    closed = {row["year_month"] for row in await api.get("/api/spend/months")}
+    closed = {row["year_month"] for row in await api.get("/api/budgets/months")}
     for year_month in months:
         if year_month in closed:
             continue
         _ = await api.post(
-            f"/api/spend/months/{year_month}/close",
-            json={"reason": "Closed after the card statement and claims were final."},
+            f"/api/budgets/months/{year_month}/close",
+            json={"reason": "Closed after the claims were final."},
             expected=201,
         )
 
@@ -580,9 +473,9 @@ async def _upload_receipt(api: _Api, spec: ClaimSpec, index: int, line: ClaimLin
 
 async def _knowledge(api: _Api, embedder: Embedder) -> tuple[str, ...]:
     policy_files = sorted(POLICY_DIR.glob("*.md"))
-    if len(policy_files) != 10:
+    if len(policy_files) != 9:
         raise DemoSeedError(
-            f"Expected ten policy documents in {POLICY_DIR}, found {len(policy_files)}."
+            f"Expected nine policy documents in {POLICY_DIR}, found {len(policy_files)}."
         )
     expense = {
         path.name: path.read_bytes()
@@ -606,8 +499,8 @@ async def _load_collection(
     rules: Sequence[Mapping[str, object]],
     files: Mapping[str, bytes],
 ) -> None:
-    """Create the collection, upload a full-set batch, and apply it with a second admin."""
-    await api.sign_in(NOOR)
+    """Create the collection as the admin, start a batch as finance, and apply it as the admin."""
+    await api.sign_in(DEV_ADMIN)
     collections: list[dict[str, Any]] = await api.get("/api/knowledge/collections")
     found = next((row for row in collections if row["name"] == name), None)
     if found is None:
@@ -620,6 +513,7 @@ async def _load_collection(
     batches: list[dict[str, Any]] = await api.get("/api/knowledge/batches")
     if any(row["collection_name"] == name and row["state"] == "applied" for row in batches):
         return
+    await api.sign_in(LENA)
     await _withdraw_open_batches(api, name, embedder)
     batch = await api.post(
         f"/api/knowledge/collections/{collection_id}/batches",
@@ -711,8 +605,8 @@ async def main() -> None:
     app = create_app()
     summary = await seed_demo(app, identity=DemoIdentity(), embedder=get_embedder(settings))
     logger.info(
-        "Demo data ready: %d months of budgets and statements, %d claims, collections %s.",
-        summary.statements,
+        "Demo data ready: %d months of budgets, %d claims, collections %s.",
+        summary.months,
         len(summary.claim_statuses),
         ", ".join(summary.collections),
     )

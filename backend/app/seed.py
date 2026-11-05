@@ -21,23 +21,16 @@ from app.shared.ids import new_id
 
 DEPARTMENTS: tuple[tuple[str, str], ...] = (
     ("design", "Design"),
-    ("engineering", "Engineering"),
-    ("marketing", "Marketing"),
     ("operations", "Operations"),
 )
 
 # The subject is the email, which is also the `sub` that the fake sign-in provider issues.
 PERSONAS: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
-    # A second knowledge administrator, so a batch has an approver other than its starter.
-    ("dev.admin@fernhill.example", "Dev Admin", "operations", ("admin", "knowledge_admin")),
-    ("priya.nair@fernhill.example", "Priya Nair", "design", ("manager",)),
     ("marcus.lee@fernhill.example", "Marcus Lee", "design", ()),
-    ("ana.costa@fernhill.example", "Ana Costa", "engineering", ("manager",)),
-    ("tomas.berg@fernhill.example", "Tomas Berg", "engineering", ()),
-    ("mei.tan@fernhill.example", "Mei Tan", "marketing", ("manager",)),
-    ("sam.okafor@fernhill.example", "Sam Okafor", "marketing", ()),
+    ("priya.nair@fernhill.example", "Priya Nair", "design", ("manager",)),
     ("lena.fischer@fernhill.example", "Lena Fischer", "operations", ("finance",)),
-    ("noor.haddad@fernhill.example", "Noor Haddad", "operations", ("knowledge_admin",)),
+    # The admin is also the Operations manager, and approves the knowledge batches Lena starts.
+    ("dev.admin@fernhill.example", "Dev Admin", "operations", ("admin", "manager")),
 )
 
 

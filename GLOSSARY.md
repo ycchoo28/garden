@@ -7,9 +7,10 @@ The terms are grouped by area, and the last section lists the words to avoid.
 ## People and access
 
 - **Person**: someone who can sign in, and who belongs to one department.
-- **Department**: one of Design, Engineering, Marketing or Operations, which sets what a person may see.
+- **Department**: one of Design or Operations, which sets what a person may see.
 - **Role**: a named bundle of permissions, such as `manager` or `finance`.
-  The roles are `employee`, `manager`, `finance`, `knowledge_admin` and `admin`, and each module grants its permissions to them.
+  The roles are `employee`, `manager`, `finance` and `admin`, and each module grants its permissions to them.
+  `admin` holds every permission that any other role holds, and a test checks it.
 - **Role grant**: one row that gives a person one role.
 - **Employee**: the base role.
   Everyone who signs in holds it, so it grants the permissions every person has.
@@ -29,7 +30,7 @@ The terms are grouped by area, and the last section lists the words to avoid.
 ## Platform
 
 - **Module**: a folder that owns one part of the product.
-  A **core module** is part of the foundation (users, audit, files, approvals, confirmations and gateway), and a **business module** is part of the product (claims, budgets, spend and knowledge).
+  A **core module** is part of the foundation (users, audit, files, approvals and agent), and a **business module** is part of the product (claims, budgets and knowledge).
 - **Schema**: the Postgres schema that holds one module's tables.
   Each module has one schema, and no foreign key crosses schemas.
 - **Operation**: a route's stable name, `module.resource.verb`, with a description for agents.
@@ -51,11 +52,11 @@ The terms are grouped by area, and the last section lists the words to avoid.
 - **Version**: the counter on a record that people or agents edit, which rejects a stale write with `409 Conflict`.
 - **Replace**: a correction that writes a new version of a business record with a reason, and keeps the old one.
 - **Void**: a correction that marks a business record as not counting, with a reason, and keeps its rows.
-- **Ledger lock**: the Postgres advisory lock that imports, voids and month closes take, so they never overlap.
-  The spend module takes `spend.ledger` and the budgets module takes `budgets.lines`.
-- **Model gateway**: the OpenAI-compatible endpoint under `/api/gateway/v1`, which forwards to a configured upstream and counts usage.
+- **Ledger lock**: a Postgres advisory lock that keeps two writers from racing.
+  The budgets module takes `budgets.lines` for budget line writes and `budgets.months` for month closes.
+- **Model gateway**: the OpenAI-compatible endpoint under `/api/agent/model/v1`, which forwards to a configured upstream and counts usage.
   It is off until an upstream is set, and it forwards only the models on its allowlist.
-- **Gateway usage**: the counts the gateway keeps for each request, which are the time, the model, the status and the token numbers, and never the prompt or the reply.
+- **Model usage**: the counts the model gateway keeps for each request, which are the time, the model, the status and the token numbers, and never the prompt or the reply.
 
 ## Approvals
 
@@ -72,26 +73,17 @@ The terms are grouped by area, and the last section lists the words to avoid.
 - **Separation of duties**: the four rules the approvals core applies to a decision.
   The starter never decides, a person who decided an earlier step never decides a later one, the decider must hold the step's role, and a department-scoped step needs a decider from the subject's department.
 
-## Spend and budgets
+## Budgets
 
 - **Budget line**: the budget for one department, month and category, with each replacement kept as a version with its reason.
-- **Category**: one of the fixed spend categories `equipment`, `marketing`, `meals`, `office`, `other`, `services`, `software` and `travel`.
-  Budget lines and card statement rows use this list.
-  Claim lines use a different list (see the terms to avoid).
+- **Category**: one of the fixed categories `equipment`, `marketing`, `meals`, `office`, `other`, `services`, `software` and `travel`.
+  Budget lines and claim lines use this same list.
 - **Year-month**: a month written as `YYYY-MM`, such as `2026-10`.
-- **Card statement**: one CSV import from the company card, saved with its file's SHA-256, its row count and its total.
-- **Statement row**: one charge in a card statement, with its department, category, amount, posted date and transaction reference.
-- **Transaction reference**: the bank's reference for one charge.
-  A reference may appear once in a statement that is not voided.
-- **Statement import**: the upload of a card statement.
-  It runs a dry run first, and then saves every row or none.
-- **Dry run**: the check of a statement file that lists every row error and duplicate, and writes nothing.
-- **Statement void**: the void of a card statement, which stops its rows from counting as spend and keeps them.
-- **Actual spend**: the spend in a department, month and category, from card statement rows that are not voided and from approved claim lines.
+- **Actual spend**: the spend in a department, month and category, from approved claim lines only.
 - **Variance**: the budget minus the actual spend for one department, month and category.
   A negative variance means spend above the budget.
-- **Month close**: the closing of one year-month with a reason.
-  A closed month never reopens, and an import or void of its rows is refused.
+- **Month close**: the closing of one year-month in budgets, with a reason.
+  A closed month never reopens, and claims refuses to add, void or submit a claim line dated in it.
 
 ## Claims
 
@@ -118,7 +110,6 @@ The terms are grouped by area, and the last section lists the words to avoid.
 - **Document**: one uploaded file, named within its collection.
   A batch replaces the live document with the same name.
 - **Import batch**: one handover of files to a collection, which is prepared, submitted for approval and then applied live, or rejected or cancelled.
-  It is not a statement import.
 - **Batch file**: one file in an import batch, with its SHA-256, its size and its translation group.
 - **Translation group**: a set of files that are translations of one document.
   A preview returns one result per group in the query's language.
@@ -155,9 +146,7 @@ The terms are grouped by area, and the last section lists the words to avoid.
 | approval (for an agent's critical action) | confirmation | An approval is a decision on a claim, batch or run, and a confirmation is the agent gate. |
 | bot, AI user (for a CLI login) | agent, CLI login | The login is one person's token on one device, and the agent is the program that uses it. |
 | expense report, reimbursement | claim | The code and the API use claim throughout. |
-| transaction (for a statement row) | statement row | A transaction reference is the bank's id for a row, and a row is the thing that counts as spend. |
-| batch (for a statement import) | statement import | An import batch is a knowledge word, and statement imports have their own dry run. |
-| edit (for a budget line, claim or statement) | replace (budget line) or void (claim line, statement) | Business records are replaced or voided, never edited in place (ADR 0005). |
-| delete (for a claim, statement or budget line) | void (or replace) | Only stored files can be deleted, and voiding keeps the history. |
+| edit (for a budget line or claim) | replace (budget line) or void (claim line) | Business records are replaced or voided, never edited in place (ADR 0005). |
+| delete (for a claim or budget line) | void (or replace) | Only stored files can be deleted, and voiding keeps the history. |
 | file (for a knowledge document) | document | A document is the knowledge item, and its batch file holds the uploaded bytes. |
 | endpoint (for an operation) | operation | An operation is a route's named contract entry, and the command and MCP server show it as a tool. |
