@@ -4,9 +4,11 @@ import { computed } from "vue";
 import { RouterView, useRoute } from "vue-router";
 
 import { usersSelfReadOptions } from "./api/generated/@tanstack/vue-query.gen";
-import { useSignOut } from "./modules/users";
-import AppShell from "./shared/ui/AppShell.vue";
-import BareLayout from "./shared/ui/BareLayout.vue";
+import { useSignOut } from "./core/users";
+import { budgetsNavigation } from "./modules/budgets";
+import { claimsNavigation } from "./modules/claims";
+import { knowledgeNavigation } from "./modules/knowledge";
+import { AppShell, BareLayout, navigationFor } from "./shared/ui";
 
 const route = useRoute();
 const bare = computed(() => route.meta.layout === "bare");
@@ -19,22 +21,14 @@ const person = computed(() =>
   me.value ? { name: me.value.name, email: me.value.email } : undefined,
 );
 
-// A link shows only when the person holds the permission it leads to. The server checks every request anyway.
-const links = computed(() => {
-  const permissions = me.value?.permissions ?? [];
-  const items: { to: string; label: string }[] = [];
-  if (permissions.includes("claims.view"))
-    items.push({ to: "/claims", label: "Claims" });
-  if (permissions.includes("claims.decide"))
-    items.push({ to: "/approvals", label: "Approvals" });
-  if (permissions.includes("budgets.view"))
-    items.push({ to: "/budgets/variance", label: "Variance" });
-  if (permissions.includes("knowledge.search"))
-    items.push({ to: "/search", label: "Search" });
-  if (permissions.includes("knowledge.search_log.read"))
-    items.push({ to: "/search-log", label: "Search log" });
-  return items;
-});
+// Each module adds its links here. A link shows only when the person holds the permission it leads to,
+// and the server checks every request anyway.
+const links = computed(() =>
+  navigationFor(
+    [claimsNavigation, budgetsNavigation, knowledgeNavigation],
+    me.value?.permissions ?? [],
+  ).flatMap((module) => module.items),
+);
 
 const signOut = useSignOut();
 </script>

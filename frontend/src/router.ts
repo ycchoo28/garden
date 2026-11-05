@@ -3,12 +3,9 @@ import { createRouter, createWebHistory } from "vue-router";
 import { usersSelfReadOptions } from "./api/generated/@tanstack/vue-query.gen";
 import { claimsRoutes } from "./modules/claims";
 import { budgetsRoutes } from "./modules/budgets";
-import { spendRoutes } from "./modules/spend";
 import { knowledgeRoutes } from "./modules/knowledge";
-import { cliLoginsRoutes } from "./modules/cli-logins";
-import { confirmationsRoutes } from "./modules/confirmations";
-import { gatewayRoutes } from "./modules/gateway";
-import { usersRoutes } from "./modules/users";
+import { agentRoutes } from "./core/agent";
+import { usersRoutes } from "./core/users";
 import { queryClient } from "./queryClient";
 import { isUnauthorized } from "./shared/problem";
 import { isPublicPath, signInAddress } from "./shared/redirects";
@@ -19,11 +16,8 @@ export const router = createRouter({
     ...usersRoutes,
     ...claimsRoutes,
     ...budgetsRoutes,
-    ...spendRoutes,
     ...knowledgeRoutes,
-    ...cliLoginsRoutes,
-    ...gatewayRoutes,
-    ...confirmationsRoutes,
+    ...agentRoutes,
     { path: "/:pathMatch(.*)*", redirect: "/" },
   ],
 });
