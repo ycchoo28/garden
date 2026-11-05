@@ -42,7 +42,7 @@ test("an admin creates a collection, finance starts the batch, an admin approves
 
   await page.getByLabel("Name").fill(name);
   // Preview shows only what the caller may read, so the collection must grant a role the starter holds.
-  await page.getByLabel("Role that may read it").fill("admin");
+  await page.getByLabel("Role that may read it").fill("employee");
   await page.getByRole("button", { name: "Create collection" }).click();
   await expect(page.getByRole("listitem").filter({ hasText: name })).toBeVisible();
 
