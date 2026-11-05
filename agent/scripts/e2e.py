@@ -159,6 +159,8 @@ class FakeUpstream(BaseHTTPRequestHandler):
     calls: ClassVar[list[dict[str, Any]]] = []
     # Off in serve mode: the fake then answers with text and never asks for the critical delete.
     critical_call: ClassVar[bool] = True
+    # The file the critical delete names: the probe, or the file the dsh step uploaded.
+    critical_sha: ClassVar[str] = PROBE_SHA
 
     def do_POST(self) -> None:
         length = int(self.headers.get("Content-Length", "0"))
@@ -218,7 +220,7 @@ class FakeUpstream(BaseHTTPRequestHandler):
                 ),
                 CRITICAL_TOOL,
             )
-            arguments = json.dumps({"sha256": PROBE_SHA})
+            arguments = json.dumps({"sha256": FakeUpstream.critical_sha})
             message = {
                 "role": "assistant",
                 "content": None,
@@ -977,17 +979,25 @@ def _run(
 
     run.heading("8. dsh, through the portal's model gateway")
     overlay = dsh_overlay(launcher, secrets_file, dsh_home / "cordis.patch.yml", out)
+    dsh_status, dsh_text = upload_file(token, "e2e-dsh.txt", f"e2e dsh {uuid.uuid4()}".encode())
+    run.record("POST /api/files with the CLI login (the file dsh deletes)", dsh_text, dsh_status)
+    run.check(dsh_status == 200, "the agent uploads the file dsh deletes through its CLI login")
+    dsh_sha = str(json.loads(dsh_text).get("sha256", PROBE_SHA))
     task = (
         "Use the garden tools. Delete the file with SHA-256 "
-        f"{PROBE_SHA}, then say what the portal answered."
+        f"{dsh_sha}, then say what the portal answered."
     )
     before_calls = len(FakeUpstream.calls)
-    dsh_code, dsh_out, dsh_err, dsh_approvals = run_dsh(
-        [str(dsh), "--patch", str(overlay), "--profile", "headless", "--json", task],
-        cli_env,
-        media,
-        run,
-    )
+    FakeUpstream.critical_sha = dsh_sha
+    try:
+        dsh_code, dsh_out, dsh_err, dsh_approvals = run_dsh(
+            [str(dsh), "--patch", str(overlay), "--profile", "headless", "--json", task],
+            cli_env,
+            media,
+            run,
+        )
+    finally:
+        FakeUpstream.critical_sha = PROBE_SHA
     events = [
         line[:600] for line in dsh_out.splitlines() if "tool" in line or '"type":"final"' in line
     ]
@@ -1019,6 +1029,32 @@ def _run(
     run.check(
         len(FakeUpstream.calls) - before_calls >= 2,
         "the fake upstream served dsh's calls through the gateway",
+    )
+    # The tool results the upstream got back: the delete ran, so none of them is an error.
+    dsh_results = [
+        str(message.get("content", ""))
+        for call in FakeUpstream.calls[before_calls:]
+        for message in call.get("messages") or []
+        if message.get("role") == "tool"
+    ]
+    run.check(
+        bool(dsh_results) and not any('"error"' in result for result in dsh_results),
+        "dsh's delete returned a result to the model, and the result is not an error",
+    )
+    gone_dsh, _ = api("GET", f"/api/files/{dsh_sha}", token=token)
+    run.check(gone_dsh == 404, "the file dsh deleted is gone: a read answers 404")
+    # The trail names the delete: through an agent, named by its approval, and by the CLI login's
+    # device and creation time (the API does not show these, so they are read from the table).
+    dsh_rows = psql(
+        database,
+        "select count(*) from audit.event where target = 'file:" + dsh_sha + "' "
+        "and operation = 'files.file.delete' and acting_as_agent "
+        "and confirmation_id is not null and confirmed_at is not null "
+        "and device = 'e2e-laptop' and login_created_at is not null",
+    )
+    run.check(
+        dsh_rows == "1",
+        "the audit trail has dsh's delete: through an agent, its approval, and the login's device",
     )
 
     run.heading("9. The gateway: a chat call, a refused model, usage, and the per-minute limit")

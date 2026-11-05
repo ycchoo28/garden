@@ -30,3 +30,7 @@ class AuditEvent(Base):
     # Set when the change ran under a confirmation the person approved in the browser (ADR 0012).
     confirmation_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Set when the change was made through a CLI login: the device the login named, and when the
+    # login was created (ADR 0031, the agent design).
+    device: Mapped[str | None] = mapped_column(String(120))
+    login_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

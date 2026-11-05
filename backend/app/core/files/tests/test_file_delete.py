@@ -6,10 +6,13 @@ from pathlib import Path
 import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
+from sqlalchemy import select
 
 from app.config import Settings
 from app.config import get_settings as real_get_settings
 from app.core.agent import CONFIRMATION_HEADER
+from app.core.audit.models import AuditEvent
+from app.shared.db import session_factory
 from tests.fakes import FakeIdentity
 from tests.support import bearer, cli_sign_in, sign_in
 
@@ -73,6 +76,15 @@ async def test_agent_delete_waits_for_the_person_then_runs_once(
     assert removed["acting_as_agent"] is True
     assert removed["confirmation_id"] == problem["confirmation_id"]
     assert removed["confirmed_at"] is not None
+    # The device and the login's creation time are kept in the row, not shown by the API.
+    async with session_factory(real_get_settings().database_url)() as session:
+        [row] = (
+            await session.scalars(
+                select(AuditEvent).where(AuditEvent.operation == "files.file.delete")
+            )
+        ).all()
+    assert row.device == "test-laptop"
+    assert row.login_created_at is not None
 
     replayed = await client.delete(
         f"/api/files/{sha}",

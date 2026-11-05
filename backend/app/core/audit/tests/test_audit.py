@@ -1,19 +1,25 @@
 """The audit trail: a saved change records who made it, in the same transaction as the change."""
 
+from datetime import UTC, datetime
 from typing import Annotated
 
 import pytest
 from fastapi import Depends, FastAPI, Request
 from httpx import AsyncClient
+from sqlalchemy import select
 
+from app.config import get_settings
+from app.core.audit.models import AuditEvent
 from app.core.users import CurrentPerson, current_person
 from app.core.users.access import SESSION_COOKIE
 from app.core.users.service import UserService, get_user_service
+from app.shared.db import session_factory
 from app.shared.request_login import VIA_AGENT, RequestLogin, current_request_login
 from tests.fakes import FakeIdentity
 from tests.support import sign_in
 
 PNG_HEADER = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+LOGIN_CREATED = datetime(2026, 11, 3, 8, 30, tzinfo=UTC)
 
 
 @pytest.mark.asyncio
@@ -45,7 +51,9 @@ async def test_agent_login_marks_the_row_as_acting_as_agent(
         person = await service.current_person(
             request.cookies.get(SESSION_COOKIE), request.app.state.roles
         )
-        _ = current_request_login.set(RequestLogin(via=VIA_AGENT, device="laptop"))
+        _ = current_request_login.set(
+            RequestLogin(via=VIA_AGENT, device="laptop", created_at=LOGIN_CREATED)
+        )
         return person
 
     app.dependency_overrides[current_person] = as_agent
@@ -61,6 +69,15 @@ async def test_agent_login_marks_the_row_as_acting_as_agent(
     agent_rows = [event for event in events if event["summary"].startswith("Uploaded agent.png")]
     assert len(agent_rows) == 1
     assert agent_rows[0]["acting_as_agent"] is True
+    # The API does not show the device; the row holds it for the trail, so read it from the table.
+    async with session_factory(get_settings().database_url)() as session:
+        [row] = (
+            await session.scalars(
+                select(AuditEvent).where(AuditEvent.summary.startswith("Uploaded agent.png"))
+            )
+        ).all()
+    assert row.device == "laptop"
+    assert row.login_created_at == LOGIN_CREATED
 
 
 @pytest.mark.asyncio

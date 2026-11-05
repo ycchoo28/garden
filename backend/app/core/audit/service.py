@@ -50,6 +50,8 @@ class AuditService:
                     else None
                 ),
                 confirmed_at=login.confirmed_at if login is not None else None,
+                device=login.device if login is not None else None,
+                login_created_at=login.created_at if login is not None else None,
             )
         )
 

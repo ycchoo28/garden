@@ -163,8 +163,8 @@ async def test_contract_headers_are_on_every_response() -> None:
 
 @pytest.mark.asyncio
 async def test_contract_is_served_under_the_api_prefix() -> None:
-    # Every portal address forwards /api to the API, but not a root path such as /openapi.json, so the
-    # CLI reads the contract from under /api.
+    # Every portal address forwards /api to the API, but not a root path such as /openapi.json,
+    # so the CLI reads the contract from under /api.
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as http:
         served = await http.get("/api/openapi.json")
