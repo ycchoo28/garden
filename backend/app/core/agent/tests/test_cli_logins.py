@@ -108,3 +108,20 @@ async def test_a_person_cannot_revoke_someone_elses_login(
     await sign_in(client, identity, PRIYA)
     refused = await client.post(f"/api/agent/my-logins/{login['id']}/sign-out")
     assert refused.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_a_cli_login_ends_its_own_token_and_a_browser_call_is_refused(
+    client: AsyncClient, identity: FakeIdentity
+) -> None:
+    token = await cli_sign_in(client, identity, MARCUS, device="work-laptop")
+    await sign_in(client, identity, MARCUS)
+    refused = await client.delete("/api/agent/cli/token")
+    assert refused.status_code == 403, refused.text
+
+    signed_out = await client.delete("/api/agent/cli/token", headers=bearer(token))
+    assert signed_out.status_code == 204, signed_out.text
+    after = await client.get("/api/users/me", headers=bearer(token))
+    assert after.status_code == 401
+    still_browsing = await client.get("/api/users/me")
+    assert still_browsing.status_code == 200, still_browsing.text

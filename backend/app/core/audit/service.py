@@ -23,6 +23,8 @@ class AuditEntry:
     operation: str
     target: str
     summary: str
+    confirmation_id: uuid.UUID | None
+    confirmed_at: datetime | None
 
 
 class AuditService:
@@ -42,6 +44,12 @@ class AuditService:
                 operation=operation,
                 target=target,
                 summary=summary,
+                confirmation_id=(
+                    uuid.UUID(login.confirmation_id)
+                    if login is not None and login.confirmation_id is not None
+                    else None
+                ),
+                confirmed_at=login.confirmed_at if login is not None else None,
             )
         )
 
@@ -56,6 +64,8 @@ class AuditService:
                 operation=row.operation,
                 target=row.target,
                 summary=row.summary,
+                confirmation_id=row.confirmation_id,
+                confirmed_at=row.confirmed_at,
             )
             for row in rows
         ]

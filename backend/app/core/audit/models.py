@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, MetaData, String, Text
+from sqlalchemy import DateTime, MetaData, String, Text, Uuid
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from app.shared.db import NAMING_CONVENTION
@@ -27,3 +27,6 @@ class AuditEvent(Base):
     operation: Mapped[str] = mapped_column(String(120))
     target: Mapped[str] = mapped_column(String(300))
     summary: Mapped[str] = mapped_column(Text)
+    # Set when the change ran under a confirmation the person approved in the browser (ADR 0012).
+    confirmation_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

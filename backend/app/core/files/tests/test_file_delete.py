@@ -67,6 +67,13 @@ async def test_agent_delete_waits_for_the_person_then_runs_once(
     assert deleted.status_code == 204, deleted.text
     assert not blob.exists()
 
+    await sign_in(client, identity, "lena.fischer@fernhill.example")
+    events = (await client.get("/api/audit/events")).json()
+    [removed] = [event for event in events if event["operation"] == "files.file.delete"]
+    assert removed["acting_as_agent"] is True
+    assert removed["confirmation_id"] == problem["confirmation_id"]
+    assert removed["confirmed_at"] is not None
+
     replayed = await client.delete(
         f"/api/files/{sha}",
         headers={**bearer(token), CONFIRMATION_HEADER: problem["confirmation_id"]},

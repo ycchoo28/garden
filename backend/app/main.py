@@ -37,7 +37,13 @@ def create_app(modules: tuple[InstalledModule, ...] = MODULES) -> FastAPI:
     # A role that grants a permission no module declares stops the app before it serves anything.
     check_roles_declare_permissions(roles, permissions)
 
-    app = FastAPI(title="Garden", responses=PROBLEM_RESPONSES, lifespan=lifespan)
+    app = FastAPI(
+        title="Garden",
+        responses=PROBLEM_RESPONSES,
+        lifespan=lifespan,
+        # Under /api, which every portal address forwards to the API, so the CLI can read it.
+        openapi_url="/api/openapi.json",
+    )
     install_problem_handlers(app)
     install_contract_headers(app)
     advertise_permissions(app)

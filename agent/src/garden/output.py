@@ -53,7 +53,7 @@ def render_error(
         err.write(f"fix: {error.fix}\n")
 
 
-def _cell(value: Any) -> str:
+def _cell(value: Any, *, limit: int | None = MAX_CELL) -> str:
     if value is None:
         text = ""
     elif isinstance(value, bool):
@@ -64,7 +64,9 @@ def _cell(value: Any) -> str:
         text = str(value)
     text = text.replace("\n", " ")
     # ASCII only: Windows PowerShell shows a non-ASCII character as garbage in its default console.
-    return text if len(text) <= MAX_CELL else text[: MAX_CELL - 3] + "..."
+    if limit is None or len(text) <= limit:
+        return text
+    return text[: limit - 3] + "..."
 
 
 def _columns(rows: list[dict[str, Any]]) -> list[str]:
@@ -112,4 +114,5 @@ def _write_record(record: dict[str, Any], out: TextIO) -> None:
         return
     width = max(len(key) for key in record)
     for key, value in record.items():
-        out.write(f"{key.ljust(width)}  {_cell(value)}\n")
+        # A single record shows each value in full, so a note the person must read is not cut.
+        out.write(f"{key.ljust(width)}  {_cell(value, limit=None)}\n")

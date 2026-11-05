@@ -1,5 +1,6 @@
 """Route dependency that puts a critical route behind the gate. Browser requests pass through."""
 
+from dataclasses import replace
 from typing import Annotated
 
 from fastapi import Depends, Request, params
@@ -22,7 +23,7 @@ def confirm_agent_action(operation: str) -> params.Depends:
         login = current_request_login.get()
         if login is None or login.via != VIA_AGENT:
             return
-        await service.require_approval(
+        approved = await service.require_approval(
             person_id=person.id,
             login=login,
             operation=operation,
@@ -30,6 +31,14 @@ def confirm_agent_action(operation: str) -> params.Depends:
             target=request.url.path,
             body=await request.body(),
             confirmation_id=request.headers.get(CONFIRMATION_HEADER),
+        )
+        # The audit row for the change names the approval that let it run.
+        _ = current_request_login.set(
+            replace(
+                login,
+                confirmation_id=str(approved.id),
+                confirmed_at=approved.decided_at,
+            )
         )
 
     return Depends(gate)

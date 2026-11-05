@@ -31,6 +31,12 @@ async def list_events(
             operation=entry.operation,
             target=entry.target,
             summary=entry.summary,
+            confirmation_id=(
+                str(entry.confirmation_id) if entry.confirmation_id is not None else None
+            ),
+            confirmed_at=(
+                entry.confirmed_at.isoformat() if entry.confirmed_at is not None else None
+            ),
         )
         for entry in await service.recent(limit)
     ]

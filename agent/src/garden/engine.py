@@ -22,7 +22,7 @@ from garden.jsonio import as_list, as_object, as_text
 from garden.portal import CONTRACT_HEADER, PortalClient, Response
 from garden.tools import Tool, build_tools
 
-CONTRACT_PATH = "/openapi.json"
+CONTRACT_PATH = "/api/openapi.json"
 ME_PATH = "/api/users/me"
 # The retry of an approved action names the confirmation it spends (see the gate in the portal).
 CONFIRMATION_HEADER = "X-Garden-Confirmation"

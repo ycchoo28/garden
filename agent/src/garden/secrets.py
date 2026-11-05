@@ -114,6 +114,8 @@ def _keychain_missing() -> bool:
 
 
 def default_store() -> SecretStore:
+    # Before keyring is asked for its backend: the choice itself imports pywin32-ctypes.
+    _hide_cffi_from_windows_keyring()
     spec = os.environ.get("GARDEN_SECRET_STORE", "")
     if spec.startswith("file:"):
         print(

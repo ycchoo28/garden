@@ -11,3 +11,6 @@ class AuditEventOut(BaseModel):
     operation: str
     target: str
     summary: str
+    # The approval that let the change run, when the person approved it in the browser.
+    confirmation_id: str | None
+    confirmed_at: str | None

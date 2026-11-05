@@ -116,8 +116,11 @@ class ConfirmationService:
         target: str,
         body: bytes,
         confirmation_id: str | None,
-    ) -> None:
-        """Pass only with an approved, unused, matching confirmation. Otherwise answer 428."""
+    ) -> Confirmation:
+        """Pass only with an approved, unused, matching confirmation. Otherwise answer 428.
+
+        Returns the confirmation it used, so the audit trail can name the approval.
+        """
         digest = args_digest(operation=operation, method=method, target=target, body=body)
         fingerprint = login_fingerprint(login)
         now = self._clock.now()
@@ -159,6 +162,7 @@ class ConfirmationService:
             raise Forbidden(f"This confirmation is {status.value}.")
         row.used_at = now
         await self._repo.commit()
+        return row
 
     async def _owned(self, confirmation_id: str, person_id: uuid.UUID) -> Confirmation:
         """The confirmation, only when the caller owns it. Otherwise it looks absent."""
