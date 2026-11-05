@@ -165,6 +165,47 @@ agent-check:
     cd agent && uv run ruff check .
     cd agent && uv run pyright
 
+# Build agent/dist/garden.pyz: the garden CLI with its locked dependencies vendored in, the file the portal serves.
+agent-build:
+    cd agent && uv run python scripts/build_zipapp.py
+
+# The installer run unattended against the fake portal: the zipapp, login and dsh patch. Needs no network.
+agent-install-test:
+    cd agent && uv run pytest tests/test_install.py -q
+
+# Build the dsh bundles: agent/dist/dsh-bundle.tar.gz for linux x86_64 (build it on that platform) and
+# agent/dist/dsh-bundle-windows-x64.tar.gz for Windows x64. Needs Node.js, npm and network access to the npm registry.
+agent-dsh-bundle:
+    cd agent && uv run python scripts/build_dsh_bundle.py
+    cd agent && uv run python scripts/build_dsh_bundle.py --target windows-x64
+
+# Copy the installer's files into the folder the portal serves: garden.pyz, the dsh bundles, the dsh config template and the installers.
+# The dsh bundles take minutes to build, so existing ones are reused; run agent-dsh-bundle to rebuild them.
+agent-publish: agent-build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    [ -f agent/dist/dsh-bundle.tar.gz ] || (cd agent && uv run python scripts/build_dsh_bundle.py)
+    [ -f agent/dist/dsh-bundle-windows-x64.tar.gz ] || (cd agent && uv run python scripts/build_dsh_bundle.py --target windows-x64)
+    dest="${GARDEN_AGENT_DOWNLOADS_DIR:-backend/var/agent-downloads}"
+    mkdir -p "$dest"
+    cp agent/dist/garden.pyz agent/dist/dsh-bundle.tar.gz agent/dist/dsh-bundle-windows-x64.tar.gz "$dest/"
+    cp agent/install/dsh/cordis.patch.yml "$dest/dsh-config.yml"
+    cp agent/install/install.sh agent/install/install.ps1 "$dest/"
+    git rev-parse HEAD > "$dest/build-commit"
+    echo "Published to $dest."
+
+# The end-to-end run of the agent contract against its own portal: a fresh *_test database on the dev Postgres,
+# the API on 56000 and the web app on 56173 (`just demo` uses 55000 and 55173), a fake model upstream, the installer
+# run as `curl ... | sh` with a fresh HOME, and every login and critical action approved in a headless browser.
+# The dev database is never used. Writes agent/dist/e2e (the transcript, logs and screenshots).
+agent-e2e: up
+    cd agent && uv run python scripts/e2e.py
+
+# The same stack as agent-e2e, held up for a hand test from Windows. It prints the installer one-liner and the steps for
+# PowerShell, and it stays up until Ctrl+C, which stops its processes and drops its test database. Writes agent/dist/e2e-serve.
+agent-e2e-serve: up
+    cd agent && uv run python scripts/e2e.py --serve
+
 # Backend tests against the real Postgres in Compose, in a separate *_test database.
 # CI runs this against the Postgres that `just up` starts in the same job.
 # Set GARDEN_TEST_DB to use another test database (its name must end in _test), for example when worktrees run tests in parallel.

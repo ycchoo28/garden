@@ -9,13 +9,16 @@ from __future__ import annotations
 import argparse
 import importlib.resources
 import json
+import os
+import shutil
+import subprocess
 import sys
 from collections.abc import Sequence
 from functools import partial
 from pathlib import Path
 from typing import Any
 
-from garden import __version__, auth
+from garden import __version__, auth, dsh
 from garden.config import Settings, load_settings
 from garden.engine import Engine
 from garden.errors import GardenError, NotSignedIn
@@ -26,6 +29,7 @@ from garden.portal import PortalClient
 from garden.secrets import SecretStore, default_store
 from garden.tools import Param, Tool
 
+LOGOUT_PATH = "/api/agent/cli/token"
 RESERVED_FLAGS = {"json", "body", "help"}
 
 
@@ -59,6 +63,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     as_json = "--json" in args_list
     try:
         context = _Context(default_store())
+        if args_list[:1] == ["dsh"]:
+            # Everything after `dsh` is for dsh, so it is passed on as it is, flags and all.
+            return _dsh(context, args_list[1:])
         parser, tree = _static_parser(context)
         if args_list and args_list[0] not in _LOCAL_COMMANDS:
             _add_generated(tree, context)
@@ -79,6 +86,9 @@ _LOCAL_COMMANDS = {
     "tools",
     "mcp",
     "skills",
+    "dsh",
+    "dsh-config",
+    "dsh-launcher",
     "-h",
     "--help",
     "--version",
@@ -111,7 +121,9 @@ def _static_parser(context: _Context) -> tuple[argparse.ArgumentParser, _Tree]:
     whoami.add_argument("--json", action="store_true")
     whoami.set_defaults(handler=partial(_whoami, context))
 
-    logout = tree.add(("logout",), "Remove this device's CLI login. Other devices keep working.")
+    logout = tree.add(
+        ("logout",), "End this device's CLI login on the portal. Other devices keep working."
+    )
     logout.add_argument("--json", action="store_true")
     logout.set_defaults(handler=partial(_logout, context))
 
@@ -129,6 +141,20 @@ def _static_parser(context: _Context) -> tuple[argparse.ArgumentParser, _Tree]:
         "--to", type=Path, help="The folder to copy into. Default: ~/.garden/skills."
     )
     install.set_defaults(handler=partial(_skills_install, context))
+
+    run_dsh = tree.add(("dsh",), "Run dsh with the portal's model. Its arguments go to dsh.")
+    run_dsh.add_argument("args", nargs=argparse.REMAINDER, help="Arguments for dsh.")
+    run_dsh.set_defaults(handler=partial(_dsh_from_parser, context))
+
+    config = tree.add(
+        ("dsh-config",), "Write dsh's model patch from the portal's default model, then stop."
+    )
+    config.set_defaults(handler=partial(_dsh_config, context))
+
+    launcher = tree.add(("dsh-launcher",), "Write the dsh launcher, which runs `garden dsh`.")
+    launcher.add_argument("--to", type=Path, required=True, help="The launcher file to write.")
+    launcher.add_argument("--garden", required=True, help="The garden command the launcher runs.")
+    launcher.set_defaults(handler=partial(_dsh_launcher, context))
     return parser, tree
 
 
@@ -165,15 +191,23 @@ def _whoami(context: _Context, args: argparse.Namespace) -> None:
 
 
 def _logout(context: _Context, args: argparse.Namespace) -> None:
-    # The login is revoked in the browser by the person, so this device only forgets its copy.
+    # The portal ends this CLI login, so its token stops working everywhere. This device forgets its
+    # copy even when the portal does not confirm, so a stale login never stays behind.
     stored = auth.load(context.store, context.settings.portal_url)
+    if stored is not None:
+        try:
+            PortalClient(context.settings.portal_url, token=stored.token).request(
+                "DELETE", LOGOUT_PATH
+            )
+        except GardenError as error:
+            print(
+                f"warning: the portal did not confirm the sign-out ({error.title}). "
+                "Removing the login here.",
+                file=sys.stderr,
+            )
     auth.clear(context.store, context.settings.portal_url)
     render(
-        {
-            "signed_out": True,
-            "device": stored.device if stored else None,
-            "note": "The CLI login still exists until the person revokes it under CLI logins.",
-        },
+        {"signed_out": True, "device": stored.device if stored else None},
         as_json=args.json,
     )
 
@@ -211,6 +245,83 @@ def _skills_install(context: _Context, args: argparse.Namespace) -> None:
         (destination / "SKILL.md").write_bytes((skill / "SKILL.md").read_bytes())
         installed.append(skill.name)
     print(f"Installed {', '.join(installed)} into {target}")
+
+
+def _dsh_from_parser(context: _Context, args: argparse.Namespace) -> int:
+    # `garden dsh` is routed in main() before parsing, so this only serves the help listing.
+    return _dsh(context, list(args.args))
+
+
+def _dsh(context: _Context, dsh_args: list[str]) -> int:
+    """Refresh dsh's patch from the portal, then start dsh with the login in its environment.
+
+    The token goes to dsh's process only. It is read from the keychain each time, never written
+    to a file, so the patch and the launcher hold no secret.
+    """
+    stored = context.login()
+    settings = context.settings
+    entry = dsh.entry_point(settings.home)
+    node = shutil.which("node")
+    if node is None:
+        raise GardenError(
+            title="Node.js is not installed",
+            detail="dsh runs on Node.js.",
+            fix="Install Node.js, then run `garden dsh` again.",
+        )
+    if not entry.exists():
+        raise GardenError(
+            title="dsh is not installed",
+            detail=f"No dsh at {entry}.",
+            fix="Run the installer again.",
+        )
+    _refresh_dsh_patch(context, stored.token)
+    env = {**os.environ, "DSH_HOME": str(settings.dsh_home), dsh.TOKEN_ENV: stored.token}
+    # Plain `dsh` boots the default profile; dsh itself would stop and ask for one.
+    completed = subprocess.run(
+        [node, str(entry), *dsh.with_default_profile(dsh_args)], env=env, check=False
+    )
+    return completed.returncode
+
+
+def _dsh_config(context: _Context, args: argparse.Namespace) -> None:
+    stored = context.login()
+    _refresh_dsh_patch(context, stored.token)
+    print(f"dsh reads its model from {context.settings.dsh_home / dsh.PATCH_NAME}.")
+
+
+def _refresh_dsh_patch(context: _Context, token: str) -> None:
+    """Write dsh's patch with the portal's default model. When the portal cannot be reached, the
+    last patch stays and a warning says so. A refusal from the portal is an error."""
+    settings = context.settings
+    target = settings.dsh_home / dsh.PATCH_NAME
+    client = PortalClient(settings.portal_url, token=token)
+    try:
+        model = dsh.default_model(client)
+    except GardenError as error:
+        if error.status is not None or not target.exists():
+            raise
+        print(
+            f"warning: dsh keeps its last model, since the portal did not answer ({error.title}).",
+            file=sys.stderr,
+        )
+        return
+    dsh.write_patch(
+        settings.home / dsh.TEMPLATE_NAME,
+        target,
+        garden_command=settings.garden_command,
+        garden_args=settings.garden_args,
+        base_url=dsh.gateway_url(settings.portal_url),
+        model=model,
+    )
+
+
+def _dsh_launcher(context: _Context, args: argparse.Namespace) -> None:
+    target: Path = args.to
+    target.parent.mkdir(parents=True, exist_ok=True)
+    windows = target.suffix.lower() in {".cmd", ".bat"}
+    target.write_bytes(dsh.launcher_text(args.garden, windows=windows).encode("utf-8"))
+    target.chmod(0o755)
+    print(f"The dsh launcher is at {target}. It runs `{args.garden} dsh`.")
 
 
 def _add_generated(tree: _Tree, context: _Context) -> None:

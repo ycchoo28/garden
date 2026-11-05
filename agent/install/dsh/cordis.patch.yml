@@ -1,0 +1,30 @@
+# The DSH home patch. `garden dsh-config` fills in the placeholders in {{double braces}} from the
+# portal: the garden command, the portal's model gateway, and the default model the portal names.
+# No secret lives in this file. apiKeyEnv names the environment variable that holds the person's
+# CLI login; `garden dsh` puts it there for dsh's process only, read fresh on each request.
+- insert:
+    - id: mcp-garden
+      name: "@deepseek-ai/dsh-mcp-client"
+      config:
+        serverName: garden
+        transport: stdio
+        command: "{{GARDEN_COMMAND}}"
+        args: [{{GARDEN_ARGS}}]
+    - id: llm-pi-ai
+      name: "@deepseek-ai/dsh-llm-pi-ai"
+      config:
+        providers:
+          "{{MODEL_PROVIDER}}":
+            apiKeyEnv: "{{MODEL_KEY_ENV}}"
+            baseURL: "{{MODEL_BASE_URL}}"
+            api: openai-completions
+            models:
+              - id: "{{MODEL_NAME}}"
+                name: "{{MODEL_NAME}}"
+                contextWindow: 128000
+                maxTokens: 8192
+# dsh picks the model its agent uses from this row, so the patch points it at the same provider and model.
+- id: agent-default-model
+  config:
+    provider: "{{MODEL_PROVIDER}}"
+    model: "{{MODEL_NAME}}"

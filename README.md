@@ -183,6 +183,25 @@ Use a private window for each person, because each browser keeps one session.
 The demo seed adds twelve months of budget lines ending in the current month, and closes all but the last two of those months.
 It also adds eight claims in every status, including "Render farm hardware" waiting for the finance step, and nine policy documents in two collections.
 
+## Install the garden command with one command
+
+The portal serves its own installer, so a person installs the `garden` command and dsh from the portal's address.
+Run this on macOS or Linux, with the portal's address in place of `http://127.0.0.1:55000`:
+
+```sh
+curl -fsSL http://127.0.0.1:55000/api/agent/downloads/install.sh | GARDEN_API_URL=http://127.0.0.1:55000 bash
+```
+
+On Windows, run this in PowerShell:
+
+```powershell
+$env:GARDEN_API_URL = 'http://127.0.0.1:55000'; irm http://127.0.0.1:55000/api/agent/downloads/install.ps1 | iex
+```
+
+The installer fetches the files that `just agent-publish` puts in the portal's downloads folder, checks each one's SHA-256, and installs `garden` and `dsh`.
+It signs you in last, and it prints `garden login` as the command to retry when sign-in does not finish.
+The installers are in `agent/install/`, and [agent/README.md](agent/README.md) describes the package.
+
 ## Plug the MCP server into Claude Code
 
 The MCP server runs as the person who signed in on this device, and it offers only the tools that person may use.
@@ -228,12 +247,16 @@ Run `just` with no arguments to list them.
 | `just new-module <name>` | Scaffolds a business module, registers it, and regenerates the contract and client. |
 | `just hooks` | Installs the pinned lefthook and its commit hooks. Run it once after cloning. |
 | `just backend-check`, `just agent-check`, `just frontend-check` | Run the format, lint and type checks of one part. |
+| `just agent-build` | Builds `agent/dist/garden.pyz`, the zipapp the installer fetches. |
+| `just agent-install-test` | Runs the installer unattended against the fake portal. It needs no network. |
+| `just agent-dsh-bundle` | Builds the dsh bundles for Linux and Windows. It needs network access to the npm registry. |
+| `just agent-publish` | Copies the installer files, the zipapp and the dsh bundles into `GARDEN_AGENT_DOWNLOADS_DIR`. |
 | `just secrets-check` | Scans the git history and the working tree with gitleaks. |
 | `just docs-check` | Checks that the relative links in the Markdown files point at real files and headings. |
 | `just deny-check` | Fails when a file names a term on the deny-list. |
 | `just backend-audit`, `just frontend-audit` | Audit the locked dependencies, with accepted advisories from `security/allowlist.txt`. |
 
-The `garden` command has these local commands: `login`, `logout`, `whoami`, `tools`, `mcp` and `skills install`.
+The `garden` command has these local commands: `login`, `logout`, `whoami`, `tools`, `mcp`, `skills install`, `dsh`, `dsh-config` and `dsh-launcher`.
 Every other command comes from the contract, named after its operation id, such as `garden files file upload`.
 
 ## Ports

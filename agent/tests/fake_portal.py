@@ -34,6 +34,10 @@ class FakePortal:
         default_factory=lambda: dict[str, tuple[str, str]]()
     )
     logins: list[dict[str, Any]] = field(default_factory=lambda: list[dict[str, Any]]())
+    # The files the installer fetches, by name. Each is served from the manifest below.
+    downloads: dict[str, bytes] = field(default_factory=lambda: dict[str, bytes]())
+    # The model the gateway names as `default`. None means the portal names no model.
+    model_default: str | None = "deepseek-v4-flash"
     url: str = ""
     _server: ThreadingHTTPServer | None = None
 
@@ -138,14 +142,30 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         parts = urlsplit(self.path)
-        if parts.path == "/openapi.json":
+        if parts.path == "/api/openapi.json":
             self._send(200, self.fake.contract())
+            return
+        if parts.path == "/api/agent/manifest":
+            self._send(200, self._manifest())
+            return
+        if parts.path.startswith("/api/agent/downloads/"):
+            self._download(parts.path.rsplit("/", 1)[1])
             return
         if parts.path == "/api/agent/cli/authorize":
             self._authorize(parse_qs(parts.query))
             return
         if not self._bearer_ok():
             self._problem(401, "Unauthorized")
+            return
+        if parts.path == "/api/agent/model/v1/models":
+            self._send(
+                200,
+                {
+                    "object": "list",
+                    "data": [{"id": "deepseek-v4-flash", "object": "model", "owned_by": "garden"}],
+                    "default": self.fake.model_default,
+                },
+            )
             return
         if parts.path == "/api/users/me":
             self._send(
@@ -209,6 +229,29 @@ class _Handler(BaseHTTPRequestHandler):
         self.fake.confirmations[presented] = "used"
         self.fake.deleted.append(sha)
         self._send(204)
+
+    def _manifest(self) -> dict[str, Any]:
+        return {
+            "artifacts": {
+                name: {
+                    "url": f"/api/agent/downloads/{name}",
+                    "sha256": hashlib.sha256(raw).hexdigest(),
+                    "size_bytes": len(raw),
+                }
+                for name, raw in self.fake.downloads.items()
+            }
+        }
+
+    def _download(self, name: str) -> None:
+        raw = self.fake.downloads.get(name)
+        if raw is None:
+            self._problem(404, "Not Found")
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "application/octet-stream")
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
 
     def _authorize(self, query: dict[str, list[str]]) -> None:
         redirect_uri = query.get("redirect_uri", [""])[0]

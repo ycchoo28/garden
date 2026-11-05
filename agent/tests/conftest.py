@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import os
+import subprocess
+import sys
 from collections.abc import Callable, Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fake_portal import GOOD_TOKEN, FakePortal
@@ -59,3 +63,32 @@ def env(portal: FakePortal, tmp_path: Path) -> dict[str, str]:
         }
     )
     return base
+
+
+def run_garden(
+    env: dict[str, str], *args: str, stdin: str = "", timeout: float = 60
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, "-m", "garden", *args],
+        input=stdin,
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=ROOT,
+        timeout=timeout,
+        check=False,
+    )
+
+
+def store_token(
+    env: dict[str, str], portal_url: str, token: str, device: str = "test-device"
+) -> None:
+    """Write a CLI login the way `garden login` would, without running the browser step."""
+    path = Path(env["GARDEN_SECRET_STORE"].removeprefix("file:"))
+    data: dict[str, str] = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    data[portal_url] = json.dumps({"token": token, "device": device})
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+
+def as_json(text: str) -> Any:
+    return json.loads(text)

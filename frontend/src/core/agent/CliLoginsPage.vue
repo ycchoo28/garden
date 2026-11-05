@@ -18,6 +18,9 @@ const revoke = useMutation({
   onSuccess: () => queryClient.invalidateQueries({ queryKey: agentMyLoginListQueryKey() }),
 });
 
+// The installer and dsh come from this portal, so the commands name the origin the person opened.
+const origin = window.location.origin;
+
 function when(value: string | null): string {
   return value ? new Date(value).toLocaleString() : 'Never';
 }
@@ -28,6 +31,27 @@ function when(value: string | null): string {
     title="Command line sign-ins"
     description="Each row is a device where the garden command is signed in as you. Revoke a row to sign that device out."
   />
+  <SectionCard
+    title="Get started"
+    class="mb-6"
+  >
+    <ol class="grid list-inside list-decimal gap-3 text-sm">
+      <li>
+        Install the garden command and dsh. On macOS or Linux, run this in a terminal:
+        <code class="mt-2 block overflow-x-auto whitespace-pre rounded bg-surface-muted px-3 py-2 font-mono text-sm">curl -fsSL {{ origin }}/api/agent/downloads/install.sh | GARDEN_API_URL={{ origin }} bash</code>
+        On Windows, run this in PowerShell:
+        <code class="mt-2 block overflow-x-auto whitespace-pre rounded bg-surface-muted px-3 py-2 font-mono text-sm">$env:GARDEN_API_URL = '{{ origin }}'; irm {{ origin }}/api/agent/downloads/install.ps1 | iex</code>
+      </li>
+      <li>
+        The installer signs you in last and opens a browser page to approve it. If that step did not finish, run this and approve the login in the browser:
+        <code class="mt-2 block overflow-x-auto whitespace-pre rounded bg-surface-muted px-3 py-2 font-mono text-sm">garden login</code>
+      </li>
+      <li>
+        Start dsh, the coding agent, signed in as you:
+        <code class="mt-2 block overflow-x-auto whitespace-pre rounded bg-surface-muted px-3 py-2 font-mono text-sm">garden dsh</code>
+      </li>
+    </ol>
+  </SectionCard>
   <SectionCard
     title="Your sign-ins"
     flush

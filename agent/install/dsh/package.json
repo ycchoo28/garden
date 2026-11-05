@@ -1,0 +1,10 @@
+{
+  "name": "garden-dsh-bundle",
+  "version": "0.2.1-rc.5",
+  "private": true,
+  "description": "The dsh release the portal serves to the installer. Built into dsh-bundle.tar.gz by scripts/build_dsh_bundle.py.",
+  "type": "commonjs",
+  "dependencies": {
+    "@deepseek-ai/dsh": "0.2.1-rc.5"
+  }
+}
