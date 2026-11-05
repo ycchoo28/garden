@@ -46,6 +46,35 @@ class UsageTodayOut(BaseModel):
     tokens_limit: int
 
 
+class ModelInfoOut(BaseModel):
+    id: str
+    object: Literal["model"] = "model"
+    owned_by: str = "garden"
+
+
+class ModelListOut(BaseModel):
+    """The models the gateway forwards, as an OpenAI-style list, and the one `default` names.
+
+    `default` is the model dsh uses. It is null when no model is allowed.
+    """
+
+    object: Literal["list"] = "list"
+    data: list[ModelInfoOut]
+    default: str | None
+
+
+class ManifestArtifact(BaseModel):
+    url: str
+    sha256: str
+    size_bytes: int
+
+
+class ManifestOut(BaseModel):
+    """The files the installer fetches, keyed by name, each with the SHA-256 it must match."""
+
+    artifacts: dict[str, ManifestArtifact]
+
+
 class CliLoginIn(BaseModel):
     """What the CLI sends after its browser returned the code: the PKCE verifier and the nonce."""
 

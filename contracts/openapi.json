@@ -92,6 +92,28 @@
             "title": "Actor Id",
             "type": "string"
           },
+          "confirmation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmation Id"
+          },
+          "confirmed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed At"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -120,7 +142,9 @@
           "acting_as_agent",
           "operation",
           "target",
-          "summary"
+          "summary",
+          "confirmation_id",
+          "confirmed_at"
         ],
         "title": "AuditEventOut",
         "type": "object"
@@ -1410,6 +1434,46 @@
         "title": "LineReplaceIn",
         "type": "object"
       },
+      "ManifestArtifact": {
+        "properties": {
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "sha256",
+          "size_bytes"
+        ],
+        "title": "ManifestArtifact",
+        "type": "object"
+      },
+      "ManifestOut": {
+        "description": "The files the installer fetches, keyed by name, each with the SHA-256 it must match.",
+        "properties": {
+          "artifacts": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ManifestArtifact"
+            },
+            "title": "Artifacts",
+            "type": "object"
+          }
+        },
+        "required": [
+          "artifacts"
+        ],
+        "title": "ManifestOut",
+        "type": "object"
+      },
       "MeOut": {
         "properties": {
           "department": {
@@ -1452,6 +1516,65 @@
           "permissions"
         ],
         "title": "MeOut",
+        "type": "object"
+      },
+      "ModelInfoOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "object": {
+            "const": "model",
+            "default": "model",
+            "title": "Object",
+            "type": "string"
+          },
+          "owned_by": {
+            "default": "garden",
+            "title": "Owned By",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "ModelInfoOut",
+        "type": "object"
+      },
+      "ModelListOut": {
+        "description": "The models the gateway forwards, as an OpenAI-style list, and the one `default` names.\n\n`default` is the model dsh uses. It is null when no model is allowed.",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/ModelInfoOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "default": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default"
+          },
+          "object": {
+            "const": "list",
+            "default": "list",
+            "title": "Object",
+            "type": "string"
+          }
+        },
+        "required": [
+          "data",
+          "default"
+        ],
+        "title": "ModelListOut",
         "type": "object"
       },
       "MonthOut": {
@@ -2157,6 +2280,136 @@
         }
       }
     },
+    "/api/agent/cli/token": {
+      "delete": {
+        "description": "End this device's CLI login. The token used for this call stops working.",
+        "operationId": "agent.cli_token.sign_out",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Sign Out Cli Token",
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": false
+        },
+        "x-permission": "users.self"
+      }
+    },
+    "/api/agent/downloads/{name}": {
+      "get": {
+        "description": "Download one garden or dsh file, or an installer, by name. Needs no sign-in.",
+        "operationId": "agent.download.read",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Read Download",
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": false
+        }
+      }
+    },
+    "/api/agent/manifest": {
+      "get": {
+        "description": "List the files the installer fetches, with the SHA-256 each must match. Needs no sign-in.",
+        "operationId": "agent.manifest.read",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManifestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Read Manifest",
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": false
+        }
+      }
+    },
     "/api/agent/model/my-usage": {
       "get": {
         "description": "Read today's model requests and tokens for the signed-in person. Counts only.",
@@ -2222,11 +2475,7 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Agent.Model.Chat Completion",
-                  "type": "object"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
@@ -2263,16 +2512,14 @@
     },
     "/api/agent/model/v1/models": {
       "get": {
-        "description": "List the models the gateway forwards.",
+        "description": "List the models the gateway forwards, and the default one that `default` names.",
         "operationId": "agent.model.list",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Agent.Model.List",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ModelListOut"
                 }
               }
             },

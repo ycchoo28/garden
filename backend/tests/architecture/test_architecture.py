@@ -27,6 +27,10 @@ PUBLIC_ROUTES = {
     # The CLI starts and finishes its sign-in before it holds a token, so these take no person.
     ("GET", "/api/agent/cli/authorize"),
     ("POST", "/api/agent/cli/approvals"),
+    # The installer fetches the manifest and its files before anyone has a login, and they hold
+    # no secrets.
+    ("GET", "/api/agent/manifest"),
+    ("GET", "/api/agent/downloads/{name}"),
 }
 
 # Routes an agent may only call after the person approves, listed explicitly.
@@ -155,3 +159,16 @@ async def test_contract_headers_are_on_every_response() -> None:
         response = await http.get("/api/health")
     assert len(response.headers["X-Garden-Contract-Version"]) == 12
     assert response.headers["X-Garden-Min-CLI-Version"] == "0.1.0"
+
+
+@pytest.mark.asyncio
+async def test_contract_is_served_under_the_api_prefix() -> None:
+    # Every portal address forwards /api to the API, but not a root path such as /openapi.json, so the
+    # CLI reads the contract from under /api.
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as http:
+        served = await http.get("/api/openapi.json")
+        root = await http.get("/openapi.json")
+    assert served.status_code == 200
+    assert served.json()["info"]["title"] == "Garden"
+    assert root.status_code == 404

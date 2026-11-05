@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from httpx import AsyncClient
 from pydantic import SecretStr
 
+from app.config import Settings
 from app.config import get_settings as real_get_settings
 from app.core.agent import get_upstream_transport
 from tests.fakes import FakeIdentity, MovableClock
@@ -33,6 +34,18 @@ class FakeUpstream:
         self.requests.append(request)
         if self.status != 200:
             return httpx.Response(self.status, json={"error": "upstream trouble"})
+        sent: dict[str, Any] = json.loads(request.content)
+        if sent.get("stream") is True:
+            events: list[dict[str, Any]] = [{"choices": [{"delta": {"content": "pong"}}]}]
+            options: dict[str, Any] = sent.get("stream_options") or {}
+            if options.get("include_usage") is True:
+                events.append({"choices": [], "usage": self.usage})
+            body = "".join(f"data: {json.dumps(event)}\n\n" for event in events)
+            return httpx.Response(
+                200,
+                content=(body + "data: [DONE]\n\n").encode(),
+                headers={"content-type": "text/event-stream"},
+            )
         return httpx.Response(
             200,
             json={"object": "chat.completion", "choices": [], "usage": self.usage},
@@ -136,15 +149,74 @@ async def test_a_model_off_the_allowlist_is_refused(
 
 
 @pytest.mark.asyncio
-async def test_streaming_is_refused_until_it_is_supported(
-    client: AsyncClient, identity: FakeIdentity, configure: Callable[..., None]
+async def test_a_stream_is_relayed_unchanged_and_counted(
+    client: AsyncClient,
+    identity: FakeIdentity,
+    configure: Callable[..., None],
+    upstream: FakeUpstream,
 ) -> None:
     configure()
+    await sign_in(client, identity, MARCUS)
+    streamed = await client.post(
+        "/api/agent/model/v1/chat/completions", json={**CHAT, "stream": True}
+    )
+    assert streamed.status_code == 200, streamed.text
+    assert streamed.headers["content-type"].startswith("text/event-stream")
+    assert streamed.text.endswith("data: [DONE]\n\n")
+    assert '"content": "pong"' in streamed.text
+
+    [sent] = upstream.requests
+    assert json.loads(sent.content) == {
+        **CHAT,
+        "stream": True,
+        "stream_options": {"include_usage": True},
+    }
+
+    today = (await client.get("/api/agent/model/my-usage")).json()
+    assert today["requests"] == 1
+    assert today["prompt_tokens"] == 3
+    assert today["completion_tokens"] == 4
+    assert today["total_tokens"] == 7
+
+
+@pytest.mark.asyncio
+async def test_a_stream_keeps_the_client_stream_options_and_asks_for_usage(
+    client: AsyncClient,
+    identity: FakeIdentity,
+    configure: Callable[..., None],
+    upstream: FakeUpstream,
+) -> None:
+    configure()
+    await sign_in(client, identity, MARCUS)
+    streamed = await client.post(
+        "/api/agent/model/v1/chat/completions",
+        json={**CHAT, "stream": True, "stream_options": {"other": 1, "include_usage": False}},
+    )
+    assert streamed.status_code == 200, streamed.text
+
+    [sent] = upstream.requests
+    assert json.loads(sent.content)["stream_options"] == {"other": 1, "include_usage": True}
+    today = (await client.get("/api/agent/model/my-usage")).json()
+    assert today["total_tokens"] == 7
+
+
+@pytest.mark.asyncio
+async def test_a_stream_whose_upstream_fails_is_502_and_counted(
+    client: AsyncClient,
+    identity: FakeIdentity,
+    configure: Callable[..., None],
+    upstream: FakeUpstream,
+) -> None:
+    configure()
+    upstream.status = 500
     await sign_in(client, identity, MARCUS)
     response = await client.post(
         "/api/agent/model/v1/chat/completions", json={**CHAT, "stream": True}
     )
-    assert response.status_code == 422
+    assert response.status_code == 502
+    today = (await client.get("/api/agent/model/my-usage")).json()
+    assert today["requests"] == 1
+    assert today["total_tokens"] == 0
 
 
 @pytest.mark.asyncio
@@ -216,3 +288,71 @@ async def test_upstream_failure_is_502_and_counts_a_request_with_no_tokens(
     today = (await client.get("/api/agent/model/my-usage")).json()
     assert today["requests"] == 1
     assert today["total_tokens"] == 0
+
+
+@pytest.mark.asyncio
+async def test_models_names_the_configured_default_beside_the_list(
+    client: AsyncClient, identity: FakeIdentity, configure: Callable[..., None]
+) -> None:
+    configure(agent_model_default="garden-large")
+    await sign_in(client, identity, MARCUS)
+
+    listed = await client.get("/api/agent/model/v1/models")
+
+    assert listed.status_code == 200, listed.text
+    body = listed.json()
+    assert body["object"] == "list"
+    assert [model["id"] for model in body["data"]] == ["garden-large", "garden-small"]
+    assert body["default"] == "garden-large"
+
+
+@pytest.mark.asyncio
+async def test_default_is_the_first_allowed_model_when_none_is_configured(
+    client: AsyncClient, identity: FakeIdentity, configure: Callable[..., None]
+) -> None:
+    configure(agent_model_models="garden-small,garden-large")
+    await sign_in(client, identity, MARCUS)
+
+    body = (await client.get("/api/agent/model/v1/models")).json()
+
+    assert body["default"] == "garden-small"
+    assert [model["id"] for model in body["data"]] == ["garden-large", "garden-small"]
+
+
+@pytest.mark.asyncio
+async def test_default_is_null_when_no_model_is_allowed(
+    client: AsyncClient, identity: FakeIdentity, configure: Callable[..., None]
+) -> None:
+    configure(agent_model_models="")
+    await sign_in(client, identity, MARCUS)
+
+    body = (await client.get("/api/agent/model/v1/models")).json()
+
+    assert body == {"object": "list", "data": [], "default": None}
+
+
+@pytest.mark.asyncio
+async def test_default_is_not_an_alias_for_chat(
+    client: AsyncClient,
+    identity: FakeIdentity,
+    configure: Callable[..., None],
+    upstream: FakeUpstream,
+) -> None:
+    configure(agent_model_default="garden-large")
+    await sign_in(client, identity, MARCUS)
+
+    answered = await client.post(
+        "/api/agent/model/v1/chat/completions", json={**CHAT, "model": "default"}
+    )
+
+    assert answered.status_code == 403
+    assert upstream.requests == []
+
+
+def test_the_default_model_must_be_on_the_allowlist() -> None:
+    with pytest.raises(ValueError, match="GARDEN_AGENT_MODEL_DEFAULT"):
+        _ = Settings(
+            database_url="postgresql://unused",
+            agent_model_models="garden-small",
+            agent_model_default="garden-large",
+        )

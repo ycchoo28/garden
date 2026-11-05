@@ -40,17 +40,44 @@ class Settings(BaseSettings):
     agent_model_models: str = ""
     agent_model_requests_per_minute: int = 20
     agent_model_tokens_per_day: int = 200_000
+    # The model the gateway names as its `default`, which dsh uses. Empty means the first model in
+    # GARDEN_AGENT_MODEL_MODELS. It must be one of the allowed models.
+    agent_model_default: str = ""
+    # Where the garden CLI and dsh files come from: the built zipapp, the dsh bundles, the dsh
+    # config and the install scripts. The portal serves only the names it offers, from this folder.
+    agent_downloads_dir: Path = Path("var/agent-downloads")
+
+    @property
+    def allowed_model_names(self) -> list[str]:
+        """The allowed models in the order the setting lists them, without repeats."""
+        names: list[str] = []
+        for part in self.agent_model_models.split(","):
+            name = part.strip()
+            if name and name not in names:
+                names.append(name)
+        return names
 
     @property
     def allowed_models(self) -> frozenset[str]:
-        return frozenset(
-            name.strip() for name in self.agent_model_models.split(",") if name.strip()
-        )
+        return frozenset(self.allowed_model_names)
+
+    @property
+    def default_model(self) -> str | None:
+        """The model the gateway names as `default`: the configured one, else the first allowed."""
+        if self.agent_model_default:
+            return self.agent_model_default
+        return self.allowed_model_names[0] if self.allowed_model_names else None
 
     @model_validator(mode="after")
     def refuse_fake_oidc_outside_dev(self) -> Self:
         if self.fake_oidc and self.environment != "dev":
             raise ValueError("GARDEN_FAKE_OIDC is only allowed when GARDEN_ENVIRONMENT=dev")
+        return self
+
+    @model_validator(mode="after")
+    def model_default_is_allowed(self) -> Self:
+        if self.agent_model_default and self.agent_model_default not in self.allowed_models:
+            raise ValueError("GARDEN_AGENT_MODEL_DEFAULT must be one of GARDEN_AGENT_MODEL_MODELS")
         return self
 
     @model_validator(mode="after")

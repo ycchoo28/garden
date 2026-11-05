@@ -3,8 +3,8 @@
 import { queryOptions, type UseMutationOptions } from '@tanstack/vue-query';
 
 import { client } from '../client.gen';
-import { agentCliApprovalCreate, agentCliApprovalStart, agentConfirmationDecide, agentConfirmationRead, agentModelChatCompletion, agentModelList, agentMyLoginList, agentMyLoginSignOut, agentMyModelUsageRead, auditEventList, budgetsCategoryList, budgetsLineCreate, budgetsLineHistory, budgetsLineList, budgetsLineReplace, budgetsMonthClose, budgetsMonthList, budgetsVarianceRead, claimsClaimCreate, claimsClaimDecide, claimsClaimList, claimsClaimRead, claimsClaimSubmit, claimsClaimWithdraw, claimsDecisionQueue, claimsLineAdd, claimsLineVoid, filesFileDelete, filesFileRead, filesFileUpload, knowledgeBatchApprove, knowledgeBatchCancel, knowledgeBatchCreate, knowledgeBatchList, knowledgeBatchPrepare, knowledgeBatchPreview, knowledgeBatchRead, knowledgeBatchReject, knowledgeBatchSubmit, knowledgeBatchUndo, knowledgeBatchUpload, knowledgeCollectionCreate, knowledgeCollectionList, knowledgeCollectionRead, knowledgeDocumentErase, knowledgeSearchLogList, knowledgeSearchRun, knowledgeStatusRead, type Options, platformHealthRead, usersDepartmentList, usersDirectoryList, usersSelfRead, usersSessionEnd, usersSessionFinish, usersSessionStart } from '../sdk.gen';
-import type { AgentCliApprovalCreateData, AgentCliApprovalCreateError, AgentCliApprovalCreateResponse, AgentCliApprovalStartData, AgentCliApprovalStartError, AgentConfirmationDecideData, AgentConfirmationDecideError, AgentConfirmationDecideResponse, AgentConfirmationReadData, AgentConfirmationReadError, AgentConfirmationReadResponse, AgentModelChatCompletionData, AgentModelChatCompletionError, AgentModelChatCompletionResponse, AgentModelListData, AgentModelListError, AgentModelListResponse, AgentMyLoginListData, AgentMyLoginListError, AgentMyLoginListResponse, AgentMyLoginSignOutData, AgentMyLoginSignOutError, AgentMyLoginSignOutResponse, AgentMyModelUsageReadData, AgentMyModelUsageReadError, AgentMyModelUsageReadResponse, AuditEventListData, AuditEventListError, AuditEventListResponse, BudgetsCategoryListData, BudgetsCategoryListError, BudgetsCategoryListResponse, BudgetsLineCreateData, BudgetsLineCreateError, BudgetsLineCreateResponse, BudgetsLineHistoryData, BudgetsLineHistoryError, BudgetsLineHistoryResponse, BudgetsLineListData, BudgetsLineListError, BudgetsLineListResponse, BudgetsLineReplaceData, BudgetsLineReplaceError, BudgetsLineReplaceResponse, BudgetsMonthCloseData, BudgetsMonthCloseError, BudgetsMonthCloseResponse, BudgetsMonthListData, BudgetsMonthListError, BudgetsMonthListResponse, BudgetsVarianceReadData, BudgetsVarianceReadError, BudgetsVarianceReadResponse, ClaimsClaimCreateData, ClaimsClaimCreateError, ClaimsClaimCreateResponse, ClaimsClaimDecideData, ClaimsClaimDecideError, ClaimsClaimDecideResponse, ClaimsClaimListData, ClaimsClaimListError, ClaimsClaimListResponse, ClaimsClaimReadData, ClaimsClaimReadError, ClaimsClaimReadResponse, ClaimsClaimSubmitData, ClaimsClaimSubmitError, ClaimsClaimSubmitResponse, ClaimsClaimWithdrawData, ClaimsClaimWithdrawError, ClaimsClaimWithdrawResponse, ClaimsDecisionQueueData, ClaimsDecisionQueueError, ClaimsDecisionQueueResponse, ClaimsLineAddData, ClaimsLineAddError, ClaimsLineAddResponse, ClaimsLineVoidData, ClaimsLineVoidError, ClaimsLineVoidResponse, FilesFileDeleteData, FilesFileDeleteError, FilesFileDeleteResponse, FilesFileReadData, FilesFileReadError, FilesFileUploadData, FilesFileUploadError, FilesFileUploadResponse, KnowledgeBatchApproveData, KnowledgeBatchApproveError, KnowledgeBatchApproveResponse, KnowledgeBatchCancelData, KnowledgeBatchCancelError, KnowledgeBatchCancelResponse, KnowledgeBatchCreateData, KnowledgeBatchCreateError, KnowledgeBatchCreateResponse, KnowledgeBatchListData, KnowledgeBatchListError, KnowledgeBatchListResponse, KnowledgeBatchPrepareData, KnowledgeBatchPrepareError, KnowledgeBatchPrepareResponse, KnowledgeBatchPreviewData, KnowledgeBatchPreviewError, KnowledgeBatchPreviewResponse, KnowledgeBatchReadData, KnowledgeBatchReadError, KnowledgeBatchReadResponse, KnowledgeBatchRejectData, KnowledgeBatchRejectError, KnowledgeBatchRejectResponse, KnowledgeBatchSubmitData, KnowledgeBatchSubmitError, KnowledgeBatchSubmitResponse, KnowledgeBatchUndoData, KnowledgeBatchUndoError, KnowledgeBatchUndoResponse, KnowledgeBatchUploadData, KnowledgeBatchUploadError, KnowledgeBatchUploadResponse, KnowledgeCollectionCreateData, KnowledgeCollectionCreateError, KnowledgeCollectionCreateResponse, KnowledgeCollectionListData, KnowledgeCollectionListError, KnowledgeCollectionListResponse, KnowledgeCollectionReadData, KnowledgeCollectionReadError, KnowledgeCollectionReadResponse, KnowledgeDocumentEraseData, KnowledgeDocumentEraseError, KnowledgeDocumentEraseResponse, KnowledgeSearchLogListData, KnowledgeSearchLogListError, KnowledgeSearchLogListResponse, KnowledgeSearchRunData, KnowledgeSearchRunError, KnowledgeSearchRunResponse, KnowledgeStatusReadData, KnowledgeStatusReadError, KnowledgeStatusReadResponse, PlatformHealthReadData, PlatformHealthReadError, PlatformHealthReadResponse, UsersDepartmentListData, UsersDepartmentListError, UsersDepartmentListResponse, UsersDirectoryListData, UsersDirectoryListError, UsersDirectoryListResponse, UsersSelfReadData, UsersSelfReadError, UsersSelfReadResponse, UsersSessionEndData, UsersSessionEndError, UsersSessionEndResponse, UsersSessionFinishData, UsersSessionFinishError, UsersSessionStartData, UsersSessionStartError } from '../types.gen';
+import { agentCliApprovalCreate, agentCliApprovalStart, agentCliTokenSignOut, agentConfirmationDecide, agentConfirmationRead, agentDownloadRead, agentManifestRead, agentModelChatCompletion, agentModelList, agentMyLoginList, agentMyLoginSignOut, agentMyModelUsageRead, auditEventList, budgetsCategoryList, budgetsLineCreate, budgetsLineHistory, budgetsLineList, budgetsLineReplace, budgetsMonthClose, budgetsMonthList, budgetsVarianceRead, claimsClaimCreate, claimsClaimDecide, claimsClaimList, claimsClaimRead, claimsClaimSubmit, claimsClaimWithdraw, claimsDecisionQueue, claimsLineAdd, claimsLineVoid, filesFileDelete, filesFileRead, filesFileUpload, knowledgeBatchApprove, knowledgeBatchCancel, knowledgeBatchCreate, knowledgeBatchList, knowledgeBatchPrepare, knowledgeBatchPreview, knowledgeBatchRead, knowledgeBatchReject, knowledgeBatchSubmit, knowledgeBatchUndo, knowledgeBatchUpload, knowledgeCollectionCreate, knowledgeCollectionList, knowledgeCollectionRead, knowledgeDocumentErase, knowledgeSearchLogList, knowledgeSearchRun, knowledgeStatusRead, type Options, platformHealthRead, usersDepartmentList, usersDirectoryList, usersSelfRead, usersSessionEnd, usersSessionFinish, usersSessionStart } from '../sdk.gen';
+import type { AgentCliApprovalCreateData, AgentCliApprovalCreateError, AgentCliApprovalCreateResponse, AgentCliApprovalStartData, AgentCliApprovalStartError, AgentCliTokenSignOutData, AgentCliTokenSignOutError, AgentCliTokenSignOutResponse, AgentConfirmationDecideData, AgentConfirmationDecideError, AgentConfirmationDecideResponse, AgentConfirmationReadData, AgentConfirmationReadError, AgentConfirmationReadResponse, AgentDownloadReadData, AgentDownloadReadError, AgentManifestReadData, AgentManifestReadError, AgentManifestReadResponse, AgentModelChatCompletionData, AgentModelChatCompletionError, AgentModelListData, AgentModelListError, AgentModelListResponse, AgentMyLoginListData, AgentMyLoginListError, AgentMyLoginListResponse, AgentMyLoginSignOutData, AgentMyLoginSignOutError, AgentMyLoginSignOutResponse, AgentMyModelUsageReadData, AgentMyModelUsageReadError, AgentMyModelUsageReadResponse, AuditEventListData, AuditEventListError, AuditEventListResponse, BudgetsCategoryListData, BudgetsCategoryListError, BudgetsCategoryListResponse, BudgetsLineCreateData, BudgetsLineCreateError, BudgetsLineCreateResponse, BudgetsLineHistoryData, BudgetsLineHistoryError, BudgetsLineHistoryResponse, BudgetsLineListData, BudgetsLineListError, BudgetsLineListResponse, BudgetsLineReplaceData, BudgetsLineReplaceError, BudgetsLineReplaceResponse, BudgetsMonthCloseData, BudgetsMonthCloseError, BudgetsMonthCloseResponse, BudgetsMonthListData, BudgetsMonthListError, BudgetsMonthListResponse, BudgetsVarianceReadData, BudgetsVarianceReadError, BudgetsVarianceReadResponse, ClaimsClaimCreateData, ClaimsClaimCreateError, ClaimsClaimCreateResponse, ClaimsClaimDecideData, ClaimsClaimDecideError, ClaimsClaimDecideResponse, ClaimsClaimListData, ClaimsClaimListError, ClaimsClaimListResponse, ClaimsClaimReadData, ClaimsClaimReadError, ClaimsClaimReadResponse, ClaimsClaimSubmitData, ClaimsClaimSubmitError, ClaimsClaimSubmitResponse, ClaimsClaimWithdrawData, ClaimsClaimWithdrawError, ClaimsClaimWithdrawResponse, ClaimsDecisionQueueData, ClaimsDecisionQueueError, ClaimsDecisionQueueResponse, ClaimsLineAddData, ClaimsLineAddError, ClaimsLineAddResponse, ClaimsLineVoidData, ClaimsLineVoidError, ClaimsLineVoidResponse, FilesFileDeleteData, FilesFileDeleteError, FilesFileDeleteResponse, FilesFileReadData, FilesFileReadError, FilesFileUploadData, FilesFileUploadError, FilesFileUploadResponse, KnowledgeBatchApproveData, KnowledgeBatchApproveError, KnowledgeBatchApproveResponse, KnowledgeBatchCancelData, KnowledgeBatchCancelError, KnowledgeBatchCancelResponse, KnowledgeBatchCreateData, KnowledgeBatchCreateError, KnowledgeBatchCreateResponse, KnowledgeBatchListData, KnowledgeBatchListError, KnowledgeBatchListResponse, KnowledgeBatchPrepareData, KnowledgeBatchPrepareError, KnowledgeBatchPrepareResponse, KnowledgeBatchPreviewData, KnowledgeBatchPreviewError, KnowledgeBatchPreviewResponse, KnowledgeBatchReadData, KnowledgeBatchReadError, KnowledgeBatchReadResponse, KnowledgeBatchRejectData, KnowledgeBatchRejectError, KnowledgeBatchRejectResponse, KnowledgeBatchSubmitData, KnowledgeBatchSubmitError, KnowledgeBatchSubmitResponse, KnowledgeBatchUndoData, KnowledgeBatchUndoError, KnowledgeBatchUndoResponse, KnowledgeBatchUploadData, KnowledgeBatchUploadError, KnowledgeBatchUploadResponse, KnowledgeCollectionCreateData, KnowledgeCollectionCreateError, KnowledgeCollectionCreateResponse, KnowledgeCollectionListData, KnowledgeCollectionListError, KnowledgeCollectionListResponse, KnowledgeCollectionReadData, KnowledgeCollectionReadError, KnowledgeCollectionReadResponse, KnowledgeDocumentEraseData, KnowledgeDocumentEraseError, KnowledgeDocumentEraseResponse, KnowledgeSearchLogListData, KnowledgeSearchLogListError, KnowledgeSearchLogListResponse, KnowledgeSearchRunData, KnowledgeSearchRunError, KnowledgeSearchRunResponse, KnowledgeStatusReadData, KnowledgeStatusReadError, KnowledgeStatusReadResponse, PlatformHealthReadData, PlatformHealthReadError, PlatformHealthReadResponse, UsersDepartmentListData, UsersDepartmentListError, UsersDepartmentListResponse, UsersDirectoryListData, UsersDirectoryListError, UsersDirectoryListResponse, UsersSelfReadData, UsersSelfReadError, UsersSelfReadResponse, UsersSessionEndData, UsersSessionEndError, UsersSessionEndResponse, UsersSessionFinishData, UsersSessionFinishError, UsersSessionStartData, UsersSessionStartError } from '../types.gen';
 
 /**
  * Create Cli Login
@@ -78,6 +78,65 @@ export const agentCliApprovalStartOptions = (options: Options<AgentCliApprovalSt
     queryKey: agentCliApprovalStartQueryKey(options)
 });
 
+/**
+ * Sign Out Cli Token
+ *
+ * End this device's CLI login. The token used for this call stops working.
+ */
+export const agentCliTokenSignOutMutation = (options?: Partial<Options<AgentCliTokenSignOutData>>): UseMutationOptions<AgentCliTokenSignOutResponse, AgentCliTokenSignOutError, Options<AgentCliTokenSignOutData>> => {
+    const mutationOptions: UseMutationOptions<AgentCliTokenSignOutResponse, AgentCliTokenSignOutError, Options<AgentCliTokenSignOutData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await agentCliTokenSignOut({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+export const agentDownloadReadQueryKey = (options: Options<AgentDownloadReadData>) => createQueryKey('agentDownloadRead', options);
+
+/**
+ * Read Download
+ *
+ * Download one garden or dsh file, or an installer, by name. Needs no sign-in.
+ */
+export const agentDownloadReadOptions = (options: Options<AgentDownloadReadData>) => queryOptions<unknown, AgentDownloadReadError, unknown, ReturnType<typeof agentDownloadReadQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await agentDownloadRead({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: agentDownloadReadQueryKey(options)
+});
+
+export const agentManifestReadQueryKey = (options?: Options<AgentManifestReadData>) => createQueryKey('agentManifestRead', options);
+
+/**
+ * Read Manifest
+ *
+ * List the files the installer fetches, with the SHA-256 each must match. Needs no sign-in.
+ */
+export const agentManifestReadOptions = (options?: Options<AgentManifestReadData>) => queryOptions<AgentManifestReadResponse, AgentManifestReadError, AgentManifestReadResponse, ReturnType<typeof agentManifestReadQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await agentManifestRead({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: agentManifestReadQueryKey(options)
+});
+
 export const agentMyModelUsageReadQueryKey = (options?: Options<AgentMyModelUsageReadData>) => createQueryKey('agentMyModelUsageRead', options);
 
 /**
@@ -103,8 +162,8 @@ export const agentMyModelUsageReadOptions = (options?: Options<AgentMyModelUsage
  *
  * Send an OpenAI-compatible chat completion to a model on the gateway allowlist.
  */
-export const agentModelChatCompletionMutation = (options?: Partial<Options<AgentModelChatCompletionData>>): UseMutationOptions<AgentModelChatCompletionResponse, AgentModelChatCompletionError, Options<AgentModelChatCompletionData>> => {
-    const mutationOptions: UseMutationOptions<AgentModelChatCompletionResponse, AgentModelChatCompletionError, Options<AgentModelChatCompletionData>> = {
+export const agentModelChatCompletionMutation = (options?: Partial<Options<AgentModelChatCompletionData>>): UseMutationOptions<unknown, AgentModelChatCompletionError, Options<AgentModelChatCompletionData>> => {
+    const mutationOptions: UseMutationOptions<unknown, AgentModelChatCompletionError, Options<AgentModelChatCompletionData>> = {
         mutationFn: async (fnOptions) => {
             const { data } = await agentModelChatCompletion({
                 ...options,
@@ -122,7 +181,7 @@ export const agentModelListQueryKey = (options?: Options<AgentModelListData>) =>
 /**
  * List Models
  *
- * List the models the gateway forwards.
+ * List the models the gateway forwards, and the default one that `default` names.
  */
 export const agentModelListOptions = (options?: Options<AgentModelListData>) => queryOptions<AgentModelListResponse, AgentModelListError, AgentModelListResponse, ReturnType<typeof agentModelListQueryKey>>({
     queryFn: async ({ queryKey, signal }) => {

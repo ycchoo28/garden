@@ -1,6 +1,8 @@
 """The model gateway: forwards OpenAI-compatible chat requests and counts usage only."""
 
+import json
 import uuid
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
@@ -12,8 +14,9 @@ from fastapi import Depends
 from app.config import Settings, get_settings
 from app.core.agent.models import Usage
 from app.core.agent.repository import AgentRepository, get_agent_repository
+from app.core.agent.schemas import ModelInfoOut, ModelListOut
 from app.shared.clock import Clock, get_clock
-from app.shared.errors import Forbidden, ProblemError, TooManyRequests, Unprocessable
+from app.shared.errors import Forbidden, ProblemError, TooManyRequests
 from app.shared.ids import new_id
 
 UPSTREAM_TIMEOUT_SECONDS = 60.0
@@ -53,6 +56,18 @@ def _start_of_day(now: datetime) -> datetime:
     return now.astimezone(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
 
 
+def _event_usage(line: str) -> dict[str, Any]:
+    """The usage object carried by one `data:` event of a stream, or nothing."""
+    try:
+        parsed: object = json.loads(line[len("data:") :])
+    except ValueError:
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    usage: object = cast("dict[str, Any]", parsed).get("usage")
+    return cast("dict[str, Any]", usage) if isinstance(usage, dict) else {}
+
+
 def _count(value: object) -> int:
     """Token counts from the upstream. Anything that is not a whole number counts as zero."""
     return value if isinstance(value, int) and not isinstance(value, bool) else 0
@@ -71,27 +86,18 @@ class ModelService:
         self._settings = settings
         self._transport = transport
 
-    def models(self) -> list[dict[str, str]]:
-        return [
-            {"id": name, "object": "model", "owned_by": "garden"}
-            for name in sorted(self._settings.allowed_models)
-        ]
+    def models(self) -> ModelListOut:
+        return ModelListOut(
+            data=[ModelInfoOut(id=name) for name in sorted(self._settings.allowed_models)],
+            default=self._settings.default_model,
+        )
 
     async def complete(
         self, *, person_id: uuid.UUID, cli_login_id: uuid.UUID | None, body: dict[str, Any]
     ) -> dict[str, Any]:
         if not self._settings.agent_model_upstream_url:
             raise ModelUnavailable("The model gateway has no upstream model configured.")
-        if body.get("stream") is True:
-            raise Unprocessable(
-                "Streaming is not supported yet. Leave stream out or set it to false."
-            )
-        model = body.get("model")
-        if not isinstance(model, str) or model not in self._settings.allowed_models:
-            raise Forbidden("This model is not on the gateway allowlist.")
-
-        now = self._clock.now()
-        await self._check_limits(person_id=person_id, cli_login_id=cli_login_id, now=now)
+        model, now = await self._admit(person_id=person_id, cli_login_id=cli_login_id, body=body)
         try:
             response = await self._forward(body)
         except UpstreamFailed:
@@ -101,6 +107,85 @@ class ModelService:
         self._record(person_id, cli_login_id, model, now, "ok", response.get("usage") or {})
         await self._repo.commit()
         return response
+
+    async def stream(
+        self, *, person_id: uuid.UUID, cli_login_id: uuid.UUID | None, body: dict[str, Any]
+    ) -> AsyncIterator[bytes]:
+        """Open a streamed completion. Refusals and upstream failures raise before any bytes
+        go out. The usage is asked for in the stream, so it can be recorded when the answer ends."""
+        model, now = await self._admit(person_id=person_id, cli_login_id=cli_login_id, body=body)
+        url = f"{self._settings.agent_model_upstream_url.rstrip('/')}/chat/completions"
+        client = httpx.AsyncClient(transport=self._transport, timeout=UPSTREAM_TIMEOUT_SECONDS)
+        options = body.get("stream_options")
+        asked: dict[str, Any] = {"include_usage": True}
+        if isinstance(options, dict):
+            asked = {**cast("dict[str, Any]", options), "include_usage": True}
+        upstream_body = {**body, "stream_options": asked}
+        try:
+            upstream = await client.send(
+                client.build_request("POST", url, json=upstream_body, headers=self._headers()),
+                stream=True,
+            )
+        except httpx.HTTPError as error:
+            await client.aclose()
+            await self._record_failure(person_id, cli_login_id, model, now)
+            raise UpstreamFailed("The upstream model could not answer.") from error
+        if upstream.status_code >= 400:
+            await upstream.aclose()
+            await client.aclose()
+            await self._record_failure(person_id, cli_login_id, model, now)
+            raise UpstreamFailed("The upstream model could not answer.")
+        return self._relay(client, upstream, person_id, cli_login_id, model, now)
+
+    async def _relay(
+        self,
+        client: httpx.AsyncClient,
+        upstream: httpx.Response,
+        person_id: uuid.UUID,
+        cli_login_id: uuid.UUID | None,
+        model: str,
+        now: datetime,
+    ) -> AsyncIterator[bytes]:
+        """Pass the upstream's server-sent events through unchanged and count usage when it ends."""
+        usage: dict[str, Any] = {}
+        status = "ok"
+        try:
+            async for line in upstream.aiter_lines():
+                if line.startswith("data:") and '"usage"' in line:
+                    found = _event_usage(line)
+                    if found:
+                        usage = found
+                yield f"{line}\n".encode()
+        except httpx.HTTPError:
+            status = "upstream_error"
+        finally:
+            await upstream.aclose()
+            await client.aclose()
+            self._record(person_id, cli_login_id, model, now, status, usage)
+            await self._repo.commit()
+
+    async def _admit(
+        self, *, person_id: uuid.UUID, cli_login_id: uuid.UUID | None, body: dict[str, Any]
+    ) -> tuple[str, datetime]:
+        """Check the upstream, the allowlist and the limits. Returns the model and the moment."""
+        if not self._settings.agent_model_upstream_url:
+            raise ModelUnavailable("The model gateway has no upstream model configured.")
+        model = body.get("model")
+        if not isinstance(model, str) or model not in self._settings.allowed_models:
+            raise Forbidden("This model is not on the gateway allowlist.")
+        now = self._clock.now()
+        await self._check_limits(person_id=person_id, cli_login_id=cli_login_id, now=now)
+        return model, now
+
+    def _headers(self) -> dict[str, str]:
+        key = self._settings.agent_model_api_key.get_secret_value()
+        return {"Authorization": f"Bearer {key}"} if key else {}
+
+    async def _record_failure(
+        self, person_id: uuid.UUID, cli_login_id: uuid.UUID | None, model: str, now: datetime
+    ) -> None:
+        self._record(person_id, cli_login_id, model, now, "upstream_error", {})
+        await self._repo.commit()
 
     async def _check_limits(
         self, *, person_id: uuid.UUID, cli_login_id: uuid.UUID | None, now: datetime
@@ -121,15 +206,11 @@ class ModelService:
 
     async def _forward(self, body: dict[str, Any]) -> dict[str, Any]:
         url = f"{self._settings.agent_model_upstream_url.rstrip('/')}/chat/completions"
-        headers: dict[str, str] = {}
-        key = self._settings.agent_model_api_key.get_secret_value()
-        if key:
-            headers["Authorization"] = f"Bearer {key}"
         try:
             async with httpx.AsyncClient(
                 transport=self._transport, timeout=UPSTREAM_TIMEOUT_SECONDS
             ) as client:
-                reply = await client.post(url, json=body, headers=headers)
+                reply = await client.post(url, json=body, headers=self._headers())
             parsed: object = reply.json()
         except (httpx.HTTPError, ValueError) as error:
             raise UpstreamFailed("The upstream model could not answer.") from error

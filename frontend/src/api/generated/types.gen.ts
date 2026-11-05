@@ -69,6 +69,14 @@ export type AuditEventOut = {
      */
     actor_id: string;
     /**
+     * Confirmation Id
+     */
+    confirmation_id: string | null;
+    /**
+     * Confirmed At
+     */
+    confirmed_at: string | null;
+    /**
      * Id
      */
     id: string;
@@ -893,6 +901,38 @@ export type LineReplaceIn = {
 };
 
 /**
+ * ManifestArtifact
+ */
+export type ManifestArtifact = {
+    /**
+     * Sha256
+     */
+    sha256: string;
+    /**
+     * Size Bytes
+     */
+    size_bytes: number;
+    /**
+     * Url
+     */
+    url: string;
+};
+
+/**
+ * ManifestOut
+ *
+ * The files the installer fetches, keyed by name, each with the SHA-256 it must match.
+ */
+export type ManifestOut = {
+    /**
+     * Artifacts
+     */
+    artifacts: {
+        [key: string]: ManifestArtifact;
+    };
+};
+
+/**
  * MeOut
  */
 export type MeOut = {
@@ -917,6 +957,46 @@ export type MeOut = {
      * Roles
      */
     roles: Array<string>;
+};
+
+/**
+ * ModelInfoOut
+ */
+export type ModelInfoOut = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Object
+     */
+    object?: 'model';
+    /**
+     * Owned By
+     */
+    owned_by?: string;
+};
+
+/**
+ * ModelListOut
+ *
+ * The models the gateway forwards, as an OpenAI-style list, and the one `default` names.
+ *
+ * `default` is the model dsh uses. It is null when no model is allowed.
+ */
+export type ModelListOut = {
+    /**
+     * Data
+     */
+    data: Array<ModelInfoOut>;
+    /**
+     * Default
+     */
+    default: string | null;
+    /**
+     * Object
+     */
+    object?: 'list';
 };
 
 /**
@@ -1352,6 +1432,96 @@ export type AgentCliApprovalStartResponses = {
     200: unknown;
 };
 
+export type AgentCliTokenSignOutData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent/cli/token';
+};
+
+export type AgentCliTokenSignOutErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type AgentCliTokenSignOutError = AgentCliTokenSignOutErrors[keyof AgentCliTokenSignOutErrors];
+
+export type AgentCliTokenSignOutResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type AgentCliTokenSignOutResponse = AgentCliTokenSignOutResponses[keyof AgentCliTokenSignOutResponses];
+
+export type AgentDownloadReadData = {
+    body?: never;
+    path: {
+        /**
+         * Name
+         */
+        name: string;
+    };
+    query?: never;
+    url: '/api/agent/downloads/{name}';
+};
+
+export type AgentDownloadReadErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type AgentDownloadReadError = AgentDownloadReadErrors[keyof AgentDownloadReadErrors];
+
+export type AgentDownloadReadResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type AgentManifestReadData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent/manifest';
+};
+
+export type AgentManifestReadErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type AgentManifestReadError = AgentManifestReadErrors[keyof AgentManifestReadErrors];
+
+export type AgentManifestReadResponses = {
+    /**
+     * Successful Response
+     */
+    200: ManifestOut;
+};
+
+export type AgentManifestReadResponse = AgentManifestReadResponses[keyof AgentManifestReadResponses];
+
 export type AgentMyModelUsageReadData = {
     body?: never;
     path?: never;
@@ -1408,16 +1578,10 @@ export type AgentModelChatCompletionError = AgentModelChatCompletionErrors[keyof
 
 export type AgentModelChatCompletionResponses = {
     /**
-     * Response Agent.Model.Chat Completion
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: unknown;
 };
-
-export type AgentModelChatCompletionResponse = AgentModelChatCompletionResponses[keyof AgentModelChatCompletionResponses];
 
 export type AgentModelListData = {
     body?: never;
@@ -1441,13 +1605,9 @@ export type AgentModelListError = AgentModelListErrors[keyof AgentModelListError
 
 export type AgentModelListResponses = {
     /**
-     * Response Agent.Model.List
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ModelListOut;
 };
 
 export type AgentModelListResponse = AgentModelListResponses[keyof AgentModelListResponses];

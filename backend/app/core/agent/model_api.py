@@ -3,9 +3,10 @@
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 
 from app.core.agent.model_service import ModelService, get_model_service
-from app.core.agent.schemas import UsageTodayOut
+from app.core.agent.schemas import ModelListOut, UsageTodayOut
 from app.core.users import CurrentPerson, require
 from app.shared.operations import op
 from app.shared.request_login import current_request_login
@@ -20,29 +21,35 @@ router = APIRouter()
         "Send an OpenAI-compatible chat completion to a model on the gateway allowlist.",
         tool=False,
     ),
+    response_model=None,
 )
 async def chat_completions(
     body: dict[str, Any],
     person: Annotated[CurrentPerson, require("agent.model.use")],
     service: Annotated[ModelService, Depends(get_model_service)],
-) -> dict[str, Any]:
+) -> dict[str, Any] | StreamingResponse:
     login = current_request_login.get()
-    return await service.complete(
-        person_id=person.id,
-        cli_login_id=login.cli_login_id if login else None,
-        body=body,
-    )
+    cli_login_id = login.cli_login_id if login else None
+    if body.get("stream") is True:
+        events = await service.stream(person_id=person.id, cli_login_id=cli_login_id, body=body)
+        return StreamingResponse(events, media_type="text/event-stream")
+    return await service.complete(person_id=person.id, cli_login_id=cli_login_id, body=body)
 
 
 @router.get(
     "/api/agent/model/v1/models",
-    **op("agent.model.list", "List the models the gateway forwards.", tool=False),
+    response_model=ModelListOut,
+    **op(
+        "agent.model.list",
+        "List the models the gateway forwards, and the default one that `default` names.",
+        tool=False,
+    ),
 )
 async def list_models(
     _person: Annotated[CurrentPerson, require("agent.model.use")],
     service: Annotated[ModelService, Depends(get_model_service)],
-) -> dict[str, Any]:
-    return {"object": "list", "data": service.models()}
+) -> ModelListOut:
+    return service.models()
 
 
 @router.get(

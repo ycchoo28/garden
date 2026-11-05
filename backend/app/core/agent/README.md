@@ -9,6 +9,7 @@
 - The model gateway (ADR 0024): an OpenAI-compatible API for CLI logins, which forwards each chat call to the configured upstream model.
   The gateway answers only for models on its allowlist and counts each person's usage.
   Its usage rows are in `usage`.
+- The installer's files: the manifest and the public downloads (`garden.pyz`, the dsh bundles, the dsh config and the installers), from the folder `GARDEN_AGENT_DOWNLOADS_DIR`.
 - Limits per person: a requests-per-minute limit per CLI login and a tokens-per-day allowance per person, reset at midnight UTC.
 - Schema: `agent`, tables `confirmation` and `usage`.
   Prompts and completions are never stored.
@@ -17,14 +18,18 @@
 
 Import from `app.core.agent` only: `router`, `ROLES`, `PERMISSIONS`, `confirm_agent_action`, `CONFIRMATION_HEADER` and `get_upstream_transport`, which tests use to pass a fake upstream.
 
+- `GET /api/agent/manifest` (no sign-in): the files the installer fetches, each with its URL, size and SHA-256.
+- `GET /api/agent/downloads/{name}` (no sign-in): one public file, by plain file name.
+  Only the names in `PUBLIC_DOWNLOADS` are served, and a name that is not one of them answers 404.
 - `GET /api/agent/cli/authorize` (no sign-in): starts a CLI login and redirects the browser to the identity provider.
 - `POST /api/agent/cli/approvals` (no sign-in): finishes a CLI login with the code and the PKCE verifier, and answers the token once.
 - `GET /api/agent/my-logins` (`agent.logins.view`): the caller's CLI logins, newest first.
 - `POST /api/agent/my-logins/{login_id}/sign-out` (`agent.logins.revoke`, browser only): revokes one of the caller's CLI logins.
+- `DELETE /api/agent/cli/token` (`users.self`, CLI login only): ends the CLI login this call was made with. `garden logout` calls it.
 - `GET /api/agent/my-confirmations/{confirmation_id}` (`users.self`): one confirmation and its status.
   The CLI polls it after a 428, and only the person who asked may read it.
 - `POST /api/agent/my-confirmations/{confirmation_id}/decision` (`agent.confirmations.decide`, browser only): approves or rejects a pending confirmation.
-- `GET /api/agent/model/v1/models` (`agent.model.use`): the models the gateway forwards.
+- `GET /api/agent/model/v1/models` (`agent.model.use`): the models the gateway forwards, and `default` when a default model is configured.
 - `POST /api/agent/model/v1/chat/completions` (`agent.model.use`): an OpenAI chat completion for a model on the allowlist.
 - `GET /api/agent/model/my-usage` (`agent.model_usage.view`): the caller's requests and tokens today, with the daily allowance.
 
@@ -50,3 +55,7 @@ The 428 names the confirmation id and a URL to open, which is `{public_url}/agen
 - A failed upstream call is still recorded, with status `upstream_error`.
 - With no upstream configured the gateway answers 503, and it refuses streaming.
 - Token counts that are not whole numbers count as zero.
+- `default` is a name the gateway resolves to `GARDEN_AGENT_MODEL_DEFAULT` before its allowlist check, and the upstream receives the real model name.
+  The default must be on the allowlist, and `default` cannot be on it.
+- The downloads need no sign-in, because the installer fetches them before a person has a login.
+  They are plain files in one folder, and a missing folder offers no files, which is not an error.

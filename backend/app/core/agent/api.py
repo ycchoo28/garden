@@ -8,8 +8,10 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 
+from app.config import Settings, get_settings
+from app.core.agent.downloads import download_path, offered_files
 from app.core.agent.model_api import router as model_router
 from app.core.agent.schemas import (
     CliLoginCreated,
@@ -17,14 +19,62 @@ from app.core.agent.schemas import (
     CliLoginOut,
     ConfirmationOut,
     DecisionIn,
+    ManifestArtifact,
+    ManifestOut,
 )
 from app.core.agent.service import ConfirmationService, get_confirmation_service
 from app.core.users import CurrentPerson, UserService, get_user_service, require
+from app.shared.errors import Forbidden
 from app.shared.operations import op
+from app.shared.request_login import current_request_login
 
 router = APIRouter()
 # The model gateway's routes are declared in their own file, and this router serves them too.
 router.include_router(model_router)
+
+
+# The installer's manifest and files need no sign-in: they hold no secrets, and the installer
+# fetches them before the person has a login. These two routes are the public exception.
+
+
+@router.get(
+    "/api/agent/manifest",
+    response_model=ManifestOut,
+    **op(
+        "agent.manifest.read",
+        "List the files the installer fetches, with the SHA-256 each must match. Needs no sign-in.",
+        tool=False,
+    ),
+)
+async def read_manifest(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> ManifestOut:
+    return ManifestOut(
+        artifacts={
+            file.name: ManifestArtifact(
+                url=f"/api/agent/downloads/{file.name}",
+                sha256=file.sha256,
+                size_bytes=file.size_bytes,
+            )
+            for file in offered_files(settings.agent_downloads_dir)
+        }
+    )
+
+
+@router.get(
+    "/api/agent/downloads/{name}",
+    response_class=FileResponse,
+    **op(
+        "agent.download.read",
+        "Download one garden or dsh file, or an installer, by name. Needs no sign-in.",
+        tool=False,
+    ),
+)
+async def read_download(
+    name: str,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> FileResponse:
+    return FileResponse(download_path(settings.agent_downloads_dir, name), filename=name)
 
 
 @router.get(
@@ -100,6 +150,28 @@ async def revoke_cli_login(
     service: Annotated[UserService, Depends(get_user_service)],
 ) -> Response:
     await service.revoke_cli_login(person_id=person.id, login_id=login_id)
+    return Response(status_code=204)
+
+
+# A CLI login ends itself: `garden logout` calls this with the login's own token, so the portal
+# stops it and not only the laptop forgetting it. A browser session has no CLI login to end.
+@router.delete(
+    "/api/agent/cli/token",
+    status_code=204,
+    **op(
+        "agent.cli_token.sign_out",
+        "End this device's CLI login. The token used for this call stops working.",
+        tool=False,
+    ),
+)
+async def sign_out_cli_token(
+    person: Annotated[CurrentPerson, require("users.self")],
+    service: Annotated[UserService, Depends(get_user_service)],
+) -> Response:
+    login = current_request_login.get()
+    if login is None or login.cli_login_id is None:
+        raise Forbidden("Only a CLI login ends with this call. Sign out in the browser instead.")
+    await service.revoke_cli_login(person_id=person.id, login_id=login.cli_login_id)
     return Response(status_code=204)
 
 

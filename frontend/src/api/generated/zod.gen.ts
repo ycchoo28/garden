@@ -33,6 +33,8 @@ export const zAddLineIn = z.object({
 export const zAuditEventOut = z.object({
     acting_as_agent: z.boolean(),
     actor_id: z.string(),
+    confirmation_id: z.string().nullable(),
+    confirmed_at: z.string().nullable(),
     id: z.string(),
     occurred_at: z.string(),
     operation: z.string(),
@@ -381,6 +383,24 @@ export const zLineReplaceIn = z.object({
 });
 
 /**
+ * ManifestArtifact
+ */
+export const zManifestArtifact = z.object({
+    sha256: z.string(),
+    size_bytes: z.int(),
+    url: z.string()
+});
+
+/**
+ * ManifestOut
+ *
+ * The files the installer fetches, keyed by name, each with the SHA-256 it must match.
+ */
+export const zManifestOut = z.object({
+    artifacts: z.record(z.string(), zManifestArtifact)
+});
+
+/**
  * MeOut
  */
 export const zMeOut = z.object({
@@ -390,6 +410,28 @@ export const zMeOut = z.object({
     name: z.string(),
     permissions: z.array(z.string()),
     roles: z.array(z.string())
+});
+
+/**
+ * ModelInfoOut
+ */
+export const zModelInfoOut = z.object({
+    id: z.string(),
+    object: z.literal('model').optional().default('model'),
+    owned_by: z.string().optional().default('garden')
+});
+
+/**
+ * ModelListOut
+ *
+ * The models the gateway forwards, as an OpenAI-style list, and the one `default` names.
+ *
+ * `default` is the model dsh uses. It is null when no model is allowed.
+ */
+export const zModelListOut = z.object({
+    data: z.array(zModelInfoOut),
+    default: z.string().nullable(),
+    object: z.literal('list').optional().default('list')
 });
 
 /**
@@ -584,6 +626,20 @@ export const zAgentCliApprovalStartQuery = z.object({
 /**
  * Successful Response
  */
+export const zAgentCliTokenSignOutResponse = z.void();
+
+export const zAgentDownloadReadPath = z.object({
+    name: z.string()
+});
+
+/**
+ * Successful Response
+ */
+export const zAgentManifestReadResponse = zManifestOut;
+
+/**
+ * Successful Response
+ */
 export const zAgentMyModelUsageReadResponse = zUsageTodayOut;
 
 /**
@@ -592,18 +648,9 @@ export const zAgentMyModelUsageReadResponse = zUsageTodayOut;
 export const zAgentModelChatCompletionBody = z.record(z.string(), z.unknown());
 
 /**
- * Response Agent.Model.Chat Completion
- *
  * Successful Response
  */
-export const zAgentModelChatCompletionResponse = z.record(z.string(), z.unknown());
-
-/**
- * Response Agent.Model.List
- *
- * Successful Response
- */
-export const zAgentModelListResponse = z.record(z.string(), z.unknown());
+export const zAgentModelListResponse = zModelListOut;
 
 export const zAgentConfirmationReadPath = z.object({
     confirmation_id: z.uuid()
