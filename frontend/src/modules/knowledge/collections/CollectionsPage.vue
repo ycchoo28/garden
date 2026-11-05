@@ -18,6 +18,7 @@ const queryClient = useQueryClient();
 
 const { data: me } = useQuery(usersSelfReadOptions());
 const canManage = computed(() => me.value?.permissions.includes('knowledge.collection.manage') ?? false);
+const canPrepare = computed(() => me.value?.permissions.includes('knowledge.batch.prepare') ?? false);
 const { data: collections, error, isPending } = useQuery(knowledgeCollectionListOptions());
 
 const name = ref('');
@@ -117,7 +118,7 @@ function startBatch(collectionId: string) {
             </p>
           </div>
           <button
-            v-if="canManage"
+            v-if="canPrepare"
             type="button"
             class="rounded-lg border border-line px-3 py-2 text-sm font-medium"
             :disabled="openBatch.isPending.value"
