@@ -21,6 +21,7 @@ from garden.jsonio import as_object, is_object
 PROTOCOL_VERSION = "2025-06-18"
 SUPPORTED_VERSIONS = ("2025-06-18", "2025-03-26")
 PARSE_ERROR = -32700
+INVALID_REQUEST = -32600
 METHOD_NOT_FOUND = -32601
 INVALID_PARAMS = -32602
 
@@ -40,6 +41,18 @@ def serve(engine: Engine, stdin: TextIO, stdout: TextIO, stderr: TextIO | None =
                     "jsonrpc": "2.0",
                     "id": None,
                     "error": {"code": PARSE_ERROR, "message": "Not JSON."},
+                },
+            )
+            continue
+        if not is_object(message):
+            # A JSON value that is not a message object, such as an array or a number, must not
+            # stop the server: it gets an invalid-request reply, and the next line is read.
+            _send(
+                stdout,
+                {
+                    "jsonrpc": "2.0",
+                    "id": None,
+                    "error": {"code": INVALID_REQUEST, "message": "Not a JSON-RPC message."},
                 },
             )
             continue
@@ -78,8 +91,15 @@ def handle(
     request_id = message.get("id")
     if request_id is None:
         return None
+    raw_params: Any = message.get("params") or {}
+    if not is_object(raw_params):
+        return {
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "error": {"code": INVALID_PARAMS, "message": "Params must be an object."},
+        }
     try:
-        result = _dispatch(engine, str(method), message.get("params") or {}, notify)
+        result = _dispatch(engine, str(method), raw_params, notify)
     except _ProtocolError as error:
         return {
             "jsonrpc": "2.0",

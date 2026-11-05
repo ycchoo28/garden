@@ -9,13 +9,13 @@ import json
 import re
 import threading
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 CONFIRMATION_HEADER = "x-garden-confirmation"
 GOOD_TOKEN = "good-token"
-EXPIRES_AT = "2099-01-01T00:00:00+00:00"
 BATCH_UPLOAD = re.compile(r"/api/knowledge/batches/([^/]+)/files")
 
 
@@ -63,6 +63,18 @@ class FakePortal:
     downloads: dict[str, bytes] = field(default_factory=lambda: dict[str, bytes]())
     # The model the gateway names as `default`. None means the portal names no model.
     model_default: str | None = "deepseek-v4-flash"
+    # What the person does with a confirmation once it is polled. None means nobody answers.
+    auto_decision: str | None = None
+    # How many polls find the confirmation still pending before the person answers.
+    polls_before_decision: int = 0
+    polls: dict[str, int] = field(default_factory=lambda: dict[str, int]())
+    # How long a confirmation stays open, from the moment the portal asks for it.
+    expires_in_seconds: float = 600.0
+    # Routes a test adds to the contract. Each answers with the method, path and JSON body it got.
+    extra_paths: dict[str, dict[str, Any]] = field(
+        default_factory=lambda: dict[str, dict[str, Any]]()
+    )
+    logouts: list[str] = field(default_factory=lambda: list[str]())
     url: str = ""
     _server: ThreadingHTTPServer | None = None
 
@@ -84,6 +96,18 @@ class FakePortal:
 
     def decide(self, confirmation_id: str, status: str) -> None:
         self.confirmations[confirmation_id] = status
+
+    def answer(self, confirmation_id: str) -> str:
+        """The status the person's browser shows now. With auto_decision set, the person answers
+        once the confirmation has been polled polls_before_decision times while still pending."""
+        status = self.confirmations.get(confirmation_id, "pending")
+        if status == "pending" and self.auto_decision is not None:
+            seen = self.polls.get(confirmation_id, 0)
+            self.polls[confirmation_id] = seen + 1
+            if seen >= self.polls_before_decision:
+                self.confirmations[confirmation_id] = self.auto_decision
+                status = self.auto_decision
+        return status
 
     def contract(self) -> dict[str, Any]:
         item_params = [
@@ -188,6 +212,7 @@ class FakePortal:
                 "x-agent": {"confirm": False, "tool": True, "save": True},
                 "x-permission": "files.view",
             }
+        paths.update(self.extra_paths)
         return {"openapi": "3.1.0", "info": {"title": "garden", "version": "1"}, "paths": paths}
 
 
@@ -259,6 +284,8 @@ class _Handler(BaseHTTPRequestHandler):
         if not self._bearer_ok():
             self._problem(401, "Unauthorized")
             return
+        if self._extra_route("GET", parts.path):
+            return
         if parts.path == "/api/agent/model/v1/models":
             self._send(
                 200,
@@ -281,7 +308,7 @@ class _Handler(BaseHTTPRequestHandler):
             return
         if parts.path.startswith("/api/agent/my-confirmations/"):
             confirmation_id = parts.path.rsplit("/", 1)[1]
-            status = self.fake.confirmations.get(confirmation_id, "pending")
+            status = self.fake.answer(confirmation_id)
             self._send(200, {"id": confirmation_id, "status": status})
             return
         if parts.path.startswith("/api/files/"):
@@ -305,7 +332,23 @@ class _Handler(BaseHTTPRequestHandler):
         if batch is not None:
             self._upload(path, "knowledge.batch.prepare", 201)
             return
+        if self._extra_route("POST", path):
+            return
         self._problem(404, "Not Found")
+
+    def _extra_route(self, method: str, path: str) -> bool:
+        """A route a test added to the contract. It answers with what it received, so the test can
+        see the method, the path parameters and the JSON body the CLI or MCP server sent."""
+        for template, operations in self.fake.extra_paths.items():
+            if method.lower() not in operations:
+                continue
+            pattern = re.sub(r"\{[^}]+\}", "[^/]+", template)
+            if re.fullmatch(pattern, path) is None:
+                continue
+            body = self._body() if method == "POST" else {}
+            self._send(200, {"method": method, "path": path, "body": body})
+            return True
+        return False
 
     def _upload(self, route: str, permission: str, status: int) -> None:
         """Accepts a multipart upload the way the portal does: the same gate, and the file kept."""
@@ -342,6 +385,14 @@ class _Handler(BaseHTTPRequestHandler):
                 422, "Validation failed", errors=[{"field": "file", "message": "Missing"}]
             )
             return
+        # The contract's translation_group has maxLength 200, and the portal says so field by field.
+        if len(texts.get("translation_group", "")) > 200:
+            self._problem(
+                422,
+                "Validation failed",
+                errors=[{"field": "translation_group", "message": "Too long."}],
+            )
+            return
         field_name, filename, content_type, data = file_part
         upload = Upload(
             route=route,
@@ -374,6 +425,10 @@ class _Handler(BaseHTTPRequestHandler):
             self._problem(401, "Unauthorized")
             return
         path = urlsplit(self.path).path
+        if path == "/api/agent/cli/token":
+            self.fake.logouts.append(self.headers.get("Authorization", "").removeprefix("Bearer "))
+            self._send(204)
+            return
         if not path.startswith("/api/files/"):
             self._problem(404, "Not Found")
             return
@@ -398,7 +453,9 @@ class _Handler(BaseHTTPRequestHandler):
                 detail="The person must approve this action in the browser first.",
                 confirmation_id=confirmation_id,
                 confirmation_url=f"{self.fake.url}/agent/confirmations/{confirmation_id}",
-                expires_at=EXPIRES_AT,
+                expires_at=(
+                    datetime.now(UTC) + timedelta(seconds=self.fake.expires_in_seconds)
+                ).isoformat(),
             )
             return False
         self.fake.retries.append(presented)
