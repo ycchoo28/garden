@@ -5,17 +5,19 @@ It talks to the API through a client generated from the OpenAPI contract, with T
 
 ## Shell
 
-`App.vue` chooses the layout for each page.
-Signed-in pages use `AppShell`, which shows the brand, the signed-in person, sign-out and the colour choice.
-The signed-out page uses `BareLayout`, and a route opts into it with `meta: { layout: 'bare' }`.
+`src/app/App.vue` chooses the layout for each page.
+Signed-in pages use `src/app/layouts/AppShell.vue`, which shows the brand, the signed-in person, sign-out and the colour choice.
+The signed-out page uses `src/app/layouts/BareLayout.vue`, and a route opts into it with `meta: { layout: 'bare' }`.
 
+The application router in `src/app/router.ts` registers global routes and business-module routes.
+The home and signed-out pages are in `src/app`; identity and session operations remain in `src/core/users`.
 The router asks the API who the person is before it shows a private page.
 When there is no session, the browser goes to `/auth/login` and comes back to the page afterwards (`src/shared/redirects.ts`).
 
 ### Ownership direction
 
 [ADR 0026](adr/0026-business-ownership-and-reporting-reads.md) assigns global pages, layouts and navigation composition to the application layer.
-The current home/signed-out pages under Users and shell/layouts under Shared are pending refactor work.
+The application assembles module navigation using generic navigation types and permission filtering from Shared.
 Business pages remain in their owning modules; theme tokens and generic components remain Shared.
 Central route registration does not require a central directory for business pages.
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import SkipLink from './SkipLink.vue';
+import SkipLink from '../../shared/ui/SkipLink.vue';
 
 // The layout for pages shown without a session, such as the signed-out page: the name of the app and nothing else.
 </script>

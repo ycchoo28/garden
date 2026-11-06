@@ -1,3 +1,2 @@
-// Public interface of the users core module. The app imports only from here.
-export { usersRoutes } from './routes';
+// Public interface of the users core module. The app imports session operations from here.
 export { useSignOut } from './useSignOut';
