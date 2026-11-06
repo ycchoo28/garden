@@ -18,6 +18,7 @@ from app.core.approvals import ApprovalService, RunState, get_approval_service
 from app.core.audit import AuditService, get_audit_service
 from app.core.files import FileService, get_file_service
 from app.core.users import CurrentPerson
+from app.modules.budgets import CATEGORIES
 from app.modules.claims.drafting.repository import ClaimRepository, get_claim_repository
 from app.modules.claims.flows import CLAIM_FLOW_CODE, SUBJECT_TYPE
 from app.modules.claims.models import Claim, Line
@@ -41,7 +42,6 @@ from app.modules.claims.views import (
     summary_of,
     total_of,
 )
-from app.shared.categories import CATEGORIES
 from app.shared.clock import Clock, get_clock
 from app.shared.errors import Conflict, Forbidden, NotFound, Unprocessable
 from app.shared.ids import new_id
