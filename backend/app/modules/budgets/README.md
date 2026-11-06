@@ -7,7 +7,8 @@
   A closed month never reopens.
 - Variance: the budget minus the actual spend for a range of months.
 - Schema: `budgets`. Tables: `line` (owned by `lines`) and `month_close` (owned by `months`). `variance` owns no table.
-- It reads approved claim lines from `claims` through that module's public interface, and it owns neither those lines nor the claims.
+- It currently reads approved claim lines from `claims` through that module's public interface, and it owns neither those lines nor the claims.
+  A documented direct reporting read is also permitted by [ADR 0026](../../../../docs/adr/0026-business-ownership-and-reporting-reads.md).
 
 ## Features
 
@@ -32,3 +33,12 @@ Claims reads whether a month is closed through a port that this module provides 
   Claims refuses to add, void or submit a claim line dated in a closed month.
 - Variance is the budget minus the actual spend, and the actual spend is approved claim lines only.
 - The categories and the `YYYY-MM` month format are shared with claims.
+
+## Reporting read boundary
+
+Variance currently obtains Budget lines, approved Claims spending and departments through services.
+This is a valid implementation; no direct cross-module SQL contract is declared here yet.
+Before introducing one, document the consumed Budget, Claims and Approval tables/views and columns, latest-run approval semantics, caller scope, reporting dates and tests affected by migrations.
+Only the report's read path changes; Claims mutations and Approval decisions remain with their owners.
+Preserve the existing response behavior, including `null` budget and variance when spending has no matching Budget line.
+The fixed category definition currently in Shared is pending business-owner alignment, not a model for new shared business policy.

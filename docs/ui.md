@@ -12,6 +12,13 @@ The signed-out page uses `BareLayout`, and a route opts into it with `meta: { la
 The router asks the API who the person is before it shows a private page.
 When there is no session, the browser goes to `/auth/login` and comes back to the page afterwards (`src/shared/redirects.ts`).
 
+### Ownership direction
+
+[ADR 0026](adr/0026-business-ownership-and-reporting-reads.md) assigns global pages, layouts and navigation composition to the application layer.
+The current home/signed-out pages under Users and shell/layouts under Shared are pending refactor work.
+Business pages remain in their owning modules; theme tokens and generic components remain Shared.
+Central route registration does not require a central directory for business pages.
+
 ## Colour
 
 Every colour comes from a token.

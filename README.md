@@ -42,6 +42,8 @@ The API is one FastAPI app with one Postgres database, split into modules.
 Core modules are users, audit, files, approvals and agent.
 Business modules are claims, budgets and knowledge.
 Each module owns one Postgres schema, and no foreign key crosses schemas.
+Business responsibility determines ownership of pages and features, including reports that use several domains.
+Reporting repositories may read other modules' tables through documented read contracts; writes remain domain-owned ([ADR 0026](docs/adr/0026-business-ownership-and-reporting-reads.md)).
 The worker runs the same code as the API and handles the background jobs of the knowledge module.
 The web app is a Vue 3 single-page app that calls the API through a client generated from the contract.
 The `garden` command and its MCP server use the same contract, and they show only the tools the signed-in person may use.

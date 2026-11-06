@@ -23,6 +23,15 @@ Import from `app.modules.claims` only: `router`, `ROLES` and `PERMISSIONS`.
 The approved spend per department, month and category is exposed through `ClaimsService.approved_spend`, which the budgets module reads for the variance report.
 Variance uses approved claim lines only.
 A line uses the shared `CATEGORIES`, the same list that budget lines use.
+That definition's placement in generic Shared code is pending business-owner alignment under [ADR 0026](../../../../docs/adr/0026-business-ownership-and-reporting-reads.md).
+The selectable category contract must be available to legitimate Claims callers without granting them Budget financial access.
+
+## Reporting read boundary
+
+`ClaimsService.approved_spend` is the current public read used by Budget Variance.
+ADR 0026 also permits a documented direct reporting query, without granting access to private Claims repositories or mutation behavior.
+Before introducing that query, record its consumed tables/views and columns, approval and voiding semantics, authorization scope, and consumer tests that must run when Claims or Approval storage changes.
+There is no direct cross-module SQL contract for Variance implemented yet.
 
 ## Key decisions
 

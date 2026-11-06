@@ -22,6 +22,22 @@ Read it before you change anything, then read the folder you work in.
 - `backend/migrations` holds one Alembic branch per module, and each branch creates its own schema.
 - `frontend/src/modules` holds frontend modules. A module imports only from `api`, `shared` and itself.
 - `frontend/src/shared` holds the UI shell, theme tokens and shared helpers.
+  The shell's current placement is pending application-layer alignment under ADR 0026.
+
+## Ownership and reporting reads
+
+- Business modules own their pages, business rules, domain-specific components and tests.
+  Choose the owner by business outcome, even when a feature uses several domains.
+- Global home/auth/error pages, layouts and navigation composition belong to the application layer.
+  Keep Shared domain-neutral; expense categories require a business owner rather than generic plumbing.
+- A reporting repository may read other modules' tables through a documented database read contract.
+  Record consumed tables/views, columns and meanings, caller scope and affected tests before adding the query.
+  This does not permit imports from foreign private models/repositories or writes to foreign records.
+- Keep SQL in repositories, enforce backend authorization and preserve authoritative business semantics.
+  Cross-domain writes use domain-owned operations with transaction handling and audit.
+- Existing Variance service calls remain valid.
+  The current category and global UI placements are pending refactors, not completed changes.
+- Read [ADR 0026](docs/adr/0026-business-ownership-and-reporting-reads.md) and the reporting-read section of [code patterns](docs/code-patterns.md#reporting-reads) for the full policy.
 
 ## Rules that the checks enforce
 

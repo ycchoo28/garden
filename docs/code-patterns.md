@@ -72,8 +72,10 @@ Architecture tests walk every installed route and check the rules above.
 ## Schemas and migrations
 
 Each module owns one Postgres schema and one Alembic branch, named after the module.
-Migrations create their schema, and no table may reference a table in another schema.
+Migrations create their schema, and no foreign key may reference a table in another schema.
 Primary keys are UUIDv7 from `app.shared.ids.new_id`.
+Schema ownership controls writes; it does not prohibit documented read-only joins across schemas.
+See [ADR 0026](adr/0026-business-ownership-and-reporting-reads.md) for the read boundary.
 
 ## Feature folders
 
@@ -88,16 +90,49 @@ Not every feature has every file.
 The rules are these.
 
 - A feature repository is private to its feature.
-  The import-linter contract "Feature repositories stay private to their feature" forbids any other module code from importing it, so a feature reads another feature through that feature's service or port.
+  The import-linter contract "Feature repositories stay private to their feature" forbids other module code from importing it.
+  A consumer may use an owner's public service or port, or a documented database read contract for reporting.
 - Read-only helpers with no database access go at the module root, such as `views.py` and `rules.py` in claims.
 - The module's `__init__.py` is the only import point for other modules.
   The architecture test in `backend/tests/architecture/test_module_interfaces.py` fails when another module imports anything deeper.
 - Each table has one owning feature repository, and only that feature writes it.
-  Other features read that table through the owner's service, except the search exception below.
-- The search repository in knowledge is the one repository whose SQL reads another feature's tables.
-  It reads them read-only, and it writes only `search_log`, which it owns.
-- Features call each other's service and get plain views back.
-  They never get another feature's repository or ORM rows.
+  Reporting repositories may read other features' or modules' tables under the read rules below.
+- The search repository in knowledge applies access rules by reading collection rules in SQL.
+  It is an existing example of controlled cross-feature reads, and writes only the search log it owns.
+- Service interactions return deliberate public views rather than another feature's repository or ORM rows.
+
+## Reporting reads
+
+A report belongs to the business module responsible for its outcome, even when it reads several domains.
+Budget Variance belongs to Budgets and may aggregate Budget and Claims data directly in a Budgets-owned reporting repository.
+Its current service-based implementation is also allowed.
+
+- Document consumed tables/views, relevant columns and business meanings, the consumer, caller scope and affected migration tests in the module READMEs before adding direct cross-module SQL.
+- Keep SQL in repositories, with department and reporting-period filters applied there where practical.
+  Do not depend on frontend filtering for authorization.
+- Keep foreign private models and repositories private.
+  A database read contract permits specified SQL references, not arbitrary code imports or foreign writes.
+- Preserve authoritative meanings such as latest-run approval, voiding, dates and category allocation.
+  Use an owner-provided read query or view when copying those meanings would duplicate complex rules.
+- Aggregate at the intended grain without multiplying amounts through joins, and include missing Budget or spending sides correctly.
+- Run report tests when consumed schema or business meanings change.
+  Check backend authorization, money precision and response compatibility as well as totals.
+- Keep writes, audit and transaction handling under the owning domain's operations.
+  The closed-months port used during Claim mutations remains an explicit domain integration.
+
+## Business and application ownership
+
+Business modules own their pages, domain-specific UI, client logic and tests.
+Multiple data sources do not create a new module or move a business page to the application layer.
+Frontend/backend naming should align by responsibility, without forcing matching files or empty modules.
+
+The application layer owns routing, home, global auth/error pages, layouts and navigation composition.
+Generic UI, theme tokens, transport and utilities stay in Shared.
+Domain-specific vocabulary and policies, including expense categories, require a business owner and a public contract.
+Reuse by several modules is not enough reason to put business policy in Shared.
+
+The current Users home/signed-out pages, Shared layouts and Shared category definition are pending refactor work under ADR 0026.
+Their current locations should not be copied as the target ownership pattern.
 
 The frontend mirrors the same split.
 `frontend/src/modules/<module>/<feature>/` holds the pages of one feature, and the module's `index.ts` exports the routes.
