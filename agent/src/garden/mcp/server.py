@@ -14,9 +14,8 @@ import sys
 from typing import Any, TextIO
 
 from garden import __version__
-from garden.engine import Engine, Notify
-from garden.errors import GardenError
-from garden.jsonio import as_object, is_object
+from garden.engine import Engine, Notify, Tool
+from garden.shared import GardenError, as_object, is_object
 
 PROTOCOL_VERSION = "2025-06-18"
 SUPPORTED_VERSIONS = ("2025-06-18", "2025-03-26")
@@ -26,7 +25,7 @@ METHOD_NOT_FOUND = -32601
 INVALID_PARAMS = -32602
 
 
-def serve(engine: Engine, stdin: TextIO, stdout: TextIO, stderr: TextIO | None = None) -> None:
+def serve(engine: Engine, stdin: TextIO, stdout: TextIO, stderr: TextIO | None = None) -> int:
     notify = _notifier(stdout, stderr or sys.stderr)
     for line in stdin:
         line = line.strip()
@@ -59,6 +58,11 @@ def serve(engine: Engine, stdin: TextIO, stdout: TextIO, stderr: TextIO | None =
         reply = handle(engine, message, notify=notify)
         if reply is not None:
             _send(stdout, reply)
+    return 0
+
+
+def serve_stdio(engine: Engine) -> int:
+    return serve(engine, sys.stdin, sys.stdout)
 
 
 def _notifier(stdout: TextIO, stderr: TextIO) -> Notify:
@@ -143,7 +147,7 @@ def _dispatch(
     raise _ProtocolError(METHOD_NOT_FOUND, f"Unknown method {method}.")
 
 
-def _describe(tool: Any) -> dict[str, Any]:
+def _describe(tool: Tool) -> dict[str, Any]:
     return {
         "name": tool.name,
         "description": tool.summary,

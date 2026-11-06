@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import io
 
-from garden.output import MAX_CELL, render
+from garden.shared import MAX_CELL, render
 
 
 def test_a_long_table_cell_is_cut_with_an_ascii_mark_and_stays_within_the_width() -> None:

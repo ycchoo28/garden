@@ -26,7 +26,7 @@ import yaml
 from conftest import ROOT, as_json, run_garden
 from fake_portal import GOOD_TOKEN, FakePortal
 
-from garden import dsh
+from garden.dsh import render_patch
 
 INSTALLER = ROOT / "install" / "install.sh"
 INSTALLER_WINDOWS = ROOT / "install" / "install.ps1"
@@ -316,7 +316,7 @@ def test_the_windows_installer_fetches_its_bundle_and_the_patch_has_no_placehold
     assert re.findall(r"\{\{[A-Z_]+\}\}", template), (
         "the dsh patch template has no placeholders to check"
     )
-    rendered = dsh.render_patch(
+    rendered = render_patch(
         template,
         garden_command="/opt/garden",
         garden_args=("mcp",),

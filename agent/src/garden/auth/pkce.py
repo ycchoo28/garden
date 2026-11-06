@@ -5,6 +5,14 @@ from __future__ import annotations
 import base64
 import hashlib
 import secrets
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class Challenge:
+    verifier: str
+    challenge: str
+    method: str = "S256"
 
 
 def _b64url(raw: bytes) -> str:
@@ -17,3 +25,8 @@ def new_verifier() -> str:
 
 def challenge_for(verifier: str) -> str:
     return _b64url(hashlib.sha256(verifier.encode("ascii")).digest())
+
+
+def generate_challenge() -> Challenge:
+    verifier = new_verifier()
+    return Challenge(verifier=verifier, challenge=challenge_for(verifier))

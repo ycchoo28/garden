@@ -13,15 +13,26 @@ import mimetypes
 import os
 import time
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from garden.errors import ConfirmationRequired, GardenError, NotSignedIn
-from garden.jsonio import as_list, as_object, as_text
-from garden.portal import CONTRACT_HEADER, FormPart, PortalClient, Response
-from garden.tools import FormField, Tool, build_tools
+from garden.auth import load_session
+from garden.engine.client import CONTRACT_HEADER, PortalClient, Response, UploadFile
+from garden.engine.contract import FormField, Tool, build_tools
+from garden.shared import (
+    ConfirmationRequired,
+    GardenError,
+    NotSignedIn,
+    Settings,
+    as_list,
+    as_object,
+    as_text,
+    home_dir,
+    load_settings,
+)
 
 CONTRACT_PATH = "/api/openapi.json"
 ME_PATH = "/api/users/me"
@@ -67,10 +78,20 @@ class Engine:
         return build_tools(self._contract(), permissions)
 
     def tool(self, name: str) -> Tool | None:
-        for tool in self.tools():
-            if tool.name == name or tool.op_id == name:
-                return tool
+        for item in self.tools():
+            if item.name == name or item.op_id == name:
+                return item
         return None
+
+    def find_tool(self, name: str) -> Tool:
+        target = self.tool(name)
+        if target is None:
+            raise GardenError(
+                title="Unknown tool",
+                detail=f"No tool named '{name}'.",
+                fix="Run `garden tools` to list the tools available to you.",
+            )
+        return target
 
     def permissions(self) -> frozenset[str]:
         body = as_object(self._send("GET", ME_PATH).body)
@@ -79,9 +100,19 @@ class Engine:
     def me(self) -> dict[str, Any]:
         return as_object(self._send("GET", ME_PATH).body)
 
-    def call(self, tool: Tool, arguments: dict[str, Any], *, notify: Notify | None = None) -> Any:
-        path = tool.path
-        for param in tool.path_params:
+    def revoke_cli_token(self) -> None:
+        self._client.call("DELETE", "/api/agent/cli/token")
+
+    def call(
+        self,
+        tool: Tool | str,
+        arguments: dict[str, Any],
+        *,
+        notify: Notify | None = None,
+    ) -> Any:
+        target = self.find_tool(tool) if isinstance(tool, str) else tool
+        path = target.path
+        for param in target.path_params:
             if param.name not in arguments or arguments[param.name] is None:
                 raise GardenError(
                     title="Missing argument",
@@ -89,16 +120,16 @@ class Engine:
                     fix=f"Pass {param.name}.",
                 )
             path = path.replace("{" + param.name + "}", _path_segment(arguments[param.name]))
-        query = {param.name: arguments.get(param.name) for param in tool.query_params}
-        body = arguments.get("body") if tool.body_schema is not None else None
-        if tool.body_required and body is None:
+        query = {param.name: arguments.get(param.name) for param in target.query_params}
+        body = arguments.get("body") if target.body_schema is not None else None
+        if target.body_required and body is None:
             raise GardenError(
                 title="Missing body", detail="This call needs a body.", fix="Pass body."
             )
         # The files are read once, before the first request, so a retry after an approval sends the
         # same bytes again without reading the disk a second time.
-        form = _form_parts(tool.form_fields, arguments)
-        method = tool.method.upper()
+        form = _form_parts(target.form_fields, arguments)
+        method = target.method.upper()
 
         def send(headers: dict[str, str] | None = None) -> Any:
             return self._send(method, path, query=query, body=body, form=form, headers=headers).body
@@ -183,7 +214,7 @@ class Engine:
         *,
         query: dict[str, Any] | None = None,
         body: Any | None = None,
-        form: list[FormPart] | None = None,
+        form: list[UploadFile] | None = None,
         headers: dict[str, str] | None = None,
     ) -> Response:
         if self._client.token is None:
@@ -212,15 +243,59 @@ class Engine:
         os.replace(tmp, self._cache_file)
 
 
+def connect(
+    *,
+    portal_url: str | None = None,
+    token: str | None = None,
+    cache_dir: Path | None = None,
+    settings: Settings | None = None,
+    sleep: Callable[[float], None] = time.sleep,
+    clock: Callable[[], float] = time.time,
+    poll_seconds: float = POLL_SECONDS,
+) -> Engine:
+    if settings is not None:
+        active_settings: Settings | None = settings
+    else:
+        try:
+            active_settings = load_settings()
+        except GardenError:
+            if portal_url is not None:
+                active_settings = None
+            else:
+                raise
+
+    if active_settings is not None and portal_url is not None:
+        active_settings = replace(active_settings, portal_url=portal_url)
+    session = load_session(active_settings) if token is None and active_settings else None
+
+    resolved_token = (
+        token if token is not None else (session.token if session is not None else None)
+    )
+    fallback_portal = active_settings.portal_url if active_settings else ""
+    resolved_url = portal_url or fallback_portal
+    resolved_cache = cache_dir or (
+        active_settings.cache_dir if active_settings else home_dir() / "cache"
+    )
+    return Engine(
+        PortalClient(resolved_url, token=resolved_token),
+        cache_dir=resolved_cache,
+        sleep=sleep,
+        clock=clock,
+        poll_seconds=poll_seconds,
+    )
+
+
 def _path_segment(value: Any) -> str:
     return quote(str(value), safe="")
 
 
-def _form_parts(fields: tuple[FormField, ...], arguments: dict[str, Any]) -> list[FormPart] | None:
+def _form_parts(
+    fields: tuple[FormField, ...], arguments: dict[str, Any]
+) -> list[UploadFile] | None:
     """The multipart body for a call, or None when the operation has no form."""
     if not fields:
         return None
-    parts: list[FormPart] = []
+    parts: list[UploadFile] = []
     for field in fields:
         value = arguments.get(field.param.name)
         if value is None:
@@ -234,11 +309,11 @@ def _form_parts(fields: tuple[FormField, ...], arguments: dict[str, Any]) -> lis
         if field.binary:
             parts.append(_file_part(field, value))
         else:
-            parts.append(FormPart(name=field.name, data=_text(value).encode("utf-8")))
+            parts.append(UploadFile(name=field.name, data=_text(value).encode("utf-8")))
     return parts
 
 
-def _file_part(field: FormField, value: Any) -> FormPart:
+def _file_part(field: FormField, value: Any) -> UploadFile:
     argument = field.param.name
     if not isinstance(value, str) or not value:
         raise GardenError(
@@ -268,7 +343,7 @@ def _file_part(field: FormField, value: Any) -> FormPart:
             fix="Check that this login may read the file, then try again.",
         ) from error
     content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-    return FormPart(name=field.name, data=data, filename=path.name, content_type=content_type)
+    return UploadFile(name=field.name, data=data, filename=path.name, content_type=content_type)
 
 
 def _text(value: Any) -> str:

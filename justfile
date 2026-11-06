@@ -164,6 +164,7 @@ agent-check:
     cd agent && uv run ruff format --check .
     cd agent && uv run ruff check .
     cd agent && uv run pyright
+    cd agent && uv run lint-imports
 
 # Build agent/dist/garden.pyz: the garden CLI with its locked dependencies vendored in, the file the portal serves.
 agent-build:

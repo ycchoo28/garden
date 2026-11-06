@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from garden.jsonio import as_list, as_object, as_text, is_list, is_object
+from garden.shared import as_list, as_object, as_text, is_list, is_object
 
 HTTP_METHODS = ("get", "post", "put", "patch", "delete")
 _MAX_REF_DEPTH = 8

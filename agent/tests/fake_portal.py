@@ -322,6 +322,9 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlsplit(self.path).path
+        if path == "/api/agent/cli/token":
+            self._problem(405, "Method Not Allowed")
+            return
         if path == "/api/agent/cli/approvals":
             self._create_login(self._body())
             return

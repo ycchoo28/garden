@@ -7,13 +7,12 @@ It never imports the portal backend, and it is not part of the server image.
 ## What is in here
 
 - `src/garden/`: the package.
-  - `cli.py` is the command tree.
-  - `engine.py` builds the tool list from the portal's OpenAPI document and runs calls.
-  - `tools.py` reads that document into tools, filtered by the person's permissions.
-  - `mcp.py` is the stdio MCP server.
-  - `login.py` runs the browser sign-in with PKCE and a loopback listener.
-  - `secrets.py` keeps the login in the OS keychain.
-  - `dsh.py` holds the dsh patch, the gateway address and the `dsh` launcher text.
+  - `cli/` routes built-in commands and compiles the contract into command flags.
+  - `engine/` owns HTTP calls, contract caching, tool discovery and confirmation waits.
+  - `auth/` owns browser login, PKCE, the loopback listener and credential storage.
+  - `dsh/` owns model configuration, offline fallback, launchers and process execution.
+  - `mcp/` serves tools over stdio.
+  - `shared/` holds settings, errors, JSON guards and terminal output.
   - `skills/` holds the `SKILL.md` files that ship inside the package.
 - `tests/`: the process-level tests, run against `fake_portal.py`, a small stand-in for the portal.
 - `install/install.sh` and `install/install.ps1`: the installers.
@@ -25,8 +24,9 @@ It never imports the portal backend, and it is not part of the server image.
 
 Run these from the repository root.
 
-- `just agent-check`: format, lint, strict types and the agent tests.
-  `just check` runs it.
+- `just agent-check`: format, lint, strict types and package import boundaries.
+  `just check` runs it, and `just test` runs the agent tests.
+  Architecture tests enforce public subpackage imports and explicit exports.
 - `just agent-build`: builds `agent/dist/garden.pyz`.
 - `just agent-install-test`: runs the installer unattended against the fake portal. It needs no network.
 - `just agent-dsh-bundle`: builds both dsh bundles. It needs Node.js, npm and network access to the npm registry.

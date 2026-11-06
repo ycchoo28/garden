@@ -9,8 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
-from garden.errors import GardenError
-from garden.jsonio import as_object
+from garden.shared.errors import GardenError
+from garden.shared.json_types import as_object
 
 # The command dsh's MCP client starts when the installer did not write one: the one on PATH.
 DEFAULT_GARDEN_COMMAND = "garden"

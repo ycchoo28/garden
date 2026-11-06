@@ -19,8 +19,7 @@ import keyring
 from keyring.backends import fail
 from keyring.errors import KeyringError, PasswordDeleteError
 
-from garden.config import home_dir
-from garden.errors import GardenError
+from garden.shared import GardenError, home_dir
 
 SERVICE = "garden"
 FALLBACK_FILE = "credentials.json"
@@ -113,7 +112,7 @@ def _keychain_missing() -> bool:
     return isinstance(keyring.get_keyring(), fail.Keyring)
 
 
-def default_store() -> SecretStore:
+def default_store(home: Path | None = None) -> SecretStore:
     # Before keyring is asked for its backend: the choice itself imports pywin32-ctypes.
     _hide_cffi_from_windows_keyring()
     spec = os.environ.get("GARDEN_SECRET_STORE", "")
@@ -129,5 +128,6 @@ def default_store() -> SecretStore:
             "in the garden home folder, in plain text.",
             file=sys.stderr,
         )
-        return FileStore(home_dir() / FALLBACK_FILE)
+        base = home if home is not None else home_dir()
+        return FileStore(base / FALLBACK_FILE)
     return KeyringStore()

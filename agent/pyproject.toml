@@ -18,6 +18,7 @@ dev = [
     "pytest==9.1.1",
     "ruff==0.16.10",
     "pyright==1.1.414",
+    "import-linter==2.15",
 ]
 
 [build-system]
@@ -44,3 +45,29 @@ include = ["src", "tests"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = ["-ra", "--strict-markers"]
+
+[tool.importlinter]
+root_packages = ["garden"]
+
+[[tool.importlinter.contracts]]
+name = "Shared plumbing imports no other agent subpackage"
+type = "forbidden"
+source_modules = ["garden.shared"]
+forbidden_modules = [
+  "garden.auth",
+  "garden.engine",
+  "garden.dsh",
+  "garden.mcp",
+  "garden.cli",
+]
+
+[[tool.importlinter.contracts]]
+name = "Agent subpackages follow strict layers"
+type = "layers"
+layers = [
+  "garden.cli",
+  "garden.mcp : garden.dsh",
+  "garden.engine",
+  "garden.auth",
+  "garden.shared",
+]

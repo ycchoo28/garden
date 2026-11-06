@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import json
+import urllib.request
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
-from conftest import as_json, run_garden, store_token
+from conftest import as_json, finish_login, open_sign_in, run_garden, store_token
 from fake_portal import GOOD_TOKEN, FakePortal
-
-from garden.pkce import challenge_for
 
 DEFAULT_TOOLS = {
     "files_file_read",
@@ -62,9 +62,13 @@ def _notes_routes() -> dict[str, dict[str, Any]]:
     }
 
 
-def test_s256_challenge_matches_the_rfc_7636_example() -> None:
-    verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
-    assert challenge_for(verifier) == "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+def test_login_sends_an_s256_challenge(portal: FakePortal, env: dict[str, str]) -> None:
+    process, head, link = open_sign_in(env, "laptop", "--no-open")
+    query = parse_qs(urlsplit(link).query)
+    assert len(query["code_challenge"][0]) == 43
+    urllib.request.urlopen(link, timeout=30).read()
+    result = finish_login(process, head)
+    assert result.returncode == 0, result.stderr
 
 
 def test_only_declared_permitted_agent_routes_become_tools(

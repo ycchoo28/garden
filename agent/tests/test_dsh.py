@@ -17,7 +17,7 @@ import yaml
 from conftest import ROOT, run_garden, store_token
 from fake_portal import GOOD_TOKEN, FakePortal
 
-from garden import dsh
+import garden.dsh as dsh
 
 DSH_TEMPLATE = ROOT / "install" / "dsh" / "cordis.patch.yml"
 
@@ -126,8 +126,9 @@ def test_the_patch_follows_the_default_model_the_portal_names_now(
     )
 
 
+@pytest.mark.parametrize("command", [("dsh", "hello"), ("dsh-config",)])
 def test_when_the_portal_cannot_be_reached_dsh_keeps_its_last_patch_and_says_so(
-    portal: FakePortal, env: dict[str, str], tmp_path: Path
+    portal: FakePortal, env: dict[str, str], tmp_path: Path, command: tuple[str, ...]
 ) -> None:
     store_token(env, portal.url, GOOD_TOKEN)
     run_env = _env(env, tmp_path)
@@ -137,12 +138,29 @@ def test_when_the_portal_cannot_be_reached_dsh_keeps_its_last_patch_and_says_so(
     before = patch.read_text(encoding="utf-8")
     portal.stop()
 
-    result = run_garden(run_env, "dsh", "hello")
+    result = run_garden(run_env, *command)
 
     assert result.returncode == 0, result.stderr
     assert "keeps its last model" in result.stderr
     assert patch.read_text(encoding="utf-8") == before
-    assert "bin.js hello" in result.stdout
+    if command[0] == "dsh":
+        assert "bin.js hello" in result.stdout
+
+
+@pytest.mark.parametrize("flag", ["--write-config", "--write-launcher"])
+def test_dsh_forwards_configuration_flags(
+    portal: FakePortal, env: dict[str, str], tmp_path: Path, flag: str
+) -> None:
+    store_token(env, portal.url, GOOD_TOKEN)
+    run_env = _env(env, tmp_path)
+    _dsh_home(run_env, tmp_path)
+    target = tmp_path / "should-not-be-written"
+
+    result = run_garden(run_env, "dsh", flag, "--to", str(target))
+
+    assert result.returncode == 0, result.stderr
+    assert f"bin.js --profile headless {flag} --to {target}" in result.stdout
+    assert not target.exists()
 
 
 def test_a_portal_refusal_stops_dsh_instead_of_running_it_on_an_old_patch(

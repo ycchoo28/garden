@@ -16,8 +16,15 @@ from dataclasses import dataclass
 from typing import Any
 
 from garden import __version__
-from garden.errors import CliTooOld, ConfirmationRequired, GardenError
-from garden.jsonio import as_list, as_object, as_text, is_object
+from garden.shared import (
+    CliTooOld,
+    ConfirmationRequired,
+    GardenError,
+    as_list,
+    as_object,
+    as_text,
+    is_object,
+)
 
 CONTRACT_HEADER = "x-garden-contract-version"
 MIN_CLI_HEADER = "x-garden-min-cli-version"
@@ -32,7 +39,7 @@ class Response:
 
 
 @dataclass(frozen=True)
-class FormPart:
+class UploadFile:
     """One part of a multipart/form-data body. A file part has a filename and a content type."""
 
     name: str
@@ -41,7 +48,7 @@ class FormPart:
     content_type: str | None = None
 
 
-def encode_multipart(parts: Sequence[FormPart]) -> tuple[bytes, str]:
+def encode_multipart(parts: Sequence[UploadFile]) -> tuple[bytes, str]:
     """The body and its Content-Type. The boundary is random, so no part's bytes can end it."""
     boundary = uuid.uuid4().hex
     chunks: list[bytes] = []
@@ -90,7 +97,7 @@ class PortalClient:
         *,
         query: dict[str, Any] | None = None,
         body: Any | None = None,
-        form: Sequence[FormPart] | None = None,
+        form: Sequence[UploadFile] | None = None,
         headers: dict[str, str] | None = None,
     ) -> Response:
         request_headers = {
@@ -125,6 +132,8 @@ class PortalClient:
             ) from error
         check_min_version(response.headers)
         return response
+
+    call = request
 
 
 def check_min_version(headers: dict[str, str]) -> None:

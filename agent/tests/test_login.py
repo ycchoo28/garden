@@ -8,7 +8,7 @@ import urllib.request
 from pathlib import Path
 
 import pytest
-from conftest import as_json, finish_login, open_sign_in, run_garden, sign_in
+from conftest import as_json, finish_login, open_sign_in, run_garden, sign_in, store_token
 from fake_portal import GOOD_TOKEN, FakePortal
 
 
@@ -96,3 +96,35 @@ def test_no_portal_address_is_reported_as_a_fix(tmp_path: Path, env: dict[str, s
     error = as_json(result.stdout)["error"]
     assert error["title"] == "No portal address"
     assert "GARDEN_API_URL" in error["fix"]
+
+
+def test_switching_portals_does_not_reuse_another_portals_login(
+    portal: FakePortal, env: dict[str, str]
+) -> None:
+    store_token(env, portal.url, GOOD_TOKEN)
+    other = FakePortal()
+    other.start()
+    try:
+        result = run_garden({**env, "GARDEN_API_URL": other.url}, "whoami", "--json")
+        assert result.returncode == 1
+        assert as_json(result.stdout)["error"]["title"] == "Not signed in"
+    finally:
+        other.stop()
+
+
+def test_logout_keeps_other_portals_logins(portal: FakePortal, env: dict[str, str]) -> None:
+    store_token(env, portal.url, GOOD_TOKEN)
+    other = FakePortal()
+    other.start()
+    try:
+        store_token(env, other.url, GOOD_TOKEN)
+        result = run_garden(env, "logout", "--json")
+        assert result.returncode == 0, result.stderr
+        assert portal.logouts == [GOOD_TOKEN]
+
+        who = run_garden({**env, "GARDEN_API_URL": other.url}, "whoami", "--json")
+        assert who.returncode == 0, who.stderr
+        assert as_json(who.stdout)["name"] == other.name
+        assert other.logouts == []
+    finally:
+        other.stop()

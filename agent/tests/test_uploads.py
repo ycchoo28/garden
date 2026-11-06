@@ -14,8 +14,8 @@ from conftest import run_garden, store_token
 from fake_portal import GOOD_TOKEN, FakePortal
 
 from garden.engine import Engine
-from garden.errors import GardenError
 from garden.mcp import handle
+from garden.shared import GardenError
 
 RECEIPT = b"%PDF-1.4 receipt"
 

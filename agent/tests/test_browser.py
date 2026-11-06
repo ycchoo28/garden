@@ -11,7 +11,7 @@ import pytest
 from conftest import finish_login, open_sign_in
 from fake_portal import FakePortal
 
-from garden.browser import open_link
+from garden.auth import open_link
 
 # The line gio printed on the captain's terminal when no handler was set up.
 GIO_NOISE = "gio: https://portal.example.test/cli/login?port=34053: Operation not supported"

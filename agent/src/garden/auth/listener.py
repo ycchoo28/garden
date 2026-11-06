@@ -1,5 +1,4 @@
-"""`garden login`: the browser approves the login, and the code comes back to a listener on this
-machine.
+"""The browser approves the login, and the code comes back to a listener on this machine.
 
 The CLI starts the sign-in at the portal with a PKCE challenge and a loopback redirect. The browser
 signs in with the identity provider, which redirects to the listener with a one-time code and the
@@ -11,18 +10,14 @@ from __future__ import annotations
 
 import html
 import secrets
-import socket
 import threading
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any, cast
 from urllib.parse import parse_qs, urlencode, urlsplit
 
-from garden.browser import open_link
-from garden.errors import GardenError
-from garden.jsonio import as_object, as_text
-from garden.pkce import challenge_for, new_verifier
-from garden.portal import PortalClient
+from garden.auth.pkce import Challenge, generate_challenge
+from garden.shared import GardenError
 
 AUTHORIZE_PATH = "/api/agent/cli/authorize"
 CREATE_PATH = "/api/agent/cli/approvals"
@@ -94,8 +89,12 @@ _CROSS_ICON = (
 
 
 @dataclass(frozen=True)
-class Login:
-    token: str
+class CallbackResult:
+    code: str
+    state: str
+    nonce: str
+    verifier: str
+    redirect_uri: str
     device: str
 
 
@@ -179,86 +178,84 @@ def authorize_url(
     return f"{portal_url}{AUTHORIZE_PATH}?{query}"
 
 
-def run_login(
-    portal_url: str,
-    device: str,
-    *,
-    open_browser: bool = True,
-    timeout: float = DEFAULT_TIMEOUT_SECONDS,
-) -> Login:
-    state = secrets.token_urlsafe(24)
-    nonce = secrets.token_urlsafe(24)
-    verifier = new_verifier()
-    listener = _Listener(state, device)
-    redirect_uri = f"http://127.0.0.1:{listener.server_address[1]}{CALLBACK_PATH}"
-    url = authorize_url(
-        portal_url,
-        redirect_uri=redirect_uri,
-        state=state,
-        nonce=nonce,
-        challenge=challenge_for(verifier),
-    )
-    # Flushed at once: a person may be waiting on this link while the listener runs.
-    print(f"Approve this login for {device} in your browser:", flush=True)
-    print(f"  {url}", flush=True)
-    if open_browser and not open_link(url):
-        print(
-            "No browser could be opened here. Open the link above yourself to approve the login.",
-            flush=True,
+class LoopbackLoginServer:
+    def __init__(
+        self,
+        portal_url: str,
+        device_name: str,
+        timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+    ) -> None:
+        self.portal_url = portal_url.rstrip("/")
+        self.device = device_name
+        self.timeout_seconds = timeout_seconds
+        self.state = secrets.token_urlsafe(24)
+        self.nonce = secrets.token_urlsafe(24)
+        self.challenge: Challenge = generate_challenge()
+        self._listener: _Listener | None = None
+        self._worker: threading.Thread | None = None
+        self.redirect_uri: str = ""
+        self._authorize_url: str = ""
+
+    @property
+    def authorize_url(self) -> str:
+        if not self._authorize_url:
+            self._ensure_server()
+        return self._authorize_url
+
+    def _ensure_server(self) -> None:
+        if self._listener is not None:
+            return
+        self._listener = _Listener(self.state, self.device)
+        port = self._listener.server_address[1]
+        self.redirect_uri = f"http://127.0.0.1:{port}{CALLBACK_PATH}"
+        self._authorize_url = authorize_url(
+            self.portal_url,
+            redirect_uri=self.redirect_uri,
+            state=self.state,
+            nonce=self.nonce,
+            challenge=self.challenge.challenge,
         )
-    # A short poll interval: shutdown() waits for one poll, and the default 0.5 s is paid per login.
-    worker = threading.Thread(
-        target=lambda: listener.serve_forever(poll_interval=0.05), daemon=True
-    )
-    worker.start()
-    try:
-        if not listener.done.wait(timeout):
+        self._worker = threading.Thread(
+            target=lambda: cast(_Listener, self._listener).serve_forever(poll_interval=0.05),
+            daemon=True,
+        )
+        self._worker.start()
+
+    def start(self) -> None:
+        self._ensure_server()
+
+    def __enter__(self) -> LoopbackLoginServer:
+        self.start()
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        self.close()
+
+    def close(self) -> None:
+        if self._listener is not None:
+            self._listener.shutdown()
+            self._listener.server_close()
+            self._listener = None
+
+    def wait_for_callback(self) -> CallbackResult:
+        self._ensure_server()
+        listener = cast(_Listener, self._listener)
+        if not listener.done.wait(self.timeout_seconds):
             raise GardenError(
                 title="Login timed out",
-                detail=f"No approval came back within {int(timeout)} seconds.",
+                detail=f"No approval came back within {int(self.timeout_seconds)} seconds.",
                 fix="Run garden login again and approve the login in the browser.",
             )
-    finally:
-        listener.shutdown()
-        listener.server_close()
-    return _create(
-        portal_url,
-        code=listener.code or "",
-        verifier=verifier,
-        redirect_uri=redirect_uri,
-        nonce=nonce,
-        device=device,
-    )
-
-
-def _create(
-    portal_url: str,
-    *,
-    code: str,
-    verifier: str,
-    redirect_uri: str,
-    nonce: str,
-    device: str,
-) -> Login:
-    reply = PortalClient(portal_url).request(
-        "POST",
-        CREATE_PATH,
-        body={
-            "code": code,
-            "code_verifier": verifier,
-            "redirect_uri": redirect_uri,
-            "nonce": nonce,
-            "device": device,
-        },
-    )
-    token = as_text(as_object(reply.body).get("token"))
-    if not token:
-        raise GardenError(title="The portal sent no login", fix="Run garden login again.")
-    return Login(token=token, device=device)
-
-
-def device_name() -> str:
-    try:
-        return socket.gethostname() or "this-device"
-    except OSError:
-        return "this-device"
+        if not listener.code:
+            raise GardenError(
+                title="No code received",
+                fix="Run garden login again.",
+            )
+        return CallbackResult(
+            code=listener.code,
+            state=self.state,
+            nonce=self.nonce,
+            verifier=self.challenge.verifier,
+            redirect_uri=self.redirect_uri,
+            device=self.device,
+        )

@@ -14,7 +14,7 @@ import pytest
 import yaml
 from conftest import ROOT
 
-from garden import dsh
+from garden.dsh import render_patch
 
 SCRIPT = ROOT / "scripts" / "e2e.py"
 TEMPLATE = ROOT / "install" / "dsh" / "cordis.patch.yml"
@@ -34,7 +34,7 @@ def e2e() -> Iterator[ModuleType]:
 
 def _installed_patch(path: Path) -> Path:
     """The patch the installer writes: the real template, filled as `garden dsh-config` fills it."""
-    text = dsh.render_patch(
+    text = render_patch(
         TEMPLATE.read_text(encoding="utf-8"),
         garden_command="/x/garden",
         base_url=GATEWAY,

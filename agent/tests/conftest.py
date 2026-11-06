@@ -14,8 +14,8 @@ from typing import Any
 import pytest
 from fake_portal import GOOD_TOKEN, FakePortal
 
-from garden.engine import Engine
-from garden.portal import PortalClient
+from garden.auth import store_token as auth_store_token
+from garden.engine import Engine, PortalClient
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -66,6 +66,12 @@ def env(portal: FakePortal, tmp_path: Path) -> dict[str, str]:
     return base
 
 
+@pytest.fixture
+def logged_in_env(env: dict[str, str], portal: FakePortal) -> dict[str, str]:
+    store_token(env, portal.url, GOOD_TOKEN, device="test-laptop")
+    return env
+
+
 def run_garden(
     env: dict[str, str], *args: str, stdin: str = "", timeout: float = 60
 ) -> subprocess.CompletedProcess[str]:
@@ -85,10 +91,15 @@ def store_token(
     env: dict[str, str], portal_url: str, token: str, device: str = "test-device"
 ) -> None:
     """Write a CLI login the way `garden login` would, without running the browser step."""
-    path = Path(env["GARDEN_SECRET_STORE"].removeprefix("file:"))
-    data: dict[str, str] = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
-    data[portal_url] = json.dumps({"token": token, "device": device})
-    path.write_text(json.dumps(data), encoding="utf-8")
+    old_store = os.environ.get("GARDEN_SECRET_STORE")
+    os.environ["GARDEN_SECRET_STORE"] = env["GARDEN_SECRET_STORE"]
+    try:
+        auth_store_token(token, portal_url=portal_url, device=device)
+    finally:
+        if old_store is not None:
+            os.environ["GARDEN_SECRET_STORE"] = old_store
+        else:
+            os.environ.pop("GARDEN_SECRET_STORE", None)
 
 
 def as_json(text: str) -> Any:

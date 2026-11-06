@@ -129,6 +129,19 @@ def test_a_critical_call_waits_for_the_approval_and_the_terminal_shows_the_link(
     assert portal.deleted == [SHA]
 
 
+def test_a_critical_call_stops_when_its_confirmation_expires(
+    portal: FakePortal, env: dict[str, str]
+) -> None:
+    store_token(env, portal.url, GOOD_TOKEN)
+    portal.expires_in_seconds = -60
+
+    result = run_garden(env, "files", "file", "delete", "--sha256", SHA, "--json", timeout=5)
+
+    assert result.returncode == 1
+    assert as_json(result.stdout)["error"]["title"] == "The approval expired"
+    assert portal.deleted == []
+
+
 def test_a_json_body_is_sent_as_the_request_body(portal: FakePortal, env: dict[str, str]) -> None:
     portal.extra_paths = {
         "/api/files/{sha256}/labels": {

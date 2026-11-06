@@ -48,7 +48,11 @@ from typing import Any, ClassVar
 
 import yaml
 
+from garden.auth import load_session
+from garden.shared import Settings
+
 ROOT = Path(__file__).resolve().parents[1]
+
 REPO = ROOT.parent
 OUT = ROOT / "dist" / "e2e"
 SERVE_OUT = ROOT / "dist" / "e2e-serve"
@@ -337,10 +341,25 @@ def approve(script: str, link: str, media: Path) -> subprocess.CompletedProcess[
     return subprocess.run(args, capture_output=True, text=True, timeout=240, check=False)
 
 
-def read_token(secrets_file: Path) -> str:
+def read_token(target: Path) -> str:
     """The CLI token from the test-only secret file. It is returned, never printed."""
-    data = json.loads(secrets_file.read_text(encoding="utf-8"))
-    return str(json.loads(data[PORTAL])["token"])
+    secrets_file = (
+        target if target.is_file() or target.suffix == ".json" else target / "secrets.json"
+    )
+    home_dir = target if target.is_dir() else target.parent
+    old_store = os.environ.get("GARDEN_SECRET_STORE")
+    os.environ["GARDEN_SECRET_STORE"] = f"file:{secrets_file}"
+    try:
+        settings = Settings(portal_url=PORTAL, home=home_dir, dsh_home=home_dir / ".dsh")
+        session = load_session(settings)
+        if session is None:
+            raise StepFailed(f"Could not load session from {target}")
+        return session.token
+    finally:
+        if old_store is not None:
+            os.environ["GARDEN_SECRET_STORE"] = old_store
+        else:
+            os.environ.pop("GARDEN_SECRET_STORE", None)
 
 
 def sign_in_headless(

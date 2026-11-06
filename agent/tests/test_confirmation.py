@@ -16,9 +16,8 @@ import pytest
 from conftest import run_garden, store_token
 from fake_portal import GOOD_TOKEN, FakePortal
 
-from garden.engine import POLL_SECONDS, Engine
-from garden.errors import GardenError
-from garden.portal import PortalClient
+from garden.engine import Engine, PortalClient
+from garden.shared import GardenError
 
 SHA = "ab" * 32
 
@@ -147,8 +146,7 @@ def test_the_default_poll_sees_an_approval_within_a_second(
 
     engine.call(tool, {"sha256": SHA})
 
-    assert naps == [POLL_SECONDS, POLL_SECONDS]
-    assert POLL_SECONDS <= 1.0
+    assert naps == [1.0, 1.0]
     assert portal.deleted == [SHA]
 
 

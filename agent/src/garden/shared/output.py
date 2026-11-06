@@ -7,8 +7,8 @@ import json
 import sys
 from typing import Any, TextIO
 
-from garden.errors import GardenError
-from garden.jsonio import as_list, is_list, is_object
+from garden.shared.errors import GardenError
+from garden.shared.json_types import as_list, is_list, is_object
 
 MAX_COLUMNS = 6
 MAX_CELL = 48
