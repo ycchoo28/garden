@@ -2890,7 +2890,7 @@
           "save": true,
           "tool": true
         },
-        "x-permission": "budgets.view"
+        "x-permission": "budgets.category.read"
       }
     },
     "/api/budgets/lines": {

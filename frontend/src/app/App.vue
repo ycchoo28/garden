@@ -3,12 +3,13 @@ import { useQuery } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { RouterView, useRoute } from "vue-router";
 
-import { usersSelfReadOptions } from "./api/generated/@tanstack/vue-query.gen";
-import { useSignOut } from "./core/users";
-import { budgetsNavigation } from "./modules/budgets";
-import { claimsNavigation } from "./modules/claims";
-import { knowledgeNavigation } from "./modules/knowledge";
-import { AppShell, BareLayout, navigationFor } from "./shared/ui";
+import { usersSelfReadOptions } from "../api/generated/@tanstack/vue-query.gen";
+import { useSignOut } from "../core/users";
+import { budgetsNavigation } from "../modules/budgets";
+import { claimsNavigation } from "../modules/claims";
+import { knowledgeNavigation } from "../modules/knowledge";
+import { navigationFor } from "../shared/ui";
+import { AppShell, BareLayout } from "./layouts";
 
 const route = useRoute();
 const bare = computed(() => route.meta.layout === "bare");

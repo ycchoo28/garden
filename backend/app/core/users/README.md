@@ -26,3 +26,5 @@ The routes of this module are browser sign-in and sign-out, the caller, and the 
 - Revoking a CLI login sets `revoked_at` and keeps the row.
 - The identity provider is a port, and the OIDC adapter is one implementation of it.
 - The data scope is set by role: finance and admin see every department, a manager sees their own, and everyone else sees none beyond their own record.
+- Budgets Variance reads `department.id`, `code` and `name` for report labels through its documented reporting contract.
+  Changes to these fields or department identity behavior must run the Budgets Variance tests.

@@ -1,17 +1,5 @@
 // Words, numbers and dates for claims. The API sends statuses, states and outcomes as codes and amounts as strings.
 
-// The fixed category list, the same as budgets uses. The server checks it when a line is added.
-export const CATEGORIES = [
-  'equipment',
-  'marketing',
-  'meals',
-  'office',
-  'other',
-  'services',
-  'software',
-  'travel',
-] as const;
-
 const STATUS_LABELS: Record<string, string> = {
   draft: 'Draft',
   submitted: 'Submitted',

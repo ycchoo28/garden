@@ -52,6 +52,26 @@ async def test_employee_may_not_read_or_write_budgets(
 
 
 @pytest.mark.asyncio
+async def test_employee_can_read_categories_without_budget_financial_access(
+    client: AsyncClient, identity: FakeIdentity
+) -> None:
+    await sign_in(client, identity, "marcus.lee@fernhill.example")
+    categories = await client.get("/api/budgets/categories")
+    assert categories.status_code == 200
+    assert categories.json() == [
+        "equipment",
+        "marketing",
+        "meals",
+        "office",
+        "other",
+        "services",
+        "software",
+        "travel",
+    ]
+    assert (await client.get("/api/budgets/lines", params={"month": "2026-09"})).status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_manager_sees_only_their_own_department(
     client: AsyncClient, identity: FakeIdentity
 ) -> None:
@@ -332,3 +352,75 @@ async def test_variance_scope_and_totals_reconcile_with_the_approved_claims(
     admin_view = await _variance(client)
     assert {row["department_code"] for row in admin_view} == {"design", "operations"}
     assert _actual_total(admin_view) == Decimal("140.10")
+
+
+@pytest.mark.asyncio
+async def test_variance_waits_for_finance_on_claims_above_threshold(
+    client: AsyncClient, identity: FakeIdentity
+) -> None:
+    await sign_in(client, identity, MARCUS)
+    claim = await _submit(client, await _claim_with_meal(client, "600.00"))
+
+    await sign_in(client, identity, PRIYA)
+    await _decide(client, claim, "approve")
+    assert _actual_total(await _variance(client)) == Decimal("0.00")
+
+    await sign_in(client, identity, LENA)
+    claim = (await client.get(f"/api/claims/{claim['claim']['id']}")).json()
+    await _decide(client, claim, "approve")
+    rows = await _variance(client)
+    assert _actual_total(rows) == Decimal("600.00")
+
+
+@pytest.mark.asyncio
+async def test_variance_uses_the_latest_run_after_resubmission(
+    client: AsyncClient, identity: FakeIdentity
+) -> None:
+    await sign_in(client, identity, MARCUS)
+    claim = await _submit(client, await _claim_with_meal(client, "20.00"))
+
+    await sign_in(client, identity, PRIYA)
+    await _decide(client, claim, "reject", "Please add context")
+    assert _actual_total(await _variance(client)) == Decimal("0.00")
+
+    await sign_in(client, identity, MARCUS)
+    claim = (await client.get(f"/api/claims/{claim['claim']['id']}")).json()
+    claim = await _submit(client, claim)
+    await sign_in(client, identity, PRIYA)
+    await _decide(client, claim, "approve")
+
+    rows = await _variance(client)
+    assert _actual_total(rows) == Decimal("20.00")
+
+
+@pytest.mark.asyncio
+async def test_variance_preserves_budget_only_and_actual_only_rows(
+    client: AsyncClient, identity: FakeIdentity
+) -> None:
+    await sign_in(client, identity, LENA)
+    design = await _department_id(client, "design")
+    budget = await client.post(
+        "/api/budgets/lines",
+        json={
+            "department_id": design,
+            "year_month": VARIANCE_MONTH,
+            "category": "office",
+            "amount": "0.00",
+        },
+    )
+    assert budget.status_code == 201, budget.text
+
+    await sign_in(client, identity, MARCUS)
+    claim = await _submit(client, await _claim_with_meal(client, "12.34"))
+    await sign_in(client, identity, PRIYA)
+    await _decide(client, claim, "approve")
+
+    rows = await _variance(client)
+    budget_only = next(row for row in rows if row["category"] == "office")
+    actual_only = next(row for row in rows if row["category"] == "meals")
+    assert budget_only["budget"] == "0.00"
+    assert budget_only["actual"] == "0.00"
+    assert budget_only["variance"] == "0.00"
+    assert actual_only["budget"] is None
+    assert actual_only["actual"] == "12.34"
+    assert actual_only["variance"] is None

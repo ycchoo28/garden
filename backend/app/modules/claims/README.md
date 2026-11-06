@@ -20,9 +20,16 @@ Schema: `claims`. Tables: `claim` and `line`, both owned by the `drafting` featu
 ## Interface
 
 Import from `app.modules.claims` only: `router`, `ROLES` and `PERMISSIONS`.
-The approved spend per department, month and category is exposed through `ClaimsService.approved_spend`, which the budgets module reads for the variance report.
-Variance uses approved claim lines only.
-A line uses the shared `CATEGORIES`, the same list that budget lines use.
+The approved spend per department, month and category remains available through `ClaimsService.approved_spend`.
+Variance counts approved, nonvoided claim lines only, through the documented Budgets reporting read in [the Budgets module contract](../budgets/README.md).
+A line uses the public Budgets `CATEGORIES` contract, the same list Budget lines use.
+The category operation is available to claim creators without granting them Budget financial access.
+
+## Reporting read boundary
+
+`ClaimsService.approved_spend` remains a public read for module consumers.
+Budget Variance uses its documented scoped SQL read contract, without importing the private Claims repository or model classes.
+Claims remains the sole writer for its claim and line tables.
 
 ## Key decisions
 

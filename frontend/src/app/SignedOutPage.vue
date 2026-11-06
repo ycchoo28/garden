@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { signInAddress } from '../../shared/redirects';
+import { signInAddress } from '../shared/redirects';
 </script>
 
 <template>

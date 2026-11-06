@@ -28,11 +28,11 @@ from app.config import get_settings
 from app.core.users.identity import IdentityClaims, IdentityRejected, TokenSet
 from app.core.users.oidc import get_identity_provider
 from app.main import create_app
+from app.modules.budgets import CATEGORIES
 from app.modules.knowledge.batches.jobs import get_batch_queue, run_prepare_job
 from app.modules.knowledge.batches.lifecycle import OPEN_STATES, BatchState
 from app.modules.knowledge.reading.embedding import Embedder, get_embedder
 from app.seed import seed
-from app.shared.categories import CATEGORIES
 from app.shared.db import session_factory
 
 logger = logging.getLogger(__name__)

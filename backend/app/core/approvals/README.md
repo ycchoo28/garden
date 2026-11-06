@@ -21,3 +21,5 @@ The core has no routes: `router`, `ROLES` and `PERMISSIONS` are empty, and ownin
 - Steps are copied from the flow into the run when it starts, so a later change to a flow does not change a run in progress.
 - The core tracks state only.
   The owning module owns its subject and decides what an approval means for it.
+- Budgets Variance consumes `approvals.run`, `run_step` and `decision` through its documented reporting read contract.
+  Changes to those columns or the ordering/state semantics must run the Budgets Variance tests.
