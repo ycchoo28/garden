@@ -105,7 +105,7 @@ The rules are these.
 
 A report belongs to the business module responsible for its outcome, even when it reads several domains.
 Budget Variance belongs to Budgets and may aggregate Budget and Claims data directly in a Budgets-owned reporting repository.
-Its current service-based implementation is also allowed.
+Variance now uses a scoped reporting repository; service-based reads remain allowed when appropriate.
 
 - Document consumed tables/views, relevant columns and business meanings, the consumer, caller scope and affected migration tests in the module READMEs before adding direct cross-module SQL.
 - Keep SQL in repositories, with department and reporting-period filters applied there where practical.
@@ -131,8 +131,8 @@ Generic UI, theme tokens, transport and utilities stay in Shared.
 Domain-specific vocabulary and policies, including expense categories, require a business owner and a public contract.
 Reuse by several modules is not enough reason to put business policy in Shared.
 
-The current Users home/signed-out pages, Shared layouts and Shared category definition are pending refactor work under ADR 0026.
-Their current locations should not be copied as the target ownership pattern.
+Global frontend pages and layouts live under `frontend/src/app`.
+Budgets owns the fixed category contract consumed by Claims; the Claims frontend reads the category operation through the generated client.
 
 The frontend mirrors the same split.
 `frontend/src/modules/<module>/<feature>/` holds the pages of one feature, and the module's `index.ts` exports the routes.

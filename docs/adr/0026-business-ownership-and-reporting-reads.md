@@ -42,8 +42,6 @@ Private repository boundaries, code dependency direction and the prohibition on 
   Changes to consumed storage or business meanings must run the consumer's affected tests.
 - Knowledge Search's reads across its features are an example of the general reporting-read policy, rather than the only permitted exception.
 - Module entry points must expose deliberate contracts; re-exporting arbitrary internals does not establish a useful boundary.
-- Existing Variance service calls remain compliant.
-  A focused report query is a refactor opportunity that requires behavior parity and measurement before any performance claim.
-- The current expense categories in Shared and global frontend pages/layouts outside the application layer are pending alignment work.
-  This decision records the target policy and does not claim those code changes are implemented.
-  The [refactor spec](../refactors/business-ownership-alignment.md) describes the proposed code changes separately from the deferred lint, checks and test redesign.
+- Service-based reads remain compliant.
+  Replacing them with a focused report query requires behavior parity and measurement before any performance claim.
+- The [refactor spec](../refactors/business-ownership-alignment.md) tracks category ownership, frontend application placement and the Variance read change separately from the deferred lint, checks and test redesign.

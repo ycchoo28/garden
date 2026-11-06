@@ -1,6 +1,6 @@
 # Garden business ownership and reporting-read refactor
 
-Status: Specified; implementation pending.
+Status: Implemented and verified locally on the feature branch; PR review pending.
 Date: 2026-11-06.
 Architecture policy: [ADR 0026](../adr/0026-business-ownership-and-reporting-reads.md).
 
@@ -27,7 +27,7 @@ Give expense categories one explicit business owner, move global frontend compos
 Allow a focused Budget-owned reporting query to consume documented database read contracts while domain-owned operations retain control of writes.
 
 Deliver these as separate, reviewable slices so an ownership move is distinguishable from a reporting implementation change.
-The documentation policy is updated first; this spec describes code changes that remain to be implemented.
+The documentation policy was updated first; the sections below record the agreed refactor scope and decisions.
 
 ## User Stories
 
@@ -149,5 +149,7 @@ The dedicated Variance service folder was introduced by the November 5 feature-p
 The Variance method already belonged to the Budget service when the Budget capability first appeared on November 4.
 Therefore the refactor addresses dependency shape and query placement, not a historical Core ownership violation.
 
-Specification completion and documentation edits are not implementation completion.
-Category ownership, application file moves, the reporting query and their verification remain pending until implemented and read back.
+Category ownership, application file moves and the reporting query are implemented on the feature branch.
+Local verification passed: 184 backend tests, 90 Agent tests, 9 frontend unit tests, 16 browser tests, the existing quick checks and dependency audits.
+PR review remains a separate delivery step.
+The broader lint, checks and test redesign remains deferred.

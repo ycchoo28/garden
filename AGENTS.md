@@ -21,8 +21,8 @@ Read it before you change anything, then read the folder you work in.
 - `backend/app/composition.py` lists the installed modules.
 - `backend/migrations` holds one Alembic branch per module, and each branch creates its own schema.
 - `frontend/src/modules` holds frontend modules. A module imports only from `api`, `shared` and itself.
-- `frontend/src/shared` holds the UI shell, theme tokens and shared helpers.
-  The shell's current placement is pending application-layer alignment under ADR 0026.
+- `frontend/src/app` holds application composition, routing, home/signed-out pages and layouts.
+- `frontend/src/shared` holds domain-neutral UI primitives, theme tokens and shared helpers.
 
 ## Ownership and reporting reads
 
@@ -36,7 +36,7 @@ Read it before you change anything, then read the folder you work in.
 - Keep SQL in repositories, enforce backend authorization and preserve authoritative business semantics.
   Cross-domain writes use domain-owned operations with transaction handling and audit.
 - Existing Variance service calls remain valid.
-  The current category and global UI placements are pending refactors, not completed changes.
+  The refactor spec tracks implementation and verification of the ownership changes.
 - Read [ADR 0026](docs/adr/0026-business-ownership-and-reporting-reads.md) and the reporting-read section of [code patterns](docs/code-patterns.md#reporting-reads) for the full policy.
 
 ## Rules that the checks enforce
