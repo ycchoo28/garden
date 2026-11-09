@@ -6,13 +6,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 
 from app.core.users import CurrentPerson, require
+from app.modules.budgets.categories import CATEGORIES
 from app.modules.budgets.lines.schemas import (
     BudgetLineOut,
     LineCreateIn,
     LineReplaceIn,
 )
 from app.modules.budgets.lines.service import BudgetLinesService, get_lines_service
-from app.shared.categories import CATEGORIES
 from app.shared.months import YEAR_MONTH_PATTERN
 from app.shared.operations import op
 
@@ -27,7 +27,7 @@ router = APIRouter()
     ),
 )
 async def list_categories(
-    _person: Annotated[CurrentPerson, require("budgets.view")],
+    _person: Annotated[CurrentPerson, require("budgets.category.read")],
 ) -> list[str]:
     return list(CATEGORIES)
 

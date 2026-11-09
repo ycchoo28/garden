@@ -4,9 +4,9 @@ import PrimeVue from 'primevue/config';
 import { createApp } from 'vue';
 
 import './styles.css';
-import App from './App.vue';
-import { queryClient } from './queryClient';
-import { router } from './router';
+import App from './app/App.vue';
+import { queryClient } from './app/queryClient';
+import { router } from './app/router';
 import { themeOptions } from './shared/ui';
 
 createApp(App)

@@ -1,4 +1,4 @@
-"""The fixed spend categories. Claim lines and budget lines both use this list."""
+"""The public fixed spend-category contract owned by Budgets."""
 
 CATEGORIES: tuple[str, ...] = (
     "equipment",

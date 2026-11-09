@@ -1,7 +1,7 @@
 import { MutationCache, QueryCache, QueryClient } from '@tanstack/vue-query';
 
-import { isUnauthorized } from './shared/problem';
-import { unauthorizedRedirect } from './shared/redirects';
+import { isUnauthorized } from '../shared/problem';
+import { unauthorizedRedirect } from '../shared/redirects';
 
 // A session that has ended answers 401 to every request. A page that is already open then sends the
 // person to sign in again, as a navigation does (router.ts), instead of showing an error. A public

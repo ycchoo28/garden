@@ -3,8 +3,8 @@ import { useQuery } from '@tanstack/vue-query';
 import { computed } from 'vue';
 import { RouterLink } from 'vue-router';
 
-import { usersSelfReadOptions } from '../../api/generated/@tanstack/vue-query.gen';
-import { PageHeader, SectionCard } from '../../shared/ui';
+import { usersSelfReadOptions } from '../api/generated/@tanstack/vue-query.gen';
+import { PageHeader, SectionCard } from '../shared/ui';
 
 const { data: me } = useQuery(usersSelfReadOptions());
 const permissions = computed(() => me.value?.permissions ?? []);

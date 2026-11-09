@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { useColorMode } from './colorMode';
-import { initials, type ShellPerson } from './person';
-import SkipLink from './SkipLink.vue';
+import { useColorMode } from '../../shared/ui/colorMode';
+import { initials, type ShellPerson } from '../../shared/ui/person';
+import SkipLink from '../../shared/ui/SkipLink.vue';
 
 // The frame for a signed-in page: the brand, the links the person may use, the person, sign-out and the
 // colour choice. Pages fill the slot.

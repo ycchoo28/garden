@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 import type { ClaimDetailOut } from '../../../api/generated/types.gen';
 import {
+  budgetsCategoryListOptions,
   claimsClaimDecideMutation,
   claimsClaimListOptions,
   claimsClaimReadOptions,
@@ -16,7 +17,6 @@ import { problemMessage } from '../../../shared/problem';
 import { PageHeader, SectionCard } from '../../../shared/ui';
 import ClaimStatus from '../ClaimStatus.vue';
 import {
-  CATEGORIES,
   categoryLabel,
   formatAmount,
   formatDateTime,
@@ -29,6 +29,7 @@ const props = defineProps<{ id: string }>();
 const queryClient = useQueryClient();
 const readOptions = () => claimsClaimReadOptions({ path: { claim_id: props.id } });
 const { data: detail, isPending, isError, error } = useQuery(() => readOptions());
+const categoriesQuery = useQuery(() => budgetsCategoryListOptions());
 
 // Every change returns the claim as it now stands, so the page shows the new version at once.
 const actionError = ref('');
@@ -62,7 +63,11 @@ const busy = computed(
 
 // The new line form. It is keyed so that a saved line clears every field.
 const formKey = ref(0);
-const category = ref<string>(CATEGORIES[0]);
+const category = ref('');
+watch(categoriesQuery.data, (categories) => {
+  const first = categories?.[0];
+  if (first && !categories.includes(category.value)) category.value = first;
+}, { immediate: true });
 const spentOn = ref('');
 const amount = ref('');
 const description = ref('');
@@ -70,6 +75,8 @@ const receipt = ref<File | null>(null);
 const lineReady = computed(
   () =>
     receipt.value !== null &&
+    categoriesQuery.isSuccess.value &&
+    categoriesQuery.data.value?.includes(category.value) === true &&
     spentOn.value !== '' &&
     amount.value !== '' &&
     Number(amount.value) > 0 &&
@@ -288,16 +295,32 @@ const canReject = computed(() => reason.value.trim() !== '' && !busy.value);
               <span class="mb-1 block text-sm font-medium">Category</span>
               <select
                 v-model="category"
+                :disabled="categoriesQuery.isPending.value || categoriesQuery.isError.value || !categoriesQuery.data.value?.length"
                 class="w-full rounded-lg border border-line-strong bg-surface px-3 py-2"
               >
                 <option
-                  v-for="option in CATEGORIES"
+                  v-for="option in categoriesQuery.data.value ?? []"
                   :key="option"
                   :value="option"
                 >
                   {{ categoryLabel(option) }}
                 </option>
               </select>
+              <span
+                v-if="categoriesQuery.isPending.value"
+                class="mt-1 block text-sm text-muted"
+                role="status"
+              >Loading categories…</span>
+              <span
+                v-else-if="categoriesQuery.isError.value"
+                class="mt-1 block text-sm text-danger"
+                role="alert"
+              >{{ problemMessage(categoriesQuery.error.value) }}</span>
+              <span
+                v-else-if="!categoriesQuery.data.value?.length"
+                class="mt-1 block text-sm text-danger"
+                role="alert"
+              >No categories are available.</span>
             </label>
             <label class="block">
               <span class="mb-1 block text-sm font-medium">Date spent</span>

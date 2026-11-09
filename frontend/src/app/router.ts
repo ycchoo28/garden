@@ -1,19 +1,19 @@
 import { createRouter, createWebHistory } from "vue-router";
 
-import { usersSelfReadOptions } from "./api/generated/@tanstack/vue-query.gen";
-import { claimsRoutes } from "./modules/claims";
-import { budgetsRoutes } from "./modules/budgets";
-import { knowledgeRoutes } from "./modules/knowledge";
-import { agentRoutes } from "./core/agent";
-import { usersRoutes } from "./core/users";
+import { usersSelfReadOptions } from "../api/generated/@tanstack/vue-query.gen";
+import { agentRoutes } from "../core/agent";
+import { budgetsRoutes } from "../modules/budgets";
+import { claimsRoutes } from "../modules/claims";
+import { knowledgeRoutes } from "../modules/knowledge";
+import { isUnauthorized } from "../shared/problem";
+import { isPublicPath, signInAddress } from "../shared/redirects";
 import { queryClient } from "./queryClient";
-import { isUnauthorized } from "./shared/problem";
-import { isPublicPath, signInAddress } from "./shared/redirects";
+import { appRoutes } from "./routes";
 
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
-    ...usersRoutes,
+    ...appRoutes,
     ...claimsRoutes,
     ...budgetsRoutes,
     ...knowledgeRoutes,

@@ -14,10 +14,10 @@ from fastapi import Depends
 
 from app.core.audit import AuditService, get_audit_service
 from app.core.users import CurrentPerson, DepartmentView, UserService, get_user_service
+from app.modules.budgets.categories import CATEGORIES
 from app.modules.budgets.lines.repository import BudgetLineRepository, get_lines_repository
 from app.modules.budgets.lines.rules import department_code, visible_departments
 from app.modules.budgets.models import BudgetLine
-from app.shared.categories import CATEGORIES
 from app.shared.clock import Clock, get_clock
 from app.shared.errors import Conflict, FieldError, Forbidden, NotFound, Unprocessable
 from app.shared.ids import new_id
