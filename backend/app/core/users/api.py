@@ -23,6 +23,7 @@ router = APIRouter()
         "users.session.start",
         "Start a browser sign-in. Redirects the browser to the identity provider.",
         tool=False,
+        confirm=False,
     ),
 )
 async def start_sign_in(
@@ -38,6 +39,7 @@ async def start_sign_in(
         "users.session.finish",
         "Finish a browser sign-in. Sets the session cookie and redirects into the app.",
         tool=False,
+        confirm=False,
     ),
 )
 async def finish_sign_in(
@@ -63,7 +65,7 @@ async def finish_sign_in(
 @router.post(
     "/api/users/sign-out",
     status_code=204,
-    **op("users.session.end", "End the browser session of the caller."),
+    **op("users.session.end", "End the browser session of the caller.", confirm=False),
 )
 async def sign_out(
     request: Request,
@@ -81,6 +83,7 @@ async def sign_out(
     **op(
         "users.self.read",
         "Return the signed-in person, their roles and their effective permissions.",
+        confirm=False,
     ),
 )
 async def read_me(
@@ -96,6 +99,7 @@ async def read_me(
         "users.directory.list",
         "List the active people the caller may see. Managers see their department, "
         "finance and admin see everyone.",
+        confirm=False,
     ),
 )
 async def list_people(
@@ -111,6 +115,7 @@ async def list_people(
     **op(
         "users.department.list",
         "List the company's departments with their ids. Budgets and claims use these ids.",
+        confirm=False,
     ),
 )
 async def list_departments(

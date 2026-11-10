@@ -25,6 +25,7 @@ router = APIRouter()
     **op(
         "knowledge.batch.preview",
         "Search a prepared batch before it is applied. Results follow the caller's access rules.",
+        confirm=False,
     ),
 )
 async def preview_batch(
@@ -43,6 +44,7 @@ async def preview_batch(
         "knowledge.search.run",
         "Search the knowledge the caller may read, as it is live now or was live at a past moment. "
         "Each result names its source document and section.",
+        confirm=False,
     ),
 )
 async def search(
@@ -60,6 +62,7 @@ async def search(
         "knowledge.search_log.list",
         "Read who searched for what and which chunks they got back. Only a person may read it.",
         tool=False,
+        confirm=False,
     ),
 )
 async def search_log(

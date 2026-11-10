@@ -21,7 +21,7 @@ def op(
     operation_id: str,
     description: str,
     *,
-    confirm: bool = False,
+    confirm: bool,
     tool: bool = True,
     save: bool = True,
 ) -> OperationMeta:

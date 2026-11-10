@@ -12,7 +12,9 @@ Each module has four layers, and a request passes through them in this order: ap
 - **repository** (`repository.py`) is the only code that runs queries.
 - **models** (`models.py`) declares the tables in the module's schema.
 
-The import contracts in `backend/pyproject.toml` enforce these rules, and `just backend-check` runs them.
+The discovered import graph in `scripts/check_backend_architecture.py` enforces these layers in `just backend-check`.
+Core and Shared direction remain Import Linter contracts.
+See [ADR 0027](adr/0027-architecture-enforcement.md) and the [enforcement map](architecture-review.md#enforcement-map) for checks, behavior tests and review responsibilities.
 
 ## A route
 
@@ -20,7 +22,7 @@ The import contracts in `backend/pyproject.toml` enforce these rules, and `just 
 @router.get(
     "/api/audit/events",
     response_model=list[AuditEventOut],
-    **op("audit.event.list", "List the most recent saved changes, newest first."),
+    **op("audit.event.list", "List the most recent saved changes, newest first.", confirm=False),
 )
 async def list_events(
     _person: Annotated[CurrentPerson, require("audit.view")],
@@ -83,18 +85,17 @@ A business module with more than one area of work splits into feature folders, o
 Each feature folder holds its own `api.py`, `service.py`, `repository.py` and `schemas.py`, as far as that feature needs them.
 The module root keeps what the features share: `api.py` mounts the feature routers, `permissions.py` and `__init__.py` export the public interface, and `models.py` holds the tables when several features share them.
 A module's tests stay in its own `tests/` folder, and they may import the module's internals.
-Garden has these feature folders: `budgets/` has `lines`, `months` and `variance`, `claims/` has `drafting` and `review`, and `knowledge/` has `collections`, `batches`, `search` and `reading`.
 Not every feature has every file.
 `reading/` holds pure helpers only, and `claims/review/` has no repository, because it reads and versions claims through the drafting service.
 
 The rules are these.
 
 - A feature repository is private to its feature.
-  The import-linter contract "Feature repositories stay private to their feature" forbids other module code from importing it.
+  The `feature-repository` rule in `scripts/check_backend_architecture.py` discovers repositories and forbids imports from outside their feature.
   A consumer may use an owner's public service or port, or a documented database read contract for reporting.
 - Read-only helpers with no database access go at the module root, such as `views.py` and `rules.py` in claims.
 - The module's `__init__.py` is the only import point for other modules.
-  The architecture test in `backend/tests/architecture/test_module_interfaces.py` fails when another module imports anything deeper.
+  The `module-interface` rule in `scripts/check_backend_architecture.py` rejects deeper imports in all static import forms.
 - Each table has one owning feature repository, and only that feature writes it.
   Reporting repositories may read other features' or modules' tables under the read rules below.
 - The search repository in knowledge applies access rules by reading collection rules in SQL.

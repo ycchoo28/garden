@@ -66,3 +66,10 @@ Read it before you change anything, then read the folder you work in.
 - [docs/code-patterns.md](docs/code-patterns.md) for how to write a route, a service, a repository and a test.
 - [docs/ui.md](docs/ui.md) for the frontend shell and colour rules.
 - [docs/adr/README.md](docs/adr/README.md) for the decisions and why they were made.
+
+## Architecture enforcement and handover
+
+Read [ADR 0027](docs/adr/0027-architecture-enforcement.md) and the [enforcement map](docs/architecture-review.md#enforcement-map).
+Run `just architecture-check` for static guardrails and `just guardrail-test` to prove the permitted and prohibited fixtures.
+When adding a file to Shared or the application layer, adding a Module, widening a public entry point or adding a reporting read contract, answer all eight [ownership review questions](docs/architecture-review.md#required-ownership-checklist) at handover.
+Ownership and business meaning are held by review; do not infer those guarantees from a passing vocabulary or import check.

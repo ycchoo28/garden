@@ -320,6 +320,11 @@ async def test_variance_scope_and_totals_reconcile_with_the_approved_claims(
     client: AsyncClient, identity: FakeIdentity
 ) -> None:
     await sign_in(client, identity, MARCUS)
+    refused = await client.get(
+        "/api/budgets/variance", params={"from": VARIANCE_MONTH, "to": VARIANCE_MONTH}
+    )
+    assert refused.status_code == 403
+
     design_claim = await _submit(client, await _claim_with_meal(client, "80.10"))
     await sign_in(client, identity, PRIYA)
     await _decide(client, design_claim, "approve")

@@ -20,6 +20,7 @@ router = APIRouter()
         "budgets.variance.read",
         "Compare budget with actual spend by department, month and category for a range of "
         "months. Managers see only their own department.",
+        confirm=False,
     ),
 )
 async def read_variance(

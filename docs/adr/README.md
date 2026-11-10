@@ -30,3 +30,4 @@ Records are numbered in the order they were made, and a later record may replace
 | [0024](0024-model-gateway.md) | A model gateway with limits per login and per person, and counts only |
 | [0025](0025-batch-approval-and-undo.md) | A batch goes live only after approval, and undo restores the spans |
 | [0026](0026-business-ownership-and-reporting-reads.md) | Business ownership, domain-neutral Shared code and governed reporting reads |
+| [0027](0027-architecture-enforcement.md) | Explicit enforcement tiers and required ownership review |

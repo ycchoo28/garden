@@ -68,5 +68,7 @@ jobs:
         run: just new-module ciproof
       - name: Install Chromium for the browser tests
         run: cd frontend && bunx playwright install --with-deps chromium
+      - name: Prove guardrails reject planted violations and permit valid code
+        run: just guardrail-test
       - name: Check the generated module
         run: just check

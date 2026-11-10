@@ -35,6 +35,7 @@ router = APIRouter()
     **op(
         "knowledge.batch.create",
         "Open an import batch for a collection. One may be open at a time.",
+        confirm=False,
     ),
 )
 async def create_batch(
@@ -52,6 +53,7 @@ async def create_batch(
     **op(
         "knowledge.batch.list",
         "List import batches, newest first, optionally for one collection or one state.",
+        confirm=False,
     ),
 )
 async def list_batches(
@@ -66,7 +68,11 @@ async def list_batches(
 @router.get(
     "/batches/{batch_id}",
     response_model=BatchOut,
-    **op("knowledge.batch.read", "Read an import batch, its files and its preparation report."),
+    **op(
+        "knowledge.batch.read",
+        "Read an import batch, its files and its preparation report.",
+        confirm=False,
+    ),
 )
 async def read_batch(
     batch_id: uuid.UUID,
@@ -83,6 +89,7 @@ async def read_batch(
     **op(
         "knowledge.batch.upload",
         "Add one Markdown, text or PDF file to a batch that is still uploading.",
+        confirm=False,
     ),
 )
 async def upload_file(
@@ -110,6 +117,7 @@ async def upload_file(
     **op(
         "knowledge.batch.prepare",
         "Start preparing a batch in the background: parse, chunk and embed its files.",
+        confirm=False,
     ),
 )
 async def prepare_batch(
@@ -126,6 +134,7 @@ async def prepare_batch(
     **op(
         "knowledge.batch.submit",
         "Ask for approval to apply a prepared batch. The staged result is fixed from this point.",
+        confirm=False,
     ),
 )
 async def submit_batch(
@@ -143,6 +152,7 @@ async def submit_batch(
         "knowledge.batch.approve",
         "Approve a batch waiting for approval, which applies it live. Only a person may do this.",
         tool=False,
+        confirm=False,
     ),
 )
 async def approve_batch(
@@ -161,6 +171,7 @@ async def approve_batch(
         "knowledge.batch.reject",
         "Reject a batch waiting for approval, with a reason. Only a person may do this.",
         tool=False,
+        confirm=False,
     ),
 )
 async def reject_batch(
@@ -178,6 +189,7 @@ async def reject_batch(
     **op(
         "knowledge.batch.cancel",
         "Cancel a batch that is still open. A request waiting for approval is withdrawn too.",
+        confirm=False,
     ),
 )
 async def cancel_batch(
@@ -216,6 +228,7 @@ async def undo_batch(
         "Erase a document from every batch of a collection, from search and from file storage. "
         "Only a person may do this, with a reason.",
         tool=False,
+        confirm=False,
     ),
 )
 async def erase_document(

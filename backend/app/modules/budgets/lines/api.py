@@ -23,7 +23,9 @@ router = APIRouter()
     "/categories",
     response_model=list[str],
     **op(
-        "budgets.category.list", "List the spend categories that budget lines and claim lines use."
+        "budgets.category.list",
+        "List the spend categories that budget lines and claim lines use.",
+        confirm=False,
     ),
 )
 async def list_categories(
@@ -38,6 +40,7 @@ async def list_categories(
     **op(
         "budgets.line.list",
         "List the current budget lines for one month. Managers see only their own department.",
+        confirm=False,
     ),
 )
 async def list_lines(
@@ -57,6 +60,7 @@ async def list_lines(
     **op(
         "budgets.line.create",
         "Create the budget for one department, month and category. Finance and admin only.",
+        confirm=False,
     ),
 )
 async def create_line(
@@ -81,6 +85,7 @@ async def create_line(
         "budgets.line.replace",
         "Replace the amount of a budget line with a reason. The old version stays in the line's "
         "history. Send the version you read; a stale version returns 409. Finance and admin only.",
+        confirm=False,
     ),
 )
 async def replace_line(
@@ -105,6 +110,7 @@ async def replace_line(
     **op(
         "budgets.line.history",
         "List every version of a budget line, oldest first, with the reason for each replacement.",
+        confirm=False,
     ),
 )
 async def read_history(

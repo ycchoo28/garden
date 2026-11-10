@@ -17,7 +17,11 @@ router = APIRouter()
 @router.get(
     "/months",
     response_model=list[MonthOut],
-    **op("budgets.month.list", "List closed months, newest first. Finance and admin only."),
+    **op(
+        "budgets.month.list",
+        "List closed months, newest first. Finance and admin only.",
+        confirm=False,
+    ),
 )
 async def list_closed_months(
     _person: Annotated[CurrentPerson, require("budgets.month.close")],

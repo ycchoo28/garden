@@ -28,6 +28,7 @@ WITHDRAW_OPERATION = "claims.claim.withdraw"
         "claims.claim.list",
         "List the claims the caller may see: their own, and their department's if they manage it. "
         "Finance and admin see every claim.",
+        confirm=False,
     ),
 )
 async def list_claims(
@@ -41,7 +42,11 @@ async def list_claims(
     "",
     response_model=ClaimDetailOut,
     status_code=201,
-    **op("claims.claim.create", "Create a draft claim. Add lines to it before you submit."),
+    **op(
+        "claims.claim.create",
+        "Create a draft claim. Add lines to it before you submit.",
+        confirm=False,
+    ),
 )
 async def create_claim(
     body: CreateClaimIn,
@@ -54,7 +59,11 @@ async def create_claim(
 @router.get(
     "/{claim_id}",
     response_model=ClaimDetailOut,
-    **op("claims.claim.read", "Read one claim with its lines, receipts and decision history."),
+    **op(
+        "claims.claim.read",
+        "Read one claim with its lines, receipts and decision history.",
+        confirm=False,
+    ),
 )
 async def read_claim(
     claim_id: uuid.UUID,
@@ -72,6 +81,7 @@ async def read_claim(
         "claims.line.add",
         "Add a categorised line to a draft or rejected claim. Attach the receipt file first, "
         "then pass its SHA-256 as receipt_sha256.",
+        confirm=False,
     ),
 )
 async def add_line(
@@ -99,6 +109,7 @@ async def add_line(
     **op(
         "claims.line.void",
         "Void a line on a draft or rejected claim. The line stays in the history.",
+        confirm=False,
     ),
 )
 async def void_line(
@@ -125,6 +136,7 @@ async def void_line(
         "claims.claim.submit",
         "Certify and submit a claim for approval. Person-only: an agent cannot submit a claim.",
         tool=False,
+        confirm=False,
     ),
 )
 async def submit_claim(

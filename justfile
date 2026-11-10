@@ -123,7 +123,7 @@ reset: up
     (cd backend && uv run python -m app.demo_seed)
 
 # The fast checks that CI runs first: backend format and lint, frontend, API contract, secrets, doc links and the deny-list.
-quick: backend-check agent-check frontend-check api-check secrets-check docs-check deny-check
+quick: backend-check agent-check frontend-check architecture-check api-check secrets-check docs-check deny-check
 
 # Run every local check, quick ones first: then tests against Postgres, browser tests and dependency audits.
 check: quick test e2e backend-audit frontend-audit
@@ -158,6 +158,8 @@ backend-check:
     cd backend && uv run ruff check .
     cd backend && uv run pyright
     cd backend && uv run lint-imports
+    cd backend && uv run python ../scripts/check_backend_architecture.py
+    cd backend && uv run pytest tests/architecture/test_feature_boundaries.py -q
 
 # The garden CLI package: format, lint and strict types.
 agent-check:
@@ -260,19 +262,23 @@ api:
     cd backend && uv run python -m app.export_openapi ../contracts/openapi.json
     cd frontend && bun run generate
 
-# Regenerate the API files and fail if that changes any of them. Compares hashes before and after, so it works before a commit.
+# Compare freshly generated API artifacts in temporary storage, leaving the working tree untouched.
 api-check:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    snapshot() { find contracts frontend/src/api/generated -type f -print0 | sort -z | xargs -0 sha256sum; }
-    before="$(snapshot)"
-    just api
-    after="$(snapshot)"
-    if [ "$before" != "$after" ]; then
-        diff <(echo "$before") <(echo "$after") || true
-        echo "The API contract or client was stale and has been regenerated. Review the diff, then run just check again." >&2
-        exit 1
-    fi
+    uv run --project backend python scripts/check_api.py
+
+# Static architecture checks need no database.
+architecture-check:
+    uv run --project backend ruff check --config backend/pyproject.toml scripts/check_*architecture.py scripts/check_reporting_contracts.py scripts/check_api.py scripts/check_authoring.py scripts/tests
+    uv run --project backend ruff format --check --config backend/pyproject.toml scripts/check_*architecture.py scripts/check_reporting_contracts.py scripts/check_api.py scripts/check_authoring.py scripts/tests
+    uv run --project backend python scripts/check_shared_architecture.py
+    uv run --project backend python scripts/check_frontend_architecture.py
+    uv run --project backend python scripts/check_reporting_contracts.py
+    uv run --project backend python scripts/check_authoring.py
+    cd agent && uv run pytest tests/architecture -q
+
+# Command-level permitted and prohibited examples, also run after Scaffold generation in CI.
+guardrail-test:
+    uv run --project backend pytest scripts/tests -q
 
 # Scan the git history and the working tree for committed secrets.
 secrets-check:

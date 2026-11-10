@@ -44,6 +44,7 @@ router.include_router(model_router)
         "agent.manifest.read",
         "List the files the installer fetches, with the SHA-256 each must match. Needs no sign-in.",
         tool=False,
+        confirm=False,
     ),
 )
 async def read_manifest(
@@ -68,6 +69,7 @@ async def read_manifest(
         "agent.download.read",
         "Download one garden or dsh file, or an installer, by name. Needs no sign-in.",
         tool=False,
+        confirm=False,
     ),
 )
 async def read_download(
@@ -84,6 +86,7 @@ async def read_download(
         "Start a CLI login. Redirects the browser to the identity provider, which returns the code "
         "to a listener on this machine.",
         tool=False,
+        confirm=False,
     ),
 )
 async def start_cli_login(
@@ -107,6 +110,7 @@ async def start_cli_login(
         "agent.cli_approval.create",
         "Finish a CLI login with the code the browser returned. The token is shown once.",
         tool=False,
+        confirm=False,
     ),
 )
 async def create_cli_login(
@@ -126,7 +130,11 @@ async def create_cli_login(
 @router.get(
     "/api/agent/my-logins",
     response_model=list[CliLoginOut],
-    **op("agent.my_login.list", "List the caller's CLI logins, newest first, with their state."),
+    **op(
+        "agent.my_login.list",
+        "List the caller's CLI logins, newest first, with their state.",
+        confirm=False,
+    ),
 )
 async def list_cli_logins(
     person: Annotated[CurrentPerson, require("agent.logins.view")],
@@ -142,6 +150,7 @@ async def list_cli_logins(
         "agent.my_login.sign_out",
         "Revoke one of the caller's CLI logins. Only a browser sign-in may do this.",
         tool=False,
+        confirm=False,
     ),
 )
 async def revoke_cli_login(
@@ -162,6 +171,7 @@ async def revoke_cli_login(
         "agent.cli_token.sign_out",
         "End this device's CLI login. The token used for this call stops working.",
         tool=False,
+        confirm=False,
     ),
 )
 async def sign_out_cli_token(
@@ -178,7 +188,11 @@ async def sign_out_cli_token(
 @router.get(
     "/api/agent/my-confirmations/{confirmation_id}",
     response_model=ConfirmationOut,
-    **op("agent.confirmation.read", "Check whether the person has approved a confirmation."),
+    **op(
+        "agent.confirmation.read",
+        "Check whether the person has approved a confirmation.",
+        confirm=False,
+    ),
 )
 async def read_confirmation(
     confirmation_id: UUID,
@@ -197,6 +211,7 @@ async def read_confirmation(
         "agent.confirmation.decide",
         "Approve or reject a pending confirmation. Only a browser sign-in may do this.",
         tool=False,
+        confirm=False,
     ),
 )
 async def decide_confirmation(
