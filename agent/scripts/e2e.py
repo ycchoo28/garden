@@ -638,9 +638,11 @@ def _run(
         "GARDEN_PUBLIC_URL": WEB,
         "GARDEN_FILES_ROOT": str(files_root),
         "GARDEN_AGENT_DOWNLOADS_DIR": str(downloads),
-        "GARDEN_AGENT_MODEL_UPSTREAM_URL": f"http://127.0.0.1:{upstream_port}",
-        "GARDEN_AGENT_MODEL_MODELS": MODEL,
-        "GARDEN_AGENT_MODEL_DEFAULT": MODEL,
+        "GARDEN_AGENT_MODEL_UPSTREAM_URL": os.environ.get("GARDEN_AGENT_MODEL_UPSTREAM_URL")
+        or f"http://127.0.0.1:{upstream_port}",
+        "GARDEN_AGENT_MODEL_API_KEY": os.environ.get("GARDEN_AGENT_MODEL_API_KEY", ""),
+        "GARDEN_AGENT_MODEL_MODELS": os.environ.get("GARDEN_AGENT_MODEL_MODELS") or MODEL,
+        "GARDEN_AGENT_MODEL_DEFAULT": os.environ.get("GARDEN_AGENT_MODEL_DEFAULT") or MODEL,
     }
 
     run.heading(

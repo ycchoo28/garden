@@ -13,7 +13,7 @@ from typing import Any
 from garden.shared import as_list, as_object, as_text, is_list, is_object
 
 HTTP_METHODS = ("get", "post", "put", "patch", "delete")
-_MAX_REF_DEPTH = 8
+_MAX_REF_DEPTH = 32
 _FILE_HELP = "Path to a local file to upload."
 
 

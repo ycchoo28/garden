@@ -46,6 +46,8 @@ $portal = $portal.TrimEnd('/')
 $uvVersion = '0.13.1'
 $uvSha256 = '3b2661a463a5baea7f5076ea2b25ab71d77f36a6c0d809e5350651792f80a672'
 $pythonVersion = '3.12.15'
+$nodeVersion = '26.13.0'
+$nodeSha256 = 'dcc60d59a0746999f99064a01c020445d54d84228c691cdbf25b49ac3b59150a'
 
 $userFolder = $env:USERPROFILE
 $binDir = if ($env:GARDEN_BIN_DIR) { $env:GARDEN_BIN_DIR } else { Join-Path $userFolder '.local\bin' }
@@ -206,6 +208,41 @@ function Add-UserPath([string]$folder) {
     }
 }
 
+# Ensures Node.js (pinned to $nodeVersion) is available on the machine.
+# If node is missing or older than v24, downloads the pinned release, checks its SHA-256 and adds it to PATH.
+function Ensure-Node {
+    $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+    if ($nodeCmd) {
+        try {
+            $verOutput = (& $nodeCmd.Source -v).Trim().TrimStart('v')
+            $major = [int]($verOutput.Split('.')[0])
+            if ($major -ge 24) {
+                return
+            }
+        } catch { }
+    }
+
+    $nodeToolsDir = Join-Path $gardenHome "tools\node-v$nodeVersion"
+    $nodeDir = Join-Path $nodeToolsDir "node-v$nodeVersion-win-x64"
+    $nodeExe = Join-Path $nodeDir 'node.exe'
+
+    if (-not (Test-Path $nodeExe)) {
+        $zip = Join-Path $tmp 'node.zip'
+        Start-Step "Downloading Node.js $nodeVersion..."
+        Receive-File "https://nodejs.org/dist/v$nodeVersion/node-v$nodeVersion-win-x64.zip" $zip "Node.js $nodeVersion"
+        if ((Get-Sha256 $zip) -ne $nodeSha256) {
+            throw 'Node.js does not match its published SHA-256. Nothing was installed.'
+        }
+        Complete-Step
+        Start-Step 'Unpacking Node.js...'
+        New-Item -ItemType Directory -Path $nodeToolsDir -Force | Out-Null
+        Expand-Archive -LiteralPath $zip -DestinationPath $nodeToolsDir -Force
+        Complete-Step
+    }
+
+    Add-UserPath $nodeDir
+}
+
 # The browser UI (`dsh web`) listens on this fixed local port, so the shortcuts and the stop script agree.
 $webPort = 8765
 
@@ -346,6 +383,25 @@ try {
         $script:TotalSteps += 1
         if (-not (Test-Path (Join-Path (Join-Path $gardenHome "tools\uv-$uvVersion") 'uv.exe'))) { $script:TotalSteps += 2 }
     }
+
+    $needNodeDownload = $false
+    $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+    if (-not $nodeCmd) {
+        $nodeDir = Join-Path (Join-Path $gardenHome "tools\node-v$nodeVersion") "node-v$nodeVersion-win-x64"
+        if (-not (Test-Path (Join-Path $nodeDir 'node.exe'))) { $needNodeDownload = $true }
+    } else {
+        try {
+            $verOutput = (& $nodeCmd.Source -v).Trim().TrimStart('v')
+            $major = [int]($verOutput.Split('.')[0])
+            if ($major -lt 24) {
+                $nodeDir = Join-Path (Join-Path $gardenHome "tools\node-v$nodeVersion") "node-v$nodeVersion-win-x64"
+                if (-not (Test-Path (Join-Path $nodeDir 'node.exe'))) { $needNodeDownload = $true }
+            }
+        } catch { }
+    }
+    if ($needNodeDownload) { $script:TotalSteps += 2 }
+
+    Ensure-Node
 
     $python = Get-Python
     if (-not (Get-Command $python -ErrorAction SilentlyContinue)) { throw "Python 3.12 could not be found at $python. Set GARDEN_PYTHON, or run the installer again." }

@@ -9,6 +9,7 @@ the variable that holds the token, but never the token itself, so nothing secret
 from __future__ import annotations
 
 import json
+import os
 import re
 from collections.abc import Sequence
 from pathlib import Path
@@ -83,7 +84,12 @@ def render_patch(
         text = text.replace(placeholder, json.dumps(value)[1:-1])
     # Each argument is a JSON string, so the list is a valid YAML flow sequence.
     arguments = ", ".join(json.dumps(argument) for argument in garden_args)
-    return text.replace("{{GARDEN_ARGS}}", arguments)
+    text = text.replace("{{GARDEN_ARGS}}", arguments)
+    if "GARDEN_SECRET_STORE" in os.environ:
+        store = os.environ["GARDEN_SECRET_STORE"]
+        env_block = f"\n        env:\n          GARDEN_SECRET_STORE: {json.dumps(store)}"
+        text = text.replace(f"args: [{arguments}]", f"args: [{arguments}]{env_block}")
+    return text
 
 
 def write_patch(
