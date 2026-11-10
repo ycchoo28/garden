@@ -30,7 +30,7 @@ Import from `app.core.agent` only: `router`, `ROLES`, `PERMISSIONS`, `confirm_ag
   The CLI polls it after a 428, and only the person who asked may read it.
 - `POST /api/agent/my-confirmations/{confirmation_id}/decision` (`agent.confirmations.decide`, browser only): approves or rejects a pending confirmation.
 - `GET /api/agent/model/v1/models` (`agent.model.use`): the models the gateway forwards, and `default` when a default model is configured.
-- `POST /api/agent/model/v1/chat/completions` (`agent.model.use`): an OpenAI chat completion for a model on the allowlist.
+- `POST /api/agent/model/v1/chat/completions` (`agent.model.use`): an OpenAI chat completion for a model on the allowlist, returning JSON or `text/event-stream` when `stream: true`.
 - `GET /api/agent/model/my-usage` (`agent.model_usage.view`): the caller's requests and tokens today, with the daily allowance.
 
 Critical routes declare `confirm_agent_action(...)` after their `require(...)`.
@@ -53,7 +53,8 @@ The 428 names the confirmation id and a URL to open, which is `{public_url}/agen
 - The model gateway counts usage only.
   The limits are checked before a request is forwarded, and a request over the per-minute limit answers 429 with `Retry-After: 60`.
 - A failed upstream call is still recorded, with status `upstream_error`.
-- With no upstream configured the gateway answers 503, and it refuses streaming.
+- With no upstream configured the gateway answers 503.
+- When `stream: true` is passed, the gateway requests `stream_options: {"include_usage": true}` from the upstream, relays the server-sent events unchanged and records the token counts when the stream finishes.
 - Token counts that are not whole numbers count as zero.
 - `default` is a name the gateway resolves to `GARDEN_AGENT_MODEL_DEFAULT` before its allowlist check, and the upstream receives the real model name.
   The default must be on the allowlist, and `default` cannot be on it.

@@ -279,6 +279,7 @@ Add a button there when you add a person to the seed.
 ## Known gaps
 
 - The model gateway forwards nothing until an upstream is configured, so the live agent chat is not part of the demo.
+  When an upstream is configured, `/api/agent/model/v1/chat/completions` supports both non-streaming JSON replies and `stream: true` server-sent events.
 
 ## Where to read next
 

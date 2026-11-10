@@ -19,5 +19,5 @@ Browser sessions keep all of the person's permissions.
 ## Consequences
 
 - An agent's reach is set by the permission declarations, and the architecture tests fail when a declaration is missing.
-- `garden logout` clears only the token on the device, so the CLI login stays valid until a person revokes it in the portal.
+- `garden logout` calls `DELETE /api/agent/cli/token` with that device's own token so the portal revokes that login row, and then clears the token on the device; it still cannot revoke another device's login.
 - A CLI login does not outlive its person, because the row is removed with the person.
