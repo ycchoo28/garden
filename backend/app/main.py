@@ -51,7 +51,7 @@ def create_app(modules: tuple[InstalledModule, ...] = MODULES) -> FastAPI:
     @app.get(
         "/api/health",
         tags=["platform"],
-        **op("platform.health.read", "Say whether Garden is up. Needs no sign-in."),
+        **op("platform.health.read", "Say whether Garden is up. Needs no sign-in.", confirm=False),
     )
     async def health() -> dict[str, str]:
         return {"status": "ok"}

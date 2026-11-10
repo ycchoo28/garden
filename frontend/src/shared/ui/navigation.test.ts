@@ -2,17 +2,17 @@ import { describe, expect, it } from 'vitest';
 
 import { type ModuleNavigation, navigationFor } from './navigation';
 
-const claims: ModuleNavigation = {
-  label: 'Claims',
+const inventory: ModuleNavigation = {
+  label: 'Inventory',
   items: [
-    { label: 'Claims', to: '/claims', permission: 'claims.view' },
-    { label: 'Approvals', to: '/approvals', permission: 'claims.decide' },
+    { label: 'Inventory', to: '/inventory', permission: 'inventory-view' },
+    { label: 'Catalog', to: '/catalog', permission: 'inventory-decide' },
   ],
 };
 
-const budgets: ModuleNavigation = {
-  label: 'Budgets',
-  items: [{ label: 'Variance', to: '/budgets/variance', permission: 'budgets.view' }],
+const archive: ModuleNavigation = {
+  label: 'Archive',
+  items: [{ label: 'Monthly summary', to: '/archive/summary', permission: 'archive-view' }],
 };
 
 const open: ModuleNavigation = {
@@ -22,9 +22,9 @@ const open: ModuleNavigation = {
 
 describe('navigationFor', () => {
   it('drops the items the person has no permission for', () => {
-    const links = navigationFor([claims], ['claims.view']);
+    const links = navigationFor([inventory], ['inventory-view']);
 
-    expect(links).toEqual([{ label: 'Claims', items: [{ label: 'Claims', to: '/claims', permission: 'claims.view' }] }]);
+    expect(links).toEqual([{ label: 'Inventory', items: [{ label: 'Inventory', to: '/inventory', permission: 'inventory-view' }] }]);
   });
 
   it('keeps the items that need no permission', () => {
@@ -32,21 +32,21 @@ describe('navigationFor', () => {
   });
 
   it('drops a module left with no items', () => {
-    expect(navigationFor([claims, budgets], ['budgets.view'])).toEqual([
-      { label: 'Budgets', items: [{ label: 'Variance', to: '/budgets/variance', permission: 'budgets.view' }] },
+    expect(navigationFor([inventory, archive], ['archive-view'])).toEqual([
+      { label: 'Archive', items: [{ label: 'Monthly summary', to: '/archive/summary', permission: 'archive-view' }] },
     ]);
   });
 
   it('keeps the modules and their items in the order given', () => {
-    const links = navigationFor([budgets, open, claims], ['claims.view', 'claims.decide', 'budgets.view']);
+    const links = navigationFor([archive, open, inventory], ['inventory-view', 'inventory-decide', 'archive-view']);
 
-    expect(links.map((module) => module.label)).toEqual(['Budgets', 'Open', 'Claims']);
-    expect(links[2]?.items.map((item) => item.label)).toEqual(['Claims', 'Approvals']);
+    expect(links.map((module) => module.label)).toEqual(['Archive', 'Open', 'Inventory']);
+    expect(links[2]?.items.map((item) => item.label)).toEqual(['Inventory', 'Catalog']);
   });
 
   it('does not change the modules it is given', () => {
-    navigationFor([claims], []);
+    navigationFor([inventory], []);
 
-    expect(claims.items).toHaveLength(2);
+    expect(inventory.items).toHaveLength(2);
   });
 });

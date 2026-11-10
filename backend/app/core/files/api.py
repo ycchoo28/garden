@@ -17,7 +17,9 @@ router = APIRouter()
 @router.post(
     "/api/files",
     response_model=UploadedFileOut,
-    **op("files.file.upload", "Upload one file. Accepts PDF, PNG, JPEG or plain text."),
+    **op(
+        "files.file.upload", "Upload one file. Accepts PDF, PNG, JPEG or plain text.", confirm=False
+    ),
 )
 async def upload_file(
     file: UploadFile,
@@ -39,7 +41,7 @@ async def upload_file(
 
 @router.get(
     "/api/files/{sha256}",
-    **op("files.file.read", "Download a file by its SHA-256."),
+    **op("files.file.read", "Download a file by its SHA-256.", confirm=False),
 )
 async def read_file(
     sha256: str,

@@ -19,6 +19,7 @@ router = APIRouter()
     **op(
         "knowledge.status.read",
         "Read whether the knowledge module is up and can reach its database.",
+        confirm=False,
     ),
 )
 async def read_status(
@@ -31,7 +32,11 @@ async def read_status(
 @router.get(
     "/collections",
     response_model=list[CollectionOut],
-    **op("knowledge.collection.list", "List every knowledge collection and its access rules."),
+    **op(
+        "knowledge.collection.list",
+        "List every knowledge collection and its access rules.",
+        confirm=False,
+    ),
 )
 async def list_collections(
     _person: Annotated[CurrentPerson, require("knowledge.collection.view")],
@@ -48,6 +53,7 @@ async def list_collections(
         "knowledge.collection.create",
         "Create a knowledge collection with its access rules. Only a person may do this.",
         tool=False,
+        confirm=False,
     ),
 )
 async def create_collection(
@@ -61,7 +67,11 @@ async def create_collection(
 @router.get(
     "/collections/{collection_id}",
     response_model=CollectionOut,
-    **op("knowledge.collection.read", "Read one knowledge collection and its access rules."),
+    **op(
+        "knowledge.collection.read",
+        "Read one knowledge collection and its access rules.",
+        confirm=False,
+    ),
 )
 async def read_collection(
     collection_id: uuid.UUID,

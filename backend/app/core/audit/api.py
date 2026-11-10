@@ -15,7 +15,7 @@ router = APIRouter()
 @router.get(
     "/api/audit/events",
     response_model=list[AuditEventOut],
-    **op("audit.event.list", "List the most recent saved changes, newest first."),
+    **op("audit.event.list", "List the most recent saved changes, newest first.", confirm=False),
 )
 async def list_events(
     _person: Annotated[CurrentPerson, require("audit.view")],

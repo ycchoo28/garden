@@ -20,6 +20,7 @@ router = APIRouter()
         "agent.model.chat_completion",
         "Send an OpenAI-compatible chat completion to a model on the gateway allowlist.",
         tool=False,
+        confirm=False,
     ),
     response_model=None,
 )
@@ -43,6 +44,7 @@ async def chat_completions(
         "agent.model.list",
         "List the models the gateway forwards, and the default one that `default` names.",
         tool=False,
+        confirm=False,
     ),
 )
 async def list_models(
@@ -58,6 +60,7 @@ async def list_models(
     **op(
         "agent.my_model_usage.read",
         "Read today's model requests and tokens for the signed-in person. Counts only.",
+        confirm=False,
     ),
 )
 async def usage_today(

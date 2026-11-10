@@ -5,6 +5,60 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 import vueParser from 'vue-eslint-parser';
 
+const gardenRules = {
+  rules: {
+    'no-server-calls': {
+      meta: {
+        type: 'problem',
+        docs: { description: 'Require server requests to use the generated API client.' },
+        schema: [],
+        messages: {
+          useClient: 'Use the generated API client for server calls.',
+        },
+      },
+      create(context) {
+        const source = context.sourceCode;
+        const member = (node, object, property) =>
+          node?.type === 'MemberExpression' &&
+          node.object?.name === object &&
+          (node.computed ? node.property.value : node.property.name) === property;
+        const urlPattern = /^(?:https?:\/\/|\/api\/)/i;
+        return {
+          CallExpression(node) {
+            const callee = node.callee;
+            if (
+              (callee.type === 'Identifier' && ['fetch', 'axios'].includes(callee.name)) ||
+              ['fetch', 'globalThis', 'self', 'window'].some((object) => member(callee, object, 'fetch')) ||
+              (callee.type === 'MemberExpression' && callee.object?.name === 'axios')
+            ) {
+              context.report({ node, messageId: 'useClient' });
+            }
+          },
+          NewExpression(node) {
+            const callee = node.callee;
+            if (
+              callee.type === 'Identifier' && ['XMLHttpRequest', 'WebSocket'].includes(callee.name) ||
+              ['XMLHttpRequest', 'WebSocket'].some((name) => member(callee, 'window', name))
+            ) {
+              context.report({ node, messageId: 'useClient' });
+            }
+          },
+          Literal(node) {
+            if (typeof node.value === 'string' && urlPattern.test(node.value)) {
+              context.report({ node, messageId: 'useClient' });
+            }
+          },
+          TemplateElement(node) {
+            if (urlPattern.test(source.getText(node).replace(/^`|`$/g, ''))) {
+              context.report({ node, messageId: 'useClient' });
+            }
+          },
+        };
+      },
+    },
+  },
+};
+
 export default tseslint.config(
   { ignores: ['dist/', 'src/api/generated/', 'playwright-report/', 'test-results/'] },
   js.configs.recommended,
@@ -25,7 +79,7 @@ export default tseslint.config(
   },
   {
     files: ['src/**/*.{ts,vue}'],
-    plugins: { boundaries },
+    plugins: { boundaries, garden: gardenRules },
     settings: {
       'import/resolver': { node: { extensions: ['.ts', '.vue', '.js'] } },
       'boundaries/elements': [
@@ -75,12 +129,26 @@ export default tseslint.config(
             },
             {
               from: { element: { type: 'shared' } },
-              allow: { to: { element: { type: ['api', 'shared'] } } },
+              allow: { to: { element: { type: 'shared' } } },
             },
             {
               from: { element: { type: 'api' } },
               allow: { to: { element: { type: 'api' } } },
             },
+          ],
+        },
+      ],
+      'garden/no-server-calls': 'error',
+    },
+  },
+  {
+    files: ['src/app/**/*.{ts,vue}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            { group: ['../modules/*/*', '../core/*/*', '@/modules/*/*', '@/core/*/*'], message: 'Import package public entry points only.' },
           ],
         },
       ],

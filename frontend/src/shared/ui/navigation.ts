@@ -10,7 +10,7 @@ export interface NavItem {
 }
 
 export interface ModuleNavigation {
-  // The module's section, such as "Budgets".
+  // The module's section label.
   label: string;
   // The section's links, in the order they show.
   items: NavItem[];

@@ -15,7 +15,11 @@ router = APIRouter(prefix="/api/__NAME__", tags=["__NAME__"])
 @router.get(
     "/status",
     response_model=StatusOut,
-    **op("__NAME__.status.read", "Read whether the __NAME__ module is up and can reach its database."),
+    **op(
+        "__NAME__.status.read",
+        "Read whether the __NAME__ module is up and can reach its database.",
+        confirm=False,
+    ),
 )
 async def read_status(
     _person: Annotated[CurrentPerson, require("__NAME__.view")],

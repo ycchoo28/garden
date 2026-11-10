@@ -25,6 +25,7 @@ router = APIRouter()
         "claims.decision.queue",
         "List the claims waiting for a decision that the caller may make. Person-only.",
         tool=False,
+        confirm=False,
     ),
 )
 async def approval_queue(
@@ -42,6 +43,7 @@ async def approval_queue(
         "Approve or reject the claim's current step. A rejection needs a reason. "
         "Person-only: an agent cannot approve or reject a claim.",
         tool=False,
+        confirm=False,
     ),
 )
 async def decide_claim(
