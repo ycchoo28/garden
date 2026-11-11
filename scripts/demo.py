@@ -408,19 +408,20 @@ class Demo:
             self.env["GARDEN_EMBEDDING_URL"] = f"http://127.0.0.1:{port}"
             self.healthy(self.env["GARDEN_EMBEDDING_URL"] + "/health")
         self.run(["uv", "run", "python", "-m", "app.demo_seed"], ROOT / "backend")
-        self.start(
-            [
-                "uv",
-                "run",
-                "uvicorn",
-                "app.main:app",
-                "--host",
-                "127.0.0.1",
-                "--port",
-                str(self.api_port),
-            ],
-            ROOT / "backend",
-        )
+        api_command = [
+            "uv",
+            "run",
+            "uvicorn",
+            "app.main:app",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(self.api_port),
+        ]
+        if os.name == "nt":
+            # Uvicorn selects its own loop, independent of the application policy.
+            api_command += ["--loop", "asyncio:SelectorEventLoop"]
+        self.start(api_command, ROOT / "backend")
         self.start(["uv", "run", "python", "-m", "app.worker"], ROOT / "backend")
         # Vite and the CLI never inherit the model upstream key.
         client_env = self.client_env()
