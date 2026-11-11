@@ -94,7 +94,8 @@ Clone the repository and install Docker with Compose first.
 Docker must be running with Linux containers before either demo command.
 On Linux, install Docker Engine and the Compose plugin, then start the daemon and ensure your user can access it.
 On macOS, install and start Docker Desktop.
-On Windows, install and start Docker Desktop with its WSL 2 backend and Linux containers.
+On native Windows, Docker and Compose must be available to Windows commands; a Docker CLI installed only inside WSL is not detected.
+Run the demo inside WSL or provide a session-scoped Windows Docker bridge, or install and start Docker Desktop with its WSL 2 backend and Linux containers.
 Bootstrap installs the user-local command runner and toolchains without administrator access, but does not install Docker.
 From the clone, run two commands on Linux or macOS:
 

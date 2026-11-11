@@ -64,3 +64,7 @@ def test_downloads_are_checked_before_any_executable_is_installed(tmp_path, vali
 def test_bootstrap_closing_message_has_platform_specific_docker_guidance(system, marker):
     assert marker in BOOTSTRAP.docker_guidance(system)
     assert "Docker" in BOOTSTRAP.docker_guidance(system)
+    if system == "windows":
+        assert "Docker CLI installed only inside WSL is not detected" in BOOTSTRAP.docker_guidance(
+            system
+        )

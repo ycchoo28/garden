@@ -49,8 +49,10 @@ def docker_guidance(system):
             "See https://docs.docker.com/desktop/setup/install/mac-install/."
         ),
         "windows": (
-            "Windows: install and start Docker Desktop with its WSL 2 backend "
-            "and Linux containers. "
+            "Windows: native commands need Docker and Compose available on Windows. "
+            "A Docker CLI installed only inside WSL is not detected; run the demo inside WSL or "
+            "provide a session docker.cmd bridge. Otherwise use Docker Desktop with "
+            "its WSL 2 backend and Linux containers. "
             "See https://docs.docker.com/desktop/setup/install/windows-install/."
         ),
     }.get(system, "Install Docker Engine with Docker Compose and start the Docker daemon.")

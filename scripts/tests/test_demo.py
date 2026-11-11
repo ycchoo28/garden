@@ -296,6 +296,25 @@ def test_web_only_explicitly_disables_saved_model_settings(tmp_path, monkeypatch
     assert settings.agent_model_default == ""
 
 
+def test_demo_uses_explicit_postgres_image_tag(tmp_path, monkeypatch):
+    env_file = tmp_path / ".env"
+    env_file.write_text("")
+    monkeypatch.setattr(DEMO.tempfile, "mkdtemp", lambda **_kwargs: str(tmp_path / "work"))
+    demo = DEMO.Demo(types.SimpleNamespace(env_file=env_file, web_only=True))
+    demo.env["GARDEN_DEV_POSTGRES_IMAGE"] = "garden-postgres:isolated-test"
+    commands = []
+
+    def stop_after_build(args, **_kwargs):
+        commands.append(args)
+        raise RuntimeError("stop after isolated image build command")
+
+    monkeypatch.setattr(demo, "run", stop_after_build)
+    with pytest.raises(RuntimeError, match="stop after isolated image build command"):
+        demo.stack()
+    build = commands[0]
+    assert build[build.index("-t") + 1] == "garden-postgres:isolated-test"
+
+
 @pytest.mark.parametrize("system", ["Linux", "Darwin", "Windows"])
 def test_missing_docker_cli_reports_os_guidance_before_initializing_env(
     tmp_path, monkeypatch, system
@@ -307,6 +326,8 @@ def test_missing_docker_cli_reports_os_guidance_before_initializing_env(
     with pytest.raises(RuntimeError, match="Docker CLI was not found") as error:
         DEMO.main()
     assert DEMO.DOCKER_GUIDANCE[system] in str(error.value)
+    if system == "Windows":
+        assert "Docker CLI installed only inside WSL is not detected" in str(error.value)
     assert not env_file.exists()
 
 

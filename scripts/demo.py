@@ -39,8 +39,10 @@ DOCKER_GUIDANCE = {
         "See https://docs.docker.com/desktop/setup/install/mac-install/."
     ),
     "Windows": (
-        "Windows: install and start Docker Desktop with its WSL 2 backend "
-        "and Linux containers. "
+        "Windows: native commands need Docker and Compose available on Windows. "
+        "A Docker CLI installed only inside WSL is not detected; run the demo inside WSL or "
+        "provide a Windows docker.cmd bridge on the current session PATH. Otherwise install and "
+        "start Docker Desktop with its WSL 2 backend and Linux containers. "
         "See https://docs.docker.com/desktop/setup/install/windows-install/."
     ),
 }
@@ -416,6 +418,7 @@ class Demo:
 
     def stack(self):
         # Do not execute shell-only Just recipes: this path also runs natively on Windows.
+        postgres_image = self.env.get("GARDEN_DEV_POSTGRES_IMAGE") or "garden-postgres:local"
         pins = dict(
             line.split("=", 1)
             for line in (ROOT / "infra/postgres/versions.env").read_text().splitlines()
@@ -432,11 +435,11 @@ class Demo:
                 "--build-arg",
                 "PGVECTOR_APT_VERSION=" + pins["PGVECTOR_APT_VERSION"],
                 "-t",
-                "garden-postgres:local",
+                postgres_image,
                 "infra/postgres",
             ]
         )
-        self.env["GARDEN_DEV_POSTGRES_IMAGE"] = "garden-postgres:local"
+        self.env["GARDEN_DEV_POSTGRES_IMAGE"] = postgres_image
         self.run(["docker", "compose", "-f", "dev/compose.yaml", "up", "-d", "--wait"])
         self.run(["uv", "run", "python", "-m", "app.migrate"], ROOT / "backend")
         real = self.env.get("GARDEN_EMBEDDING_URL", "http://127.0.0.1:55083")
