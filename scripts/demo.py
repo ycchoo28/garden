@@ -7,6 +7,7 @@ import contextlib
 import getpass
 import json
 import os
+import platform
 import shutil
 import signal
 import socket
@@ -25,6 +26,46 @@ MODEL_KEYS = tuple(
     "GARDEN_AGENT_MODEL_" + name for name in ("UPSTREAM_URL", "API_KEY", "MODELS", "DEFAULT")
 )
 FAKE_FLAG = "GARDEN_DEMO_FAKE_MODEL"
+JUST_DOTENV_PATH = "GARDEN_DEMO_JUST_DOTENV_PATH"
+
+DOCKER_GUIDANCE = {
+    "Linux": (
+        "Linux: install Docker Engine and the Compose plugin, then start the daemon and make sure "
+        "your user can access it. See https://docs.docker.com/engine/install/ and "
+        "https://docs.docker.com/compose/install/linux/."
+    ),
+    "Darwin": (
+        "macOS: install and start Docker Desktop. "
+        "See https://docs.docker.com/desktop/setup/install/mac-install/."
+    ),
+    "Windows": (
+        "Windows: install and start Docker Desktop with its WSL 2 backend "
+        "and Linux containers. "
+        "See https://docs.docker.com/desktop/setup/install/windows-install/."
+    ),
+}
+
+
+def check_docker() -> None:
+    system = platform.system()
+    guidance = DOCKER_GUIDANCE.get(
+        system, "Install Docker Engine with Docker Compose and start the Docker daemon."
+    )
+    if not shutil.which("docker"):
+        raise RuntimeError(f"Docker CLI was not found. {guidance}")
+    for label, command in (
+        ("Docker Compose", ["docker", "compose", "version"]),
+        ("Docker daemon", ["docker", "info"]),
+    ):
+        try:
+            subprocess.run(
+                command,
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except (OSError, subprocess.SubprocessError):
+            raise RuntimeError(f"{label} is unavailable or not running. {guidance}") from None
 
 
 def load_env(path: Path) -> dict[str, str]:
@@ -160,10 +201,21 @@ class Demo:
         if not self.env_file.exists():
             shutil.copyfile(ROOT / ".env.example", self.env_file)
         self.env = {**os.environ, **load_env(self.env_file)}
-        # Explicit shell values take precedence over .env, as with Just.
+        # Just exports its dotenv values to recipe processes. Only values that differ from
+        # that file are explicit shell overrides and should take precedence over --env-file.
+        dotenv_path = os.environ.get(JUST_DOTENV_PATH)
+        just_values = load_env(Path(dotenv_path)) if dotenv_path else {}
         self.env.update(
-            {key: value for key, value in os.environ.items() if key.startswith("GARDEN_")}
+            {
+                key: value
+                for key, value in os.environ.items()
+                if key.startswith("GARDEN_") and (not dotenv_path or just_values.get(key) != value)
+            }
         )
+        self.env.pop(JUST_DOTENV_PATH, None)
+        if args.web_only:
+            for key in (*MODEL_KEYS, FAKE_FLAG):
+                self.env.pop(key, None)
         self.procs = []
         self.servers = []
         self.work = Path(tempfile.mkdtemp(prefix="garden-demo-"))
@@ -228,6 +280,7 @@ class Demo:
         if not (ROOT / "frontend/node_modules").exists():
             command = ["bun", "install", "--frozen-lockfile"]
             if os.name == "nt":
+                # Bun 1.4.3's default Windows link backend produced InvalidBinContent shims.
                 command.append("--backend=copyfile")
             self.run(command, ROOT / "frontend")
 
@@ -594,9 +647,19 @@ def main():
         action="store_true",
         help="Exit after startup and verification (for isolated end-to-end tests)",
     )
+    parser.add_argument(
+        "--check-docker",
+        action="store_true",
+        help="Check Docker CLI, Compose and daemon availability, then exit",
+    )
     args = parser.parse_args()
+    if args.check_docker:
+        check_docker()
+        return 0
     if args.non_interactive and not args.web_only and not args.check_model and not args.persona:
         parser.error("--non-interactive requires --persona")
+    if not args.check_model:
+        check_docker()
     demo = Demo(args)
 
     stopping = False
@@ -614,7 +677,6 @@ def main():
             demo.configure_model()
         if args.check_model:
             return 0
-        demo.run(["docker", "info"], stdout=subprocess.DEVNULL)
         demo.setup()
         if not args.web_only:
             demo.publish()

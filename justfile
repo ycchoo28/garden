@@ -4,6 +4,7 @@ set positional-arguments := true
 
 # Fixed local ports, all on 127.0.0.1. Postgres and the fake sign-in provider are in dev/compose.yaml.
 api_url := "http://127.0.0.1:55000"
+demo_just_dotenv_path := env_var_or_default("GARDEN_DEMO_JUST_DOTENV_PATH", ".env")
 web_url := "http://127.0.0.1:55173"
 
 default:
@@ -78,11 +79,19 @@ dev: seed
 
 # Full agent demo: configure the model, publish/install garden and dsh, sign in, and run the portal.
 demo *args:
-    uv run --project backend python scripts/demo.py "$@"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ "${1:-}" != "--check-model" ]]; then
+        GARDEN_DEMO_JUST_DOTENV_PATH="{{demo_just_dotenv_path}}" uv run --no-project --python 3.12 python scripts/demo.py --check-docker
+    fi
+    GARDEN_DEMO_JUST_DOTENV_PATH="{{demo_just_dotenv_path}}" uv run --project backend python scripts/demo.py "$@"
 
 # Web-only demo: initialize .env/dependencies, migrate, seed and run the portal without an agent install.
 demo-web *args:
-    uv run --project backend python scripts/demo.py --web-only "$@"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    GARDEN_DEMO_JUST_DOTENV_PATH="{{demo_just_dotenv_path}}" uv run --no-project --python 3.12 python scripts/demo.py --check-docker
+    GARDEN_DEMO_JUST_DOTENV_PATH="{{demo_just_dotenv_path}}" uv run --project backend python scripts/demo.py --web-only "$@"
 
 # Exercise both demo commands with fresh test databases, ports, environment files and homes.
 demo-e2e: up

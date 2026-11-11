@@ -37,6 +37,25 @@ def remember_path(folder, tools, system):
                 )
 
 
+def docker_guidance(system):
+    return {
+        "linux": (
+            "Linux: install Docker Engine and the Compose plugin, then start the daemon and ensure "
+            "your user can access it. See https://docs.docker.com/engine/install/ and "
+            "https://docs.docker.com/compose/install/linux/."
+        ),
+        "darwin": (
+            "macOS: install and start Docker Desktop. "
+            "See https://docs.docker.com/desktop/setup/install/mac-install/."
+        ),
+        "windows": (
+            "Windows: install and start Docker Desktop with its WSL 2 backend "
+            "and Linux containers. "
+            "See https://docs.docker.com/desktop/setup/install/windows-install/."
+        ),
+    }.get(system, "Install Docker Engine with Docker Compose and start the Docker daemon.")
+
+
 def main():
     system = platform.system().lower()
     machine = platform.machine().lower()
@@ -103,7 +122,7 @@ def main():
             else:
                 launcher.symlink_to(bun)
         remember_path(bin_dir, tools, system)
-    print("Toolchains ready. Docker with Compose must be installed and running separately.")
+    print(f"Toolchains ready. Before running a demo, {docker_guidance(system)}")
 
 
 if __name__ == "__main__":

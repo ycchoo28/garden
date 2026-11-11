@@ -91,7 +91,11 @@ When the portal's minimum CLI version is newer than the command, the command sto
 ## Quick start
 
 Clone the repository and install Docker with Compose first.
-Docker must be running with Linux containers; bootstrap installs the user-local command runner and toolchains without administrator access, but does not install Docker.
+Docker must be running with Linux containers before either demo command.
+On Linux, install Docker Engine and the Compose plugin, then start the daemon and ensure your user can access it.
+On macOS, install and start Docker Desktop.
+On Windows, install and start Docker Desktop with its WSL 2 backend and Linux containers.
+Bootstrap installs the user-local command runner and toolchains without administrator access, but does not install Docker.
 From the clone, run two commands on Linux or macOS:
 
 ```sh

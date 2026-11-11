@@ -1,6 +1,7 @@
 """Verified bootstrap downloads at the process boundary, with no real tool installation."""
 
 import hashlib
+import importlib.util
 import json
 import os
 import platform
@@ -13,12 +14,16 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-pytestmark = pytest.mark.skipif(
-    os.name == "nt", reason="POSIX executable fixtures; PowerShell bootstrap checked on win-test"
-)
+SPEC = importlib.util.spec_from_file_location("bootstrap", ROOT / "scripts/bootstrap.py")
+assert SPEC and SPEC.loader
+BOOTSTRAP = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(BOOTSTRAP)
 
 
 @pytest.mark.parametrize("valid", [True, False])
+@pytest.mark.skipif(
+    os.name == "nt", reason="POSIX executable fixtures; PowerShell bootstrap checked on win-test"
+)
 def test_downloads_are_checked_before_any_executable_is_installed(tmp_path, valid):
     script = tmp_path / "bootstrap.py"
     shutil.copy2(ROOT / "scripts/bootstrap.py", script)
@@ -50,3 +55,12 @@ def test_downloads_are_checked_before_any_executable_is_installed(tmp_path, vali
     assert (home / ".local/bin/just").exists() == valid
     if not valid:
         assert "checksum mismatch" in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("system", "marker"),
+    [("linux", "Docker Engine"), ("darwin", "Docker Desktop"), ("windows", "WSL 2")],
+)
+def test_bootstrap_closing_message_has_platform_specific_docker_guidance(system, marker):
+    assert marker in BOOTSTRAP.docker_guidance(system)
+    assert "Docker" in BOOTSTRAP.docker_guidance(system)

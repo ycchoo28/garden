@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import threading
+import types
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
@@ -126,6 +127,146 @@ def test_noninteractive_full_demo_requires_an_explicit_persona(tmp_path):
     assert result.returncode != 0
     assert "--persona" in result.stderr
     assert not (tmp_path / ".env").exists()
+
+
+def test_just_dotenv_does_not_override_selected_env_and_shell_overrides_win(tmp_path):
+    just_upstream = ThreadingHTTPServer(("127.0.0.1", 0), DEMO.FakeModel)
+    selected_requests = []
+
+    class SelectedUpstream(DEMO.FakeModel):
+        def do_GET(self):
+            selected_requests.append(self.headers.get("Authorization"))
+            if self.headers.get("Authorization") != "Bearer explicit-shell-token":
+                self.send_error(401)
+            else:
+                super().do_GET()
+
+    selected_upstream = ThreadingHTTPServer(("127.0.0.1", 0), SelectedUpstream)
+    for server in (just_upstream, selected_upstream):
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+    just_env = tmp_path / "just.env"
+    just_env.write_text(
+        "\n".join(
+            (
+                f"GARDEN_AGENT_MODEL_UPSTREAM_URL=http://127.0.0.1:{just_upstream.server_port}/v1",
+                "GARDEN_AGENT_MODEL_API_KEY=just-file-token",
+                "GARDEN_AGENT_MODEL_MODELS=garden-demo",
+                "GARDEN_AGENT_MODEL_DEFAULT=garden-demo",
+                "GARDEN_DATABASE_URL=postgresql+psycopg://garden:garden-dev@127.0.0.1:55432/just_dev",
+                "GARDEN_FILES_ROOT=/just/files",
+            )
+        )
+        + "\n"
+    )
+    selected_env = tmp_path / "selected.env"
+    selected_env.write_text(
+        "\n".join(
+            (
+                f"GARDEN_AGENT_MODEL_UPSTREAM_URL=http://127.0.0.1:{selected_upstream.server_port}/v1",
+                "GARDEN_AGENT_MODEL_API_KEY=selected-file-token",
+                "GARDEN_AGENT_MODEL_MODELS=garden-demo",
+                "GARDEN_AGENT_MODEL_DEFAULT=garden-demo",
+                "GARDEN_DATABASE_URL=postgresql+psycopg://garden:garden-dev@127.0.0.1:55432/selected_test",
+                "GARDEN_FILES_ROOT=/selected/files",
+            )
+        )
+        + "\n"
+    )
+    env = {key: value for key, value in os.environ.items() if not key.startswith("GARDEN_")}
+    env.update(
+        {
+            "GARDEN_DEMO_JUST_DOTENV_PATH": str(just_env),
+            "GARDEN_AGENT_MODEL_API_KEY": "explicit-shell-token",
+            "HOME": str(tmp_path),
+        }
+    )
+    try:
+        result = subprocess.run(
+            [
+                "just",
+                "--dotenv-path",
+                str(just_env),
+                "demo",
+                "--check-model",
+                "--env-file",
+                str(selected_env),
+            ],
+            cwd=ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        assert selected_requests == ["Bearer explicit-shell-token"] * 2
+        selected_text = selected_env.read_text()
+        assert (
+            "GARDEN_DATABASE_URL=postgresql+psycopg://garden:garden-dev@127.0.0.1:55432/selected_test"
+            in selected_text
+        )
+        assert "GARDEN_FILES_ROOT=/selected/files" in selected_text
+        assert "just-file-token" not in selected_text
+    finally:
+        for server in (just_upstream, selected_upstream):
+            server.shutdown()
+            server.server_close()
+
+
+def test_web_only_removes_saved_model_settings_from_stack_environment(tmp_path, monkeypatch):
+    path = tmp_path / ".env"
+    path.write_text(
+        "\n".join(
+            (
+                "GARDEN_AGENT_MODEL_UPSTREAM_URL=https://model.example/v1",
+                "GARDEN_AGENT_MODEL_API_KEY=saved-token",
+                "GARDEN_AGENT_MODEL_MODELS=saved-model",
+                "GARDEN_AGENT_MODEL_DEFAULT=saved-model",
+                "GARDEN_DEMO_FAKE_MODEL=1",
+            )
+        )
+        + "\n"
+    )
+    monkeypatch.setattr(DEMO.tempfile, "mkdtemp", lambda **_kwargs: str(tmp_path / "work"))
+    demo = DEMO.Demo(types.SimpleNamespace(env_file=path, web_only=True))
+    assert all(key not in demo.env for key in (*DEMO.MODEL_KEYS, DEMO.FAKE_FLAG))
+    assert all(key not in demo.client_env() for key in (*DEMO.MODEL_KEYS, DEMO.FAKE_FLAG))
+
+
+@pytest.mark.parametrize("system", ["Linux", "Darwin", "Windows"])
+def test_missing_docker_cli_reports_os_guidance_before_initializing_env(
+    tmp_path, monkeypatch, system
+):
+    env_file = tmp_path / "not-created.env"
+    monkeypatch.setattr(DEMO.platform, "system", lambda: system)
+    monkeypatch.setattr(DEMO.shutil, "which", lambda _name: None)
+    monkeypatch.setattr(sys, "argv", ["demo.py", "--web-only", "--env-file", str(env_file)])
+    with pytest.raises(RuntimeError, match="Docker CLI was not found") as error:
+        DEMO.main()
+    assert DEMO.DOCKER_GUIDANCE[system] in str(error.value)
+    assert not env_file.exists()
+
+
+@pytest.mark.parametrize(
+    ("unavailable", "message"),
+    [("compose", "Docker Compose"), ("daemon", "Docker daemon")],
+)
+def test_docker_preflight_checks_compose_and_daemon(tmp_path, monkeypatch, unavailable, message):
+    calls = []
+    monkeypatch.setattr(DEMO.shutil, "which", lambda _name: "/usr/bin/docker")
+
+    def fail_requested(command, **_kwargs):
+        calls.append(command)
+        if (unavailable == "compose") == (command[1] == "compose"):
+            raise subprocess.CalledProcessError(1, command)
+
+    monkeypatch.setattr(DEMO.subprocess, "run", fail_requested)
+    with pytest.raises(RuntimeError, match=message):
+        DEMO.check_docker()
+    if unavailable == "daemon":
+        assert [call[1] for call in calls] == ["compose", "info"]
+    else:
+        assert [call[1] for call in calls] == ["compose"]
 
 
 @pytest.mark.skipif(
