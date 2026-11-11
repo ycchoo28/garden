@@ -1,4 +1,9 @@
-# Run from the clone: & .\scripts\bootstrap.ps1
+# Run from the clone: Get-Content .\scripts\bootstrap.ps1 -Raw | Invoke-Expression
+# Resolve the helper directory for both file invocation and the policy-independent inline form.
+$bootstrapRoot = $PSScriptRoot
+if (-not $bootstrapRoot -or -not (Test-Path (Join-Path $bootstrapRoot 'bootstrap.py'))) {
+    $bootstrapRoot = Join-Path (Get-Location) 'scripts'
+}
 $ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 $bin = Join-Path $env:USERPROFILE '.local\bin'
@@ -33,6 +38,6 @@ if (-not $bash) {
 }
 Add-BootstrapPath (Split-Path $bash)
 Add-BootstrapPath (Join-Path (Split-Path (Split-Path $bash)) 'usr\bin')
-& uv run --no-project --python 3.12 "$PSScriptRoot\bootstrap.py"
+& uv run --no-project --python 3.12 "$bootstrapRoot\bootstrap.py"
 if ($LASTEXITCODE -ne 0) { throw 'Toolchain bootstrap failed' }
 Get-Content (Join-Path $env:USERPROFILE '.local\share\garden-tools\paths') | ForEach-Object { $env:PATH = "$_;$env:PATH" }

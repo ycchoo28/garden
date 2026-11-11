@@ -102,7 +102,7 @@ just demo
 On native Windows, run these in PowerShell:
 
 ```powershell
-& .\scripts\bootstrap.ps1
+Get-Content .\scripts\bootstrap.ps1 -Raw | Invoke-Expression
 just demo
 ```
 
