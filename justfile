@@ -1,5 +1,6 @@
 # Local commands for Garden. Run `just` with no arguments to list them.
 set dotenv-load := true
+set positional-arguments := true
 
 # Fixed local ports, all on 127.0.0.1. Postgres and the fake sign-in provider are in dev/compose.yaml.
 api_url := "http://127.0.0.1:55000"
@@ -75,32 +76,17 @@ dev: seed
     (cd frontend && bun run dev --strictPort --port 55173) &
     wait
 
-# Start the demo: migrate, load the Fernhill Studio demo data, then run the API, the worker and the web app until Ctrl+C.
-# Embeddings come from the real service when it answers, and from the fake one otherwise (scripts/demo-embeddings.sh).
-# GARDEN_DEMO_API_PORT and GARDEN_DEMO_WEB_PORT move the ports, for example to 56018 and 56118.
-demo: migrate
-    #!/usr/bin/env bash
-    set -euo pipefail
-    trap 'kill 0' EXIT
-    api_default="{{api_url}}"
-    web_default="{{web_url}}"
-    api_port="${GARDEN_DEMO_API_PORT:-${api_default##*:}}"
-    web_port="${GARDEN_DEMO_WEB_PORT:-${web_default##*:}}"
-    for port in "$api_port" "$web_port"; do
-        if (echo > "/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
-            echo "Port $port is already in use. Stop that process, or set GARDEN_DEMO_API_PORT or GARDEN_DEMO_WEB_PORT." >&2
-            exit 1
-        fi
-    done
-    source scripts/demo-embeddings.sh
-    garden_select_embeddings
-    export GARDEN_PUBLIC_URL="http://localhost:$web_port"
-    (cd backend && uv run python -m app.demo_seed)
-    echo "Open http://localhost:$web_port and sign in as a seeded person, for example priya.nair@fernhill.example."
-    (cd backend && uv run uvicorn app.main:app --host 127.0.0.1 --port "$api_port") &
-    (cd backend && uv run python -m app.worker) &
-    (cd frontend && GARDEN_E2E_API_URL="http://127.0.0.1:$api_port" bun run dev --strictPort --port "$web_port") &
-    wait
+# Full agent demo: configure the model, publish/install garden and dsh, sign in, and run the portal.
+demo *args:
+    uv run --project backend python scripts/demo.py "$@"
+
+# Web-only demo: initialize .env/dependencies, migrate, seed and run the portal without an agent install.
+demo-web *args:
+    uv run --project backend python scripts/demo.py --web-only "$@"
+
+# Exercise both demo commands with fresh test databases, ports, environment files and homes.
+demo-e2e: up
+    GARDEN_DEMO_E2E=1 uv run --project backend pytest scripts/tests/test_demo_e2e.py -q
 
 # Drop and recreate the dev database named in .env, then migrate and load the demo data again. Asks for confirmation first.
 reset: up
@@ -268,8 +254,8 @@ api-check:
 
 # Static architecture checks need no database.
 architecture-check:
-    uv run --project backend ruff check --config backend/pyproject.toml scripts/check_*architecture.py scripts/check_reporting_contracts.py scripts/check_api.py scripts/check_authoring.py scripts/tests
-    uv run --project backend ruff format --check --config backend/pyproject.toml scripts/check_*architecture.py scripts/check_reporting_contracts.py scripts/check_api.py scripts/check_authoring.py scripts/tests
+    uv run --project backend ruff check --config backend/pyproject.toml scripts/check_*architecture.py scripts/check_reporting_contracts.py scripts/check_api.py scripts/check_authoring.py scripts/demo.py scripts/bootstrap.py scripts/tests
+    uv run --project backend ruff format --check --config backend/pyproject.toml scripts/check_*architecture.py scripts/check_reporting_contracts.py scripts/check_api.py scripts/check_authoring.py scripts/demo.py scripts/bootstrap.py scripts/tests
     uv run --project backend python scripts/check_shared_architecture.py
     uv run --project backend python scripts/check_frontend_architecture.py
     uv run --project backend python scripts/check_reporting_contracts.py

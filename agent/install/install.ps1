@@ -6,7 +6,7 @@
 # or, as a one-liner, which needs no execution policy change:
 #   $env:GARDEN_API_URL = 'https://portal.example'; irm https://portal.example/api/agent/downloads/install.ps1 | iex
 #
-# Needs Node.js to run dsh; without it the installer still finishes and says so. It gets Python 3.12
+# Installs Node.js when missing or older than 24. It gets Python 3.12
 # itself with the pinned uv release, whose SHA-256 it checks, and it uses tar.exe, which Windows 10 and
 # later include. Nothing is installed unless the portal's SHA-256 matches.
 #
@@ -199,13 +199,11 @@ function Add-UserPath([string]$folder) {
     $entries = @()
     if ($current) { $entries = @($current -split ';' | Where-Object { $_ }) }
     $wanted = $folder.TrimEnd('\')
-    if (-not ($entries | Where-Object { $_.TrimEnd('\') -ieq $wanted })) {
-        [Environment]::SetEnvironmentVariable('Path', (@($entries) + $folder) -join ';', 'User')
+    if (-not $env:GARDEN_INSTALL_TEST -and -not ($entries | Where-Object { $_.TrimEnd('\') -ieq $wanted })) {
+        [Environment]::SetEnvironmentVariable('Path', (@($folder) + $entries) -join ';', 'User')
         Write-Output "Added $folder to your PATH. Open a new terminal to run garden and dsh by name."
     }
-    if (-not (($env:Path -split ';') | Where-Object { $_.TrimEnd('\') -ieq $wanted })) {
-        $env:Path = "$env:Path;$folder"
-    }
+    $env:Path = "$folder;$env:Path"
 }
 
 # Ensures Node.js (pinned to $nodeVersion) is available on the machine.
@@ -250,6 +248,7 @@ $webPort = 8765
 # them. The start script runs dsh web with no console window, opens its address once it listens, and reuses
 # a server that is already running. The stop script ends the server that the start script began.
 function Install-WebShortcuts([string]$launcher, [string]$gardenFolder) {
+    if ($env:GARDEN_INSTALL_TEST) { return }
     $webDir = Join-Path $gardenFolder 'web'
     New-Item -ItemType Directory -Force -Path $webDir | Out-Null
     # The paths are written into the scripts as single-quoted strings, so an apostrophe in a path is doubled.
@@ -289,7 +288,7 @@ $pidFile = Join-Path $webDir 'web.pid'
 if (Test-Path $pidFile) {
     $started = Get-Content -Path $pidFile -ErrorAction SilentlyContinue
     if ($started) { & taskkill.exe /PID $started /T /F *> $null }
-    Remove-Item -Path $pidFile -ErrorAction SilentlyContinue
+    Move-Item -Path $pidFile -Destination "$pidFile.stopped" -Force -ErrorAction SilentlyContinue
 }
 # A server started by hand is found by the port it listens on.
 Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue |
@@ -317,7 +316,7 @@ CreateObject("WScript.Shell").Run """__PS__"" -NoProfile -ExecutionPolicy Bypass
     $programs = Join-Path ([Environment]::GetFolderPath('Programs')) 'Garden Agent'
     $desktop = [Environment]::GetFolderPath('Desktop')
     # The shortcuts are replaced each time, so a re-run leaves one of each.
-    if (Test-Path $programs) { Remove-Item -Recurse -Force -Path $programs }
+    if (Test-Path $programs) { Move-Item -Path $programs -Destination "$programs.bak-$stamp-$([Guid]::NewGuid())" }
     New-Item -ItemType Directory -Force -Path $programs | Out-Null
     $shell = New-Object -ComObject WScript.Shell
     $shortcuts = @(
@@ -326,7 +325,7 @@ CreateObject("WScript.Shell").Run """__PS__"" -NoProfile -ExecutionPolicy Bypass
         @{ Path = (Join-Path $desktop 'Garden Agent.lnk'); Script = $startVbs; Text = 'Start the Garden Agent browser UI' }
     )
     foreach ($item in $shortcuts) {
-        if (Test-Path $item.Path) { Remove-Item -Force -Path $item.Path }
+        if (Test-Path $item.Path) { Move-Item -Path $item.Path -Destination "$($item.Path).bak-$stamp-$([Guid]::NewGuid())" }
         $link = $shell.CreateShortcut($item.Path)
         $link.TargetPath = $wscript
         $link.Arguments = "//B //Nologo `"$($item.Script)`""
@@ -440,7 +439,8 @@ try {
 
     # The launcher runs the zipapp with the interpreter checked above. A batch file passes the exit code on.
     $launcher = Join-Path $binDir 'garden.cmd'
-    $launcherText = "@echo off`r`n`"$python`" `"$pyz`" %*`r`nexit /b %ERRORLEVEL%`r`n"
+    $nodeRuntime = (Get-Command node).Source | Split-Path
+    $launcherText = "@echo off`r`nset `"PATH=$nodeRuntime;%PATH%`"`r`n`"$python`" `"$pyz`" %*`r`nexit /b %ERRORLEVEL%`r`n"
     [System.IO.File]::WriteAllText($launcher, $launcherText, [System.Text.Encoding]::ASCII)
 
     # config.json holds where the portal is, the MCP server's command and arguments, and dsh's home. No secret.
@@ -462,7 +462,7 @@ try {
     $bundle = Get-Artifact 'dsh-bundle-windows-x64.tar.gz'
     $dshFolder = Join-Path $gardenHome 'dsh'
     Start-Step 'Unpacking dsh...'
-    if (Test-Path $dshFolder) { Remove-Item -Recurse -Force -Path $dshFolder }
+    if (Test-Path $dshFolder) { Move-Item -Path $dshFolder -Destination "$dshFolder.bak-$stamp-$([Guid]::NewGuid())" }
     New-Item -ItemType Directory -Path $dshFolder | Out-Null
     & $tar -xzf $bundle -C $dshFolder
     if ($LASTEXITCODE -ne 0) { throw 'dsh could not be unpacked from the portal''s bundle.' }
@@ -520,7 +520,8 @@ try {
     if ($script:CurrentStep) { Write-Host "[$($script:StepNumber)/$($script:TotalSteps)] Failed: $($script:CurrentStep)" }
     throw
 } finally {
-    Remove-Item -Recurse -Force -Path $tmp -ErrorAction SilentlyContinue
+    # Keep temporary downloads recoverable rather than permanently deleting them.
+    if (Get-Command trash -ErrorAction SilentlyContinue) { & trash $tmp }
     $env:GARDEN_HOME = $savedGardenHome
     $env:GARDEN_API_URL = $savedPortalUrl
     $ErrorActionPreference = $savedErrorActionPreference

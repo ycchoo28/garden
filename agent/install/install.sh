@@ -4,7 +4,7 @@
 # Usage: GARDEN_API_URL=https://portal.example install/install.sh
 # or, as a one-liner: curl -fsSL https://portal.example/api/agent/downloads/install.sh | GARDEN_API_URL=https://portal.example bash
 # Needs curl. The installer gets Python 3.12 itself, with the pinned uv release, whose SHA-256 it
-# checks. Node.js is needed to run dsh; without it the installer still finishes and says so. Nothing
+# checks. A pinned Node.js runtime is installed when Node is missing or older than 24. Nothing
 # is installed unless the portal's SHA-256 matches.
 #
 # Environment:
@@ -85,9 +85,9 @@ download() {
 }
 
 tmp="$(mktemp -d)"
-# The download folder is removed when the installer exits, whether it succeeded or not.
+# Recycle downloads when trash is available; otherwise leave working material in system temp.
 cleanup() {
-    rm -rf "$tmp"
+    if command -v trash >/dev/null 2>&1; then trash "$tmp"; fi
 }
 trap on_exit EXIT
 
@@ -164,10 +164,40 @@ if [ -z "${GARDEN_PYTHON:-}" ]; then
     total_steps=$((total_steps + 1))
     if [ ! -x "$uv" ]; then total_steps=$((total_steps + 2)); fi
 fi
+# Keep Node under Garden's home, and prepend it in the launcher for future shells too.
+node_bin=""
+if ! command -v node >/dev/null 2>&1 || ! node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 24 ? 0 : 1)' 2>/dev/null; then
+    case "$(uname -s)/$(uname -m)" in
+        Linux/x86_64) node_asset=node-v26.13.0-linux-x64; node_sha=5848553868b402d3fabb5b09270649977780a390f832155721025a08b5104455 ;;
+        Linux/aarch64 | Linux/arm64) node_asset=node-v26.13.0-linux-arm64; node_sha=439e9c438acdf6a6ffe47418da709153d66c4bed812e30a473faacb107dd2791 ;;
+        Darwin/x86_64) node_asset=node-v26.13.0-darwin-x64; node_sha=525c9b29bb0263d687de60a4cec0e2a6db876a8eb032369e5795eca71e7c358e ;;
+        Darwin/arm64) node_asset=node-v26.13.0-darwin-arm64; node_sha=d38bd5e5a2ddce6bbb5ce45e46e208337da4d51fffe611e567fd32073d6439f6 ;;
+        *) echo "No pinned Node runtime for this platform." >&2; exit 1 ;;
+    esac
+    node_bin="$garden_home/tools/$node_asset/bin"
+    if [ ! -x "$node_bin/node" ]; then
+        total_steps=$((total_steps + 2))
+    fi
+fi
+
 install_python
 command -v "$python" >/dev/null 2>&1 || { echo "Python 3.12 could not be found at $python. Set GARDEN_PYTHON, or run the installer again." >&2; exit 1; }
 "$python" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 12) else 1)' \
     || { echo "Python 3.12 or newer is needed; $python is older." >&2; exit 1; }
+
+if [ -n "$node_bin" ]; then
+    if [ ! -x "$node_bin/node" ]; then
+        download "https://nodejs.org/dist/v26.13.0/$node_asset.tar.gz" "$tmp/node.tar.gz" "Node.js 26.13.0"
+        [ "$(file_sha256 "$tmp/node.tar.gz")" = "$node_sha" ] || fail_step "Node.js checksum mismatch."
+        finish_step
+        begin_step "Unpacking Node.js..."
+        mkdir -p "$garden_home/tools"
+        tar -xzf "$tmp/node.tar.gz" -C "$garden_home/tools"
+        finish_step
+    fi
+    export PATH="$node_bin:$PATH"
+    "$node_bin/node" -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 24 ? 0 : 1)'
+fi
 
 # The manifest lists each artifact with its URL and SHA-256. It needs no sign-in.
 begin_step "Fetching download manifest..."
@@ -203,6 +233,7 @@ finish_step
 # The launcher runs the zipapp with the interpreter checked above.
 cat > "$bin_dir/garden" <<LAUNCHER
 #!/usr/bin/env bash
+export PATH="${node_bin:+$node_bin:}\$PATH"
 exec "$python" "$garden_home/garden.pyz" "\$@"
 LAUNCHER
 chmod 0755 "$bin_dir/garden"
@@ -262,7 +293,7 @@ finish_step
 # fresh copy each time, so an older dsh never mixes with a newer one.
 fetch_artifact dsh-bundle.tar.gz
 begin_step "Unpacking dsh..."
-rm -rf "$garden_home/dsh"
+if [ -e "$garden_home/dsh" ]; then mv "$garden_home/dsh" "$garden_home/dsh.bak-$stamp-$$"; fi
 mkdir -p "$garden_home/dsh"
 tar -xzf "$tmp/dsh-bundle.tar.gz" -C "$garden_home/dsh"
 finish_step

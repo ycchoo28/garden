@@ -86,35 +86,72 @@ When the portal's minimum CLI version is newer than the command, the command sto
 - The optional local embedding model is `bge-m3`, quantised to Q8_0, and its file is about 0.63 GB (634,553,760 bytes at the pinned revision).
   `just models` downloads it and checks its SHA-256, and `just embedding-up` starts the server.
   Preparing a knowledge batch and searching the knowledge both call that server, so the policy search in the demo needs it running.
-- No model API key is needed for anything in this README.
-  The model gateway stays off until `GARDEN_AGENT_MODEL_UPSTREAM_URL` is set.
+- No external model key is needed for the web-only demo or for the full demo with its local fake model.
 
-## Setup
+## Quick start
 
-Install these first:
-
-- Docker, with Compose.
-- [just](https://just.systems) 1.58.0, the command runner.
-- [uv](https://docs.astral.sh/uv/) 0.13.1, for Python 3.12 and the backend tools.
-- [Bun](https://bun.sh) 1.4.3, for the frontend.
-- gitleaks 8.30.1, only if you run `just quick` or `just check`, because the secrets check uses it.
-
-The versions are in `.tool-versions`.
-Then run these from the repository root:
+Clone the repository and install Docker with Compose first.
+Docker must be running with Linux containers; bootstrap installs the user-local command runner and toolchains without administrator access, but does not install Docker.
+From the clone, run two commands on Linux or macOS:
 
 ```sh
-git clone https://github.com/ycchoo28/garden.git
-cd garden
-just setup    # creates .env from .env.example and installs the dependencies
-just demo     # starts Postgres and the fake sign-in provider, migrates, seeds Fernhill Studio, then starts the API, the worker and the web app
+source scripts/bootstrap.sh
+just demo
 ```
 
-Open http://localhost:55173 and choose a seeded person.
-The fake sign-in page takes the person's email as the subject, so `marcus.lee@fernhill.example` signs in as Marcus Lee.
+On native Windows, run these in PowerShell:
 
-`just demo` needs no model and no API key.
-It uses the local embedding server when `just embedding-up` is running, and otherwise starts the small fake embedding server that the tests use, and it prints which one it chose.
+```powershell
+& .\scripts\bootstrap.ps1
+just demo
+```
+
+Bootstrap reuses working tools on PATH and otherwise installs checksum-verified Just 1.58.0, uv 0.13.1, Bun 1.4.3 and Node 26.13.0 into your user profile.
+Node must be at least version 24.
+Windows bootstrap also locates Git Bash or installs a checksum-verified portable Git, and updates the current and user PATH.
+POSIX bootstrap must be sourced to update the current shell's PATH.
+Supported bootstrap hosts are Linux and macOS on x64 or ARM64, and Windows on x64.
+
+`just demo` initializes `.env` and missing dependencies, validates the saved model upstream, publishes the agent downloads, and starts the seeded portal.
+When model settings are missing or unusable, it asks for an OpenAI-compatible base URL, a hidden API token and allowed/default models.
+Enter `fake` at the URL prompt to use the built-in local fake model without an external key.
+The four `GARDEN_AGENT_MODEL_*` settings are saved only in the portal `.env`, with restricted file permissions, and reused after validation on later starts.
+Neither the installer nor the client configuration receives the upstream key ([ADR 0024](docs/adr/0024-model-gateway.md)).
+The fake model returns a fixed reply and does not reason or call tools.
+
+Once the portal is healthy, the command runs its installer, opens CLI sign-in so you can choose a seeded persona, writes the `dsh` configuration, and verifies `garden tools`, `dsh --version` and a model turn through the portal.
+It installs into `~/.local/bin`, `~/.garden` and `~/.dsh` (under `%USERPROFILE%` on Windows).
+Both installers supply Python and Node when needed.
+Add the printed bin directory to PATH if your shell does not already include it.
+The services run until Ctrl+C, which stops only the demo's child processes; the local Compose dependencies stay available for the next run.
+
+For the web portal alone, use `just demo-web` as the second command.
+It initializes `.env` and missing dependencies, migrates and seeds Fernhill Studio, and starts the API, worker and web app without model prompts or agent installation.
+Open http://localhost:55173 and choose any seeded person.
+Both commands use the real local embedding server if it answers, or start a small fake embedding server otherwise.
 The fake gives repeatable vectors, so search works but ranks by shared words rather than meaning.
+
+For unattended runs, explicitly select a seeded persona and either the fake model or the four upstream environment settings:
+
+```sh
+just demo --fake-model --non-interactive --persona 'Dev Admin'
+```
+
+`--persona` also accepts `Marcus Lee`, `Priya Nair` or `Lena Fischer`, and approves the actual CLI OIDC login through a headless Chromium browser.
+This mode downloads Chromium if missing.
+`--smoke` exits after verification instead of holding the stack open.
+`--check-model` validates and saves only the model settings without starting the stack.
+`--env-file PATH` (or `GARDEN_DEMO_ENV_FILE`) selects a separate portal environment file.
+Shell `GARDEN_*` variables override that file.
+`GARDEN_DEMO_API_PORT`, `GARDEN_DEMO_WEB_PORT`, `GARDEN_DEMO_EMBEDDING_PORT` and `GARDEN_DEMO_MODEL_PORT` override the loopback ports (55000, 55173, 55084 and 55085).
+`GARDEN_DEV_POSTGRES_PORT`, `GARDEN_DEV_OIDC_PORT` and `COMPOSE_PROJECT_NAME` isolate Compose dependencies; set the database URL and OIDC issuer to match.
+Automated runs must use a fresh database ending in `_test` and isolated HOME, `GARDEN_HOME`, `GARDEN_DSH_HOME` and `GARDEN_BIN_DIR`, then drop that database and stop their test Compose project afterwards.
+
+## Development setup
+
+`just setup` installs all dependencies explicitly, and `just up`, `just migrate`, `just seed` and `just dev` remain available for step-by-step development.
+The pinned tool versions are in `.tool-versions`.
+Install gitleaks 8.30.1 separately to run `just quick` or `just check`.
 
 Use `just reset` to return to a clean seeded state.
 It asks you to type `reset`, then drops and recreates the dev database named in `.env`, migrates and loads the demo data again.
@@ -232,7 +269,9 @@ Run `just` with no arguments to list them.
 | Command | What it does |
 | --- | --- |
 | `just setup` | Creates `.env` from `.env.example` and installs the dependencies for the backend, the agent and the frontend. |
-| `just demo` | Starts Postgres and the fake sign-in provider, migrates, seeds the demo data, then starts the API, the worker and the web app. |
+| `just demo-web` | Starts Postgres and the fake sign-in provider, migrates, seeds the demo data, then starts the API, the worker and the web app. |
+| `just demo-e2e` | Verify both demo commands with isolated test databases, ports and homes. |
+| `just demo` | Set up the model, publish and install agents, sign in, verify garden and dsh, then run the portal. |
 | `just up` | Starts Postgres and the fake sign-in provider in Docker Compose, and waits until they are healthy. |
 | `just migrate` | Applies the Alembic migrations and creates the job queue tables when they are missing. |
 | `just seed` | Loads Fernhill Studio and the seeded people. It is safe to run again. |
@@ -278,7 +317,7 @@ Add a button there when you add a person to the seed.
 
 ## Known gaps
 
-- The model gateway forwards nothing until an upstream is configured, so the live agent chat is not part of the demo.
+- The web-only demo leaves the model gateway off; the full demo configures and verifies it.
   When an upstream is configured, `/api/agent/model/v1/chat/completions` supports both non-streaming JSON replies and `stream: true` server-sent events.
 
 ## Where to read next
