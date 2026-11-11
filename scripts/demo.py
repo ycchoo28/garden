@@ -655,7 +655,8 @@ def main():
     )
     args = parser.parse_args()
     if args.check_docker:
-        check_docker()
+        if not args.check_model:
+            check_docker()
         return 0
     if args.non_interactive and not args.web_only and not args.check_model and not args.persona:
         parser.error("--non-interactive requires --persona")

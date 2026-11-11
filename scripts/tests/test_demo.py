@@ -213,6 +213,56 @@ def test_just_dotenv_does_not_override_selected_env_and_shell_overrides_win(tmp_
             server.server_close()
 
 
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ("--fake-model", "--check-model", "--non-interactive"),
+        ("--check-model", "--fake-model", "--non-interactive"),
+    ],
+)
+def test_just_demo_model_check_flag_order_does_not_require_docker(tmp_path, arguments):
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    if os.name == "nt":
+        docker = bin_dir / "docker.cmd"
+        docker.write_text("@exit /b 1\r\n")
+    else:
+        docker = bin_dir / "docker"
+        docker.write_text("#!/bin/sh\nexit 1\n")
+        docker.chmod(0o755)
+    env_file = tmp_path / "demo.env"
+    just_env_file = tmp_path / "just.env"
+    just_env_file.write_text("")
+    env = {key: value for key, value in os.environ.items() if not key.startswith("GARDEN_")}
+    env.update(
+        {
+            "PATH": str(bin_dir) + os.pathsep + os.environ["PATH"],
+            "HOME": str(tmp_path),
+            "USERPROFILE": str(tmp_path),
+            "GARDEN_DEMO_JUST_DOTENV_PATH": str(just_env_file),
+        }
+    )
+    result = subprocess.run(
+        [
+            "just",
+            "--dotenv-path",
+            str(just_env_file),
+            "demo",
+            *arguments,
+            "--env-file",
+            str(env_file),
+        ],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert dotenv_values(env_file)[DEMO.FAKE_FLAG] == "1"
+
+
 def test_web_only_explicitly_disables_saved_model_settings(tmp_path, monkeypatch):
     path = tmp_path / ".env"
     path.write_text(

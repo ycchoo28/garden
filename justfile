@@ -81,16 +81,14 @@ dev: seed
 demo *args:
     #!/usr/bin/env bash
     set -euo pipefail
-    if [[ "${1:-}" != "--check-model" ]]; then
-        GARDEN_DEMO_JUST_DOTENV_PATH="{{demo_just_dotenv_path}}" uv run --no-project --python 3.12 python scripts/demo.py --check-docker
-    fi
+    GARDEN_DEMO_JUST_DOTENV_PATH="{{demo_just_dotenv_path}}" uv run --no-project --python 3.12 python scripts/demo.py --check-docker "$@"
     GARDEN_DEMO_JUST_DOTENV_PATH="{{demo_just_dotenv_path}}" uv run --project backend python scripts/demo.py "$@"
 
 # Web-only demo: initialize .env/dependencies, migrate, seed and run the portal without an agent install.
 demo-web *args:
     #!/usr/bin/env bash
     set -euo pipefail
-    GARDEN_DEMO_JUST_DOTENV_PATH="{{demo_just_dotenv_path}}" uv run --no-project --python 3.12 python scripts/demo.py --check-docker
+    GARDEN_DEMO_JUST_DOTENV_PATH="{{demo_just_dotenv_path}}" uv run --no-project --python 3.12 python scripts/demo.py --check-docker --web-only "$@"
     GARDEN_DEMO_JUST_DOTENV_PATH="{{demo_just_dotenv_path}}" uv run --project backend python scripts/demo.py --web-only "$@"
 
 # Exercise both demo commands with fresh test databases, ports, environment files and homes.
