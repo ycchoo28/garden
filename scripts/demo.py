@@ -61,13 +61,27 @@ def check_docker() -> None:
     ):
         try:
             subprocess.run(
-                command,
+                command_for(command),
                 check=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
         except (OSError, subprocess.SubprocessError):
             raise RuntimeError(f"{label} is unavailable or not running. {guidance}") from None
+
+
+def windows_batch_command(command: list[str]) -> list[str]:
+    return ["cmd.exe", "/d", "/c", "call " + subprocess.list2cmdline(command)]
+
+
+def command_for(args, path=None):
+    executable = (
+        shutil.which(str(args[0]), path=path) if path is not None else shutil.which(str(args[0]))
+    ) or str(args[0])
+    command = [executable, *map(str, args[1:])]
+    if os.name == "nt" and executable.lower().endswith((".cmd", ".bat")):
+        return windows_batch_command(command)
+    return command
 
 
 def load_env(path: Path) -> dict[str, str]:
@@ -231,9 +245,8 @@ class Demo:
 
     def run(self, args, cwd=ROOT, env=None, **kwargs):
         # Resolve .cmd commands explicitly on Windows (npm, bun, and installed launchers).
-        command = shutil.which(str(args[0]), path=(env or self.env).get("PATH")) or str(args[0])
         return subprocess.run(
-            [command, *map(str, args[1:])],
+            command_for(args, path=(env or self.env).get("PATH")),
             cwd=cwd,
             env=env or self.env,
             check=True,
@@ -242,12 +255,16 @@ class Demo:
 
     def start(self, args, cwd=ROOT, env=None):
         effective = env or self.env
-        executable = shutil.which(str(args[0]), path=effective.get("PATH")) or str(args[0])
+        process_options = (
+            {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+            if os.name == "nt"
+            else {"start_new_session": True}
+        )
         proc = subprocess.Popen(
-            [executable, *map(str, args[1:])],
+            command_for(args, path=effective.get("PATH")),
             cwd=cwd,
             env=effective,
-            start_new_session=os.name != "nt",
+            **process_options,
         )
         self.procs.append(proc)
         return proc
@@ -605,11 +622,10 @@ class Demo:
         for proc in reversed(self.procs):
             if proc.poll() is None:
                 if os.name == "nt":
-                    subprocess.run(
-                        ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
-                        capture_output=True,
-                        check=False,
-                    )
+                    try:
+                        proc.send_signal(signal.CTRL_BREAK_EVENT)
+                    except (OSError, ValueError):
+                        proc.terminate()
                 else:
                     with contextlib.suppress(ProcessLookupError):
                         os.killpg(proc.pid, signal.SIGTERM)
@@ -617,7 +633,15 @@ class Demo:
             try:
                 proc.wait(timeout=15)
             except subprocess.TimeoutExpired:
-                if os.name != "nt":
+                if os.name == "nt":
+                    subprocess.run(
+                        ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                        capture_output=True,
+                        check=False,
+                    )
+                    if proc.poll() is None:
+                        proc.kill()
+                else:
                     os.killpg(proc.pid, signal.SIGKILL)
                 proc.wait(timeout=10)
         for server in self.servers:

@@ -296,6 +296,93 @@ def test_web_only_explicitly_disables_saved_model_settings(tmp_path, monkeypatch
     assert settings.agent_model_default == ""
 
 
+def test_windows_batch_commands_use_cmd_and_preserve_arguments(monkeypatch):
+    executable = r"C:\test tools\docker.cmd"
+    monkeypatch.setattr(DEMO, "os", types.SimpleNamespace(name="nt"))
+    monkeypatch.setattr(DEMO.shutil, "which", lambda _name, path=None: executable)
+
+    assert DEMO.command_for(["docker", "compose", "version"], path="test") == [
+        "cmd.exe",
+        "/d",
+        "/c",
+        'call "C:\\test tools\\docker.cmd" compose version',
+    ]
+
+
+@pytest.mark.parametrize(
+    ("platform", "executable"),
+    [
+        ("posix", "/usr/local/bin/docker"),
+        ("nt", r"C:\Program Files\Docker\docker.exe"),
+    ],
+)
+def test_command_for_keeps_non_batch_executables_unchanged(monkeypatch, platform, executable):
+    monkeypatch.setattr(DEMO, "os", types.SimpleNamespace(name=platform))
+    monkeypatch.setattr(DEMO.shutil, "which", lambda _name, path=None: executable)
+
+    assert DEMO.command_for(["docker", "compose", "version"], path="test") == [
+        executable,
+        "compose",
+        "version",
+    ]
+
+
+def test_windows_demo_services_use_process_groups_and_timeout_fallback(monkeypatch, tmp_path):
+    demo = object.__new__(DEMO.Demo)
+    demo.procs = []
+    demo.servers = []
+    demo.work = tmp_path
+    monkeypatch.setattr(DEMO, "os", types.SimpleNamespace(name="nt"))
+    monkeypatch.setattr(DEMO, "signal", types.SimpleNamespace(CTRL_BREAK_EVENT=1))
+    monkeypatch.setattr(DEMO.subprocess, "CREATE_NEW_PROCESS_GROUP", 512, raising=False)
+    monkeypatch.setattr(DEMO.shutil, "which", lambda _name, path=None: None)
+    start_calls = []
+    process = types.SimpleNamespace(poll=lambda: None)
+    monkeypatch.setattr(
+        DEMO.subprocess,
+        "Popen",
+        lambda command, **options: start_calls.append((command, options)) or process,
+    )
+    demo.env = {"PATH": ""}
+    demo.start(["service.exe"])
+    assert start_calls[0][1]["creationflags"] == 512
+    assert "start_new_session" not in start_calls[0][1]
+
+    class TimedOutProcess:
+        pid = 42
+
+        def __init__(self):
+            self.returncode = None
+            self.signals = []
+            self.waits = 0
+            self.killed = False
+
+        def poll(self):
+            return self.returncode
+
+        def send_signal(self, value):
+            self.signals.append(value)
+
+        def wait(self, timeout):
+            self.waits += 1
+            if self.waits == 1:
+                raise subprocess.TimeoutExpired("service", timeout)
+            return self.returncode
+
+        def kill(self):
+            self.killed = True
+            self.returncode = -9
+
+    timed_out = TimedOutProcess()
+    demo.procs = [timed_out]
+    monkeypatch.setattr(
+        DEMO.subprocess, "run", lambda *_args, **_kwargs: types.SimpleNamespace(returncode=1)
+    )
+    demo.close()
+    assert timed_out.signals == [1]
+    assert timed_out.killed
+
+
 def test_demo_uses_explicit_postgres_image_tag(tmp_path, monkeypatch):
     env_file = tmp_path / ".env"
     env_file.write_text("")
