@@ -226,7 +226,10 @@ class Demo:
             ).exists():
                 self.run(["uv", "sync", "--frozen"], ROOT / folder)
         if not (ROOT / "frontend/node_modules").exists():
-            self.run(["bun", "install", "--frozen-lockfile"], ROOT / "frontend")
+            command = ["bun", "install", "--frozen-lockfile"]
+            if os.name == "nt":
+                command.append("--backend=copyfile")
+            self.run(command, ROOT / "frontend")
 
     def fake_model(self):
         port = int(self.env.get("GARDEN_DEMO_MODEL_PORT", "55085"))
