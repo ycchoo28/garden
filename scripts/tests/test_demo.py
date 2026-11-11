@@ -213,11 +213,12 @@ def test_just_dotenv_does_not_override_selected_env_and_shell_overrides_win(tmp_
             server.server_close()
 
 
-def test_web_only_removes_saved_model_settings_from_stack_environment(tmp_path, monkeypatch):
+def test_web_only_explicitly_disables_saved_model_settings(tmp_path, monkeypatch):
     path = tmp_path / ".env"
     path.write_text(
         "\n".join(
             (
+                "GARDEN_DATABASE_URL=postgresql+psycopg://garden:garden-dev@127.0.0.1:55432/garden_test",
                 "GARDEN_AGENT_MODEL_UPSTREAM_URL=https://model.example/v1",
                 "GARDEN_AGENT_MODEL_API_KEY=saved-token",
                 "GARDEN_AGENT_MODEL_MODELS=saved-model",
@@ -229,8 +230,20 @@ def test_web_only_removes_saved_model_settings_from_stack_environment(tmp_path, 
     )
     monkeypatch.setattr(DEMO.tempfile, "mkdtemp", lambda **_kwargs: str(tmp_path / "work"))
     demo = DEMO.Demo(types.SimpleNamespace(env_file=path, web_only=True))
-    assert all(key not in demo.env for key in (*DEMO.MODEL_KEYS, DEMO.FAKE_FLAG))
-    assert all(key not in demo.client_env() for key in (*DEMO.MODEL_KEYS, DEMO.FAKE_FLAG))
+    assert all(demo.env[key] == "" for key in DEMO.MODEL_KEYS)
+    assert demo.env[DEMO.FAKE_FLAG] == "0"
+    assert all(key not in demo.client_env() for key in DEMO.MODEL_KEYS)
+
+    monkeypatch.syspath_prepend(str(ROOT / "backend"))
+    from app.config import Settings
+
+    for key in DEMO.MODEL_KEYS:
+        monkeypatch.setenv(key, demo.env[key])
+    settings = Settings(_env_file=path)
+    assert settings.agent_model_upstream_url == ""
+    assert settings.agent_model_api_key.get_secret_value() == ""
+    assert settings.agent_model_models == ""
+    assert settings.agent_model_default == ""
 
 
 @pytest.mark.parametrize("system", ["Linux", "Darwin", "Windows"])

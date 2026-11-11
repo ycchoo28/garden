@@ -214,8 +214,9 @@ class Demo:
         )
         self.env.pop(JUST_DOTENV_PATH, None)
         if args.web_only:
-            for key in (*MODEL_KEYS, FAKE_FLAG):
-                self.env.pop(key, None)
+            for key in MODEL_KEYS:
+                self.env[key] = ""
+            self.env[FAKE_FLAG] = "0"
         self.procs = []
         self.servers = []
         self.work = Path(tempfile.mkdtemp(prefix="garden-demo-"))
