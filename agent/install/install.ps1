@@ -423,7 +423,7 @@ if (Test-Path $pidFile) {
     $started = Get-Content -Path $pidFile -ErrorAction SilentlyContinue
     if ($started) {
         $cim = Get-CimInstance Win32_Process -Filter "ProcessId = $started" -ErrorAction SilentlyContinue
-        if ($cim -and ($cim.CommandLine -like "*$launcher*" -or $cim.CommandLine -like "*dsh*web*" -or $cim.CommandLine -like "*garden*")) {
+        if ($cim -and ($cim.CommandLine -like "*$launcher*" -or $cim.CommandLine -like "*dsh*web*")) {
             & taskkill.exe /PID $started /T /F *> $null
         }
     }

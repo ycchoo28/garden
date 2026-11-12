@@ -206,6 +206,7 @@ def logout(
     settings: Settings | None = None,
     store: SecretStore | None = None,
     revoke_remote: Callable[[str], None] | None = None,
+    force: bool = False,
 ) -> tuple[Login | None, str | None]:
     active_settings = settings or load_settings()
     active_store = store or default_store(active_settings.home)
@@ -216,6 +217,6 @@ def logout(
             revoke_remote(current.token)
         except GardenError as error:
             warning = error.title
-    if warning is None:
+    if warning is None or force:
         active_store.delete(active_settings.portal_url)
     return (current, warning)

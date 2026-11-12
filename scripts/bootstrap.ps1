@@ -99,44 +99,44 @@ Add-BootstrapPath $bin
 $toolsDir = Join-Path $env:USERPROFILE '.local\share\garden-tools'
 $toolsDirExisted = Test-Path -LiteralPath $toolsDir
 $savedBootstrapToolsCreated = $env:GARDEN_BOOTSTRAP_TOOLS_CREATED
-if (-not $toolsDirExisted) { $env:GARDEN_BOOTSTRAP_TOOLS_CREATED = '1' }
-$gitHome = Join-Path $toolsDir 'git'
-$gitBash = Join-Path $gitHome 'bin\bash.exe'
-$gitComplete = Join-Path $gitHome '.complete'
-$gitCompleteInManifest = @($manifest.artifacts | Where-Object {
-    ([string]::Equals($_.path, $gitHome, [StringComparison]::OrdinalIgnoreCase) -and $_.complete -eq $true) -or
-    [string]::Equals($_.path, $gitComplete, [StringComparison]::OrdinalIgnoreCase)
-}).Count -gt 0
-$bash = @("$env:ProgramFiles\Git\bin\bash.exe", "$env:LOCALAPPDATA\Programs\Git\bin\bash.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
-if (-not $bash -and (Test-Path -LiteralPath $gitBash) -and (Test-Path -LiteralPath $gitComplete) -and $gitCompleteInManifest) {
-    $bash = $gitBash
-}
-if (-not $bash) {
-    $gitExisted = Test-Path -LiteralPath $gitHome
-    if ($gitExisted -and -not (@($manifest.artifacts | Where-Object { $_.path -ieq $gitHome -and $_.kind -eq 'tree' }).Count)) {
-        throw "Refusing to replace the unmanaged PortableGit folder $gitHome"
-    }
-    if (-not $gitExisted) {
-        New-Item -ItemType Directory -Path $gitHome -Force | Out-Null
-        Record-Artifact $gitHome 'tree' (Split-Path $gitHome)
-    }
-    Get-CheckedFile 'https://github.com/git-for-windows/git/releases/download/v2.56.1.windows.1/PortableGit-2.56.1-64-bit.7z.exe' "$tmp\git.exe" '9dd04a608ceb5f6ab32a73709e0ecb159d211da71b697c45ff81f6dd0c6b49c7'
-    & "$tmp\git.exe" -y "-o$gitHome"
-    if ($LASTEXITCODE -ne 0) { throw 'Portable Git extraction failed' }
-    Set-Content -LiteralPath $gitComplete -Value 'complete'
-    Record-Artifact $gitComplete 'file' $gitHome
-    $gitEntry = @($manifest.artifacts | Where-Object { [string]::Equals($_.path, $gitHome, [StringComparison]::OrdinalIgnoreCase) }) | Select-Object -First 1
-    if ($gitEntry) {
-        $gitEntry | Add-Member -NotePropertyName complete -NotePropertyValue $true -Force
-        Save-Manifest
-    }
-    $bash = $gitBash
-}
-Add-BootstrapPath (Split-Path $bash)
-Add-BootstrapPath (Join-Path (Split-Path (Split-Path $bash)) 'usr\bin')
 $savedUvPythonInstallDir = $env:UV_PYTHON_INSTALL_DIR
-$env:UV_PYTHON_INSTALL_DIR = Join-Path $toolsDir 'python'
 try {
+    if (-not $toolsDirExisted) { $env:GARDEN_BOOTSTRAP_TOOLS_CREATED = '1' }
+    $gitHome = Join-Path $toolsDir 'git'
+    $gitBash = Join-Path $gitHome 'bin\bash.exe'
+    $gitComplete = Join-Path $gitHome '.complete'
+    $gitCompleteInManifest = @($manifest.artifacts | Where-Object {
+        ([string]::Equals($_.path, $gitHome, [StringComparison]::OrdinalIgnoreCase) -and $_.complete -eq $true) -or
+        [string]::Equals($_.path, $gitComplete, [StringComparison]::OrdinalIgnoreCase)
+    }).Count -gt 0
+    $bash = @("$env:ProgramFiles\Git\bin\bash.exe", "$env:LOCALAPPDATA\Programs\Git\bin\bash.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $bash -and (Test-Path -LiteralPath $gitBash) -and (Test-Path -LiteralPath $gitComplete) -and $gitCompleteInManifest) {
+        $bash = $gitBash
+    }
+    if (-not $bash) {
+        $gitExisted = Test-Path -LiteralPath $gitHome
+        if ($gitExisted -and -not (@($manifest.artifacts | Where-Object { $_.path -ieq $gitHome -and $_.kind -eq 'tree' }).Count)) {
+            throw "Refusing to replace the unmanaged PortableGit folder $gitHome"
+        }
+        if (-not $gitExisted) {
+            New-Item -ItemType Directory -Path $gitHome -Force | Out-Null
+            Record-Artifact $gitHome 'tree' (Split-Path $gitHome)
+        }
+        Get-CheckedFile 'https://github.com/git-for-windows/git/releases/download/v2.56.1.windows.1/PortableGit-2.56.1-64-bit.7z.exe' "$tmp\git.exe" '9dd04a608ceb5f6ab32a73709e0ecb159d211da71b697c45ff81f6dd0c6b49c7'
+        & "$tmp\git.exe" -y "-o$gitHome"
+        if ($LASTEXITCODE -ne 0) { throw 'Portable Git extraction failed' }
+        Set-Content -LiteralPath $gitComplete -Value 'complete'
+        Record-Artifact $gitComplete 'file' $gitHome
+        $gitEntry = @($manifest.artifacts | Where-Object { [string]::Equals($_.path, $gitHome, [StringComparison]::OrdinalIgnoreCase) }) | Select-Object -First 1
+        if ($gitEntry) {
+            $gitEntry | Add-Member -NotePropertyName complete -NotePropertyValue $true -Force
+            Save-Manifest
+        }
+        $bash = $gitBash
+    }
+    Add-BootstrapPath (Split-Path $bash)
+    Add-BootstrapPath (Join-Path (Split-Path (Split-Path $bash)) 'usr\bin')
+    $env:UV_PYTHON_INSTALL_DIR = Join-Path $toolsDir 'python'
     & uv run --no-project --python 3.12 "$bootstrapRoot\bootstrap.py"
     if ($LASTEXITCODE -ne 0) { throw 'Toolchain bootstrap failed' }
 } finally {

@@ -1,5 +1,6 @@
 """Model setup exercised through the same command boundary as Just, with isolated state."""
 
+import argparse
 import importlib.util
 import os
 import subprocess
@@ -19,7 +20,7 @@ DEMO = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(DEMO)
 
 
-def run_model(path, *args, extra=None):
+def run_model(path, *args, extra=None, stdin_text=None):
     env = {key: value for key, value in os.environ.items() if not key.startswith("GARDEN_")}
     env.update({"HOME": str(path.parent), "GARDEN_DEMO_MODEL_PORT": "0", **(extra or {})})
     return subprocess.run(
@@ -32,7 +33,8 @@ def run_model(path, *args, extra=None):
             *args,
         ],
         env=env,
-        stdin=subprocess.DEVNULL,
+        input=stdin_text,
+        stdin=None if stdin_text is not None else subprocess.DEVNULL,
         capture_output=True,
         text=True,
         timeout=30,
@@ -96,6 +98,45 @@ def test_fake_model_does_not_clobber_saved_real_model(tmp_path):
         server.shutdown()
         server.server_close()
         thread.join()
+
+
+def test_interactive_fake_selection_does_not_clobber_saved_real_model(tmp_path, monkeypatch):
+    path = tmp_path / ".env"
+    path.touch(mode=0o600)
+    real_settings = dict(
+        zip(
+            DEMO.MODEL_KEYS,
+            (
+                "http://127.0.0.1:54321/v1",
+                "real-secret-token",
+                "custom-model",
+                "custom-model",
+            ),
+            strict=True,
+        )
+    )
+    DEMO.save_env(path, real_settings)
+
+    args = argparse.Namespace(
+        fake_model=False,
+        non_interactive=False,
+        web_only=False,
+        env_file=str(path),
+    )
+    monkeypatch.setenv("GARDEN_DEMO_MODEL_PORT", "0")
+    demo = DEMO.Demo(args)
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _prompt: "fake")
+
+    try:
+        demo.configure_model()
+        saved = dotenv_values(path)
+        assert saved[DEMO.MODEL_KEYS[0]] == "http://127.0.0.1:54321/v1"
+        assert saved[DEMO.MODEL_KEYS[1]] == "real-secret-token"
+        assert saved[DEMO.MODEL_KEYS[3]] == "custom-model"
+        assert saved.get(DEMO.FAKE_FLAG, "0") != "1"
+    finally:
+        demo.close()
 
 
 def test_missing_model_fails_without_waiting_for_input(tmp_path):

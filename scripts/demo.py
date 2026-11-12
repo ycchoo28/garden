@@ -526,8 +526,14 @@ class Demo:
             while True:
                 url = input("OpenAI-compatible base URL, or 'fake' for a local demo: ").strip()
                 if url == "fake":
+                    saved_keys = {
+                        key: value
+                        for key, value in load_env(self.env_file).items()
+                        if key in (MODEL_KEYS[0], MODEL_KEYS[1]) and value.strip()
+                    }
                     self.fake_model()
-                    save_env(self.env_file, {FAKE_FLAG: "1", MODEL_KEYS[3]: "garden-demo"})
+                    if not saved_keys:
+                        save_env(self.env_file, {FAKE_FLAG: "1", MODEL_KEYS[3]: "garden-demo"})
                     return
                 key = getpass.getpass("API key/token: ")
                 try:
@@ -989,6 +995,7 @@ def cleanup_preview(
     root: Path = ROOT,
     *,
     remove_env: bool = False,
+    drop_login: bool = False,
     env_file: Path | None = None,
 ) -> list[str]:
     lines = []
@@ -1007,9 +1014,15 @@ def cleanup_preview(
         return lines
 
     for login in data["logins"]:
-        lines.append(
-            f"garden logout at {login['portal']} (remote revoke, then local keyring removal)"
-        )
+        if drop_login:
+            lines.append(
+                f"garden logout at {login['portal']} (drop local credentials and record "
+                "even if portal revoke is unconfirmed)"
+            )
+        else:
+            lines.append(
+                f"garden logout at {login['portal']} (remote revoke, then local keyring removal)"
+            )
     if not data["logins"]:
         lines.append("No Garden CLI login is recorded")
     project_images = {project.get("image") for project in projects if project.get("image")}
@@ -1165,9 +1178,13 @@ class DemoCleanup:
             env["GARDEN_API_URL"] = login["portal"]
             if login.get("garden_home"):
                 env["GARDEN_HOME"] = login["garden_home"]
+            drop_login = bool(getattr(getattr(self, "args", None), "drop_login", False))
+            cmd = [str(launcher), "logout", "--json"]
+            if drop_login:
+                cmd.append("--force")
             try:
                 result = subprocess.run(
-                    command_for([str(launcher), "logout", "--json"], path=env.get("PATH")),
+                    command_for(cmd, path=env.get("PATH")),
                     env=env,
                     capture_output=True,
                     text=True,
@@ -1179,6 +1196,13 @@ class DemoCleanup:
                     f"Warning: garden logout failed for {login['portal']}: {error}",
                     file=sys.stderr,
                 )
+                if drop_login:
+                    print(
+                        f"Dropped local login record for {login['portal']} (--drop-login).",
+                        file=sys.stderr,
+                    )
+                    self.data["logins"].remove(login)
+                    continue
                 self.failed = True
                 continue
             warning = next(
@@ -1187,7 +1211,16 @@ class DemoCleanup:
             )
             if result.returncode or warning:
                 message = warning or result.stderr.strip() or result.stdout.strip()
+                if message.lower().startswith("warning: "):
+                    message = message[9:].strip()
                 print(f"Warning: {message}", file=sys.stderr)
+                if drop_login:
+                    print(
+                        f"Dropped local login record for {login['portal']} (--drop-login).",
+                        file=sys.stderr,
+                    )
+                    self.data["logins"].remove(login)
+                    continue
                 print(
                     "The portal login may still be active. Revoke it in the portal's "
                     "CLI logins page or start the portal and retry.",
@@ -1331,6 +1364,7 @@ class DemoCleanup:
             self.data,
             self.mode,
             remove_env=self.args.remove_env,
+            drop_login=getattr(self.args, "drop_login", False),
             env_file=Path(self.args.env_file).resolve(),
         )
         if not self.confirm(preview):
@@ -1444,6 +1478,14 @@ def main():
         action="store_true",
         help="Separately opt in to moving the selected .env file to Trash during uninstall",
     )
+    parser.add_argument(
+        "--drop-login",
+        action="store_true",
+        help=(
+            "Opt in to dropping local credentials and manifest login records during "
+            "uninstall when the portal cannot confirm revocation (server session may remain active)"
+        ),
+    )
     args = parser.parse_args()
     if args.clean or args.uninstall:
         if (
@@ -1457,8 +1499,10 @@ def main():
         ):
             parser.error("Cleanup options cannot be combined with demo startup options")
         return DemoCleanup(args, "uninstall" if args.uninstall else "clean").run()
-    if args.yes or args.dry_run or args.remove_env:
-        parser.error("--yes, --dry-run and --remove-env require --clean or --uninstall")
+    if args.yes or args.dry_run or args.remove_env or args.drop_login:
+        parser.error(
+            "--yes, --dry-run, --remove-env and --drop-login require --clean or --uninstall"
+        )
     if args.check_docker:
         if not args.check_model:
             check_docker()

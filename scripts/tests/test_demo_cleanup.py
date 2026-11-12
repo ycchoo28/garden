@@ -156,7 +156,47 @@ def test_unreachable_portal_warns_where_to_revoke_login(
 
     assert cleanup.failed is True
     assert len(cleanup.data["logins"]) == 1
-    assert "Revoke it in the portal's CLI logins page" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "Revoke it in the portal's CLI logins page" in err
+    assert "Warning: warning:" not in err
+
+
+def test_drop_login_removes_record_when_portal_unreachable(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    launcher = tmp_path / "garden"
+    launcher.write_text("Garden launcher")
+    cleanup = object.__new__(DEMO.DemoCleanup)
+    cleanup.args = argparse.Namespace(drop_login=True)
+    cleanup.data = {
+        "logins": [
+            {
+                "portal": "http://127.0.0.1:55000",
+                "launcher": str(launcher),
+                "garden_home": str(tmp_path / ".garden"),
+            }
+        ]
+    }
+    cleanup.failed = False
+    monkeypatch.setattr(
+        DEMO.subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(
+            args=[str(launcher), "logout", "--force"],
+            returncode=0,
+            stdout='{"signed_out": true, "unconfirmed": true}\n',
+            stderr="warning: the portal did not confirm the sign-out (unreachable).\n",
+        ),
+    )
+
+    cleanup.logout()
+
+    assert cleanup.failed is False
+    assert len(cleanup.data["logins"]) == 0
+    err = capsys.readouterr().err
+    assert "Warning: the portal did not confirm the sign-out" in err
+    assert "Warning: warning:" not in err
+    assert "Dropped local login record" in err
 
 
 def test_compose_teardown_runs_when_the_runner_is_already_gone(tmp_path: Path, monkeypatch) -> None:

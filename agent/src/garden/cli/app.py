@@ -110,6 +110,11 @@ def _static_parser(
         ("logout",), "End this device's CLI login on the portal. Other devices keep working."
     )
     logout_cmd.add_argument("--json", action="store_true")
+    logout_cmd.add_argument(
+        "--force",
+        action="store_true",
+        help="Drop local credentials even if the portal does not confirm revocation",
+    )
     logout_cmd.set_defaults(handler=partial(_logout, get_settings=get_settings))
 
     tools_cmd = tree.add(("tools",), "List the tools you may use, and which need approval.")
@@ -194,21 +199,34 @@ def _whoami(args: argparse.Namespace, *, get_settings: Callable[[], Settings]) -
 
 def _logout(args: argparse.Namespace, *, get_settings: Callable[[], Settings]) -> None:
     settings = get_settings()
+    force = bool(getattr(args, "force", False))
     previous, warning = logout(
         settings=settings,
         revoke_remote=lambda token: connect(
             portal_url=settings.portal_url, token=token, settings=settings
         ).revoke_cli_token(),
+        force=force,
     )
     if warning:
-        print(
-            f"warning: the portal did not confirm the sign-out ({warning}). "
-            "The login was kept locally so sign-out can be retried.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+        if force:
+            print(
+                f"warning: the portal did not confirm the sign-out ({warning}). "
+                "The local login was dropped (--force).",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                f"warning: the portal did not confirm the sign-out ({warning}). "
+                "The login was kept locally so sign-out can be retried.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
     render(
-        {"signed_out": True, "device": previous.device if previous else None},
+        {
+            "signed_out": True,
+            "device": previous.device if previous else None,
+            **({"unconfirmed": True} if warning else {}),
+        },
         as_json=args.json,
     )
 

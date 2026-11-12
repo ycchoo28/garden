@@ -129,3 +129,8 @@ def test_logout_keeps_token_when_remote_revoke_fails(
     active = load_session(settings)
     assert active is not None
     assert active.token == "active-token"
+
+    forced, force_warning = logout(settings=settings, revoke_remote=failing_revoke, force=True)
+    assert forced is not None and forced.token == "active-token"
+    assert force_warning == "Unreachable portal"
+    assert load_session(settings) is None
