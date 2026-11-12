@@ -157,17 +157,20 @@ def test_unreachable_portal_warns_where_to_revoke_login(
     assert cleanup.failed is True
     assert len(cleanup.data["logins"]) == 1
     err = capsys.readouterr().err
-    assert "Revoke it in the portal's CLI logins page" in err
+    assert (
+        "could not be revoked and remains valid until it expires or is revoked in the portal" in err
+    )
     assert "Warning: warning:" not in err
 
 
-def test_drop_login_removes_record_when_portal_unreachable(
-    tmp_path: Path, monkeypatch, capsys
+@pytest.mark.parametrize("flag_attr", ["force", "drop_login"])
+def test_force_removes_record_when_portal_unreachable(
+    flag_attr: str, tmp_path: Path, monkeypatch, capsys
 ) -> None:
     launcher = tmp_path / "garden"
     launcher.write_text("Garden launcher")
     cleanup = object.__new__(DEMO.DemoCleanup)
-    cleanup.args = argparse.Namespace(drop_login=True)
+    cleanup.args = argparse.Namespace(**{flag_attr: True})
     cleanup.data = {
         "logins": [
             {
@@ -194,9 +197,12 @@ def test_drop_login_removes_record_when_portal_unreachable(
     assert cleanup.failed is False
     assert len(cleanup.data["logins"]) == 0
     err = capsys.readouterr().err
-    assert "Warning: the portal did not confirm the sign-out" in err
+    assert "Warning: the portal did not confirm sign-out" in err
     assert "Warning: warning:" not in err
-    assert "Dropped local login record" in err
+    assert "The local login record was removed (--force)." in err
+    assert (
+        "The server-side login remains valid on the portal until it expires or is revoked." in err
+    )
 
 
 def test_compose_teardown_runs_when_the_runner_is_already_gone(tmp_path: Path, monkeypatch) -> None:

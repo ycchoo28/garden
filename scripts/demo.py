@@ -995,10 +995,12 @@ def cleanup_preview(
     root: Path = ROOT,
     *,
     remove_env: bool = False,
+    force: bool = False,
     drop_login: bool = False,
     env_file: Path | None = None,
 ) -> list[str]:
     lines = []
+    force = force or drop_login
     projects = demo_projects_for(data, root)
     for project in projects:
         lines.append(f"Stop demo runner for Compose project {project['name']}")
@@ -1014,9 +1016,9 @@ def cleanup_preview(
         return lines
 
     for login in data["logins"]:
-        if drop_login:
+        if force:
             lines.append(
-                f"garden logout at {login['portal']} (drop local credentials and record "
+                f"garden logout at {login['portal']} (remove local credentials and record "
                 "even if portal revoke is unconfirmed)"
             )
         else:
@@ -1178,9 +1180,12 @@ class DemoCleanup:
             env["GARDEN_API_URL"] = login["portal"]
             if login.get("garden_home"):
                 env["GARDEN_HOME"] = login["garden_home"]
-            drop_login = bool(getattr(getattr(self, "args", None), "drop_login", False))
+            force = bool(
+                getattr(getattr(self, "args", None), "force", False)
+                or getattr(getattr(self, "args", None), "drop_login", False)
+            )
             cmd = [str(launcher), "logout", "--json"]
-            if drop_login:
+            if force:
                 cmd.append("--force")
             try:
                 result = subprocess.run(
@@ -1196,13 +1201,21 @@ class DemoCleanup:
                     f"Warning: garden logout failed for {login['portal']}: {error}",
                     file=sys.stderr,
                 )
-                if drop_login:
+                if force:
                     print(
-                        f"Dropped local login record for {login['portal']} (--drop-login).",
+                        f"Warning: the portal did not confirm sign-out for {login['portal']}. "
+                        "The local login record was removed (--force). "
+                        "The server-side login remains valid on the portal until it expires or is "
+                        "revoked.",
                         file=sys.stderr,
                     )
                     self.data["logins"].remove(login)
                     continue
+                print(
+                    f"The portal login for {login['portal']} could not be revoked and remains "
+                    "valid until it expires or is revoked in the portal.",
+                    file=sys.stderr,
+                )
                 self.failed = True
                 continue
             warning = next(
@@ -1214,16 +1227,19 @@ class DemoCleanup:
                 if message.lower().startswith("warning: "):
                     message = message[9:].strip()
                 print(f"Warning: {message}", file=sys.stderr)
-                if drop_login:
+                if force:
                     print(
-                        f"Dropped local login record for {login['portal']} (--drop-login).",
+                        f"Warning: the portal did not confirm sign-out for {login['portal']}. "
+                        "The local login record was removed (--force). "
+                        "The server-side login remains valid on the portal until it expires or is "
+                        "revoked.",
                         file=sys.stderr,
                     )
                     self.data["logins"].remove(login)
                     continue
                 print(
-                    "The portal login may still be active. Revoke it in the portal's "
-                    "CLI logins page or start the portal and retry.",
+                    f"The portal login for {login['portal']} could not be revoked and remains "
+                    "valid until it expires or is revoked in the portal.",
                     file=sys.stderr,
                 )
                 self.failed = True
@@ -1360,11 +1376,12 @@ class DemoCleanup:
                 winreg.SetValueEx(key, "Path", 0, value_type, "")
 
     def run(self):
+        force = bool(getattr(self.args, "force", False) or getattr(self.args, "drop_login", False))
         preview = cleanup_preview(
             self.data,
             self.mode,
             remove_env=self.args.remove_env,
-            drop_login=getattr(self.args, "drop_login", False),
+            force=force,
             env_file=Path(self.args.env_file).resolve(),
         )
         if not self.confirm(preview):
@@ -1479,12 +1496,18 @@ def main():
         help="Separately opt in to moving the selected .env file to Trash during uninstall",
     )
     parser.add_argument(
-        "--drop-login",
+        "--force",
         action="store_true",
         help=(
-            "Opt in to dropping local credentials and manifest login records during "
-            "uninstall when the portal cannot confirm revocation (server session may remain active)"
+            "Remove local credentials and manifest login records during uninstall "
+            "even when the portal cannot confirm revocation (server session may remain active)"
         ),
+    )
+    parser.add_argument(
+        "--drop-login",
+        dest="force",
+        action="store_true",
+        help="Alias for --force",
     )
     args = parser.parse_args()
     if args.clean or args.uninstall:
@@ -1499,10 +1522,8 @@ def main():
         ):
             parser.error("Cleanup options cannot be combined with demo startup options")
         return DemoCleanup(args, "uninstall" if args.uninstall else "clean").run()
-    if args.yes or args.dry_run or args.remove_env or args.drop_login:
-        parser.error(
-            "--yes, --dry-run, --remove-env and --drop-login require --clean or --uninstall"
-        )
+    if args.yes or args.dry_run or args.remove_env or args.force:
+        parser.error("--yes, --dry-run, --remove-env and --force require --clean or --uninstall")
     if args.check_docker:
         if not args.check_model:
             check_docker()
