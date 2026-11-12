@@ -142,6 +142,7 @@ async def test_auth_ignores_cookies_and_rejects_bad_tokens_and_origins(
     )
     assert accepted_origin.status_code == 200
     assert accepted_origin.headers["access-control-allow-origin"] == "https://allowed.example"
+    assert accepted_origin.headers["access-control-expose-headers"] == "WWW-Authenticate"
     assert accepted_origin.headers["vary"] == "Origin"
     assert "access-control-allow-credentials" not in accepted_origin.headers
 
@@ -160,14 +161,20 @@ async def test_cors_preflight_is_limited_to_configured_origins_methods_and_heade
     preflight_headers = {
         "Origin": "https://allowed.example",
         "Access-Control-Request-Method": "POST",
-        "Access-Control-Request-Headers": "authorization, content-type, mcp-protocol-version",
+        "Access-Control-Request-Headers": (
+            "authorization, content-type, accept, mcp-protocol-version"
+        ),
     }
     allowed = await hosted_http.options(ENDPOINT, headers=preflight_headers)
     assert allowed.status_code == 204
     assert allowed.headers["access-control-allow-origin"] == "https://allowed.example"
     assert allowed.headers["access-control-allow-methods"] == "POST"
-    assert "authorization" in allowed.headers["access-control-allow-headers"].lower()
-    assert "mcp-protocol-version" in allowed.headers["access-control-allow-headers"].lower()
+    allowed_headers = allowed.headers["access-control-allow-headers"].lower()
+    assert "authorization" in allowed_headers
+    assert "content-type" in allowed_headers
+    assert "accept" in allowed_headers
+    assert "mcp-protocol-version" in allowed_headers
+    assert "access-control-allow-credentials" not in allowed.headers
 
     disallowed_origin = await hosted_http.options(
         ENDPOINT,
@@ -338,6 +345,83 @@ async def test_critical_call_streams_confirmation_then_result(
     assert events[1]["id"] == 1
     assert events[1]["result"]["isError"] is False
     assert portal.deleted == ["ab" * 32]
+
+
+@pytest.mark.asyncio
+async def test_repeated_sse_disconnects_leave_no_pending_tasks(portal: FakePortal) -> None:
+    settings = HostedMCPSettings(
+        enabled=True,
+        api_base_url=portal.url,
+        files_max_bytes=1024,
+    )
+    app = create_streamable_http_app(lambda: settings)
+    existing_tasks = asyncio.all_tasks()
+
+    for request_id in range(1, 6):
+        request_body = json.dumps(
+            _message(
+                request_id,
+                "tools/call",
+                {
+                    "name": "files_file_delete",
+                    "arguments": {"sha256": f"{request_id:064x}"},
+                },
+            )
+        ).encode("utf-8")
+        body_sent = False
+        disconnected = asyncio.Event()
+        stream_started = asyncio.Event()
+
+        async def receive(
+            body: bytes = request_body,
+            disconnect_event: asyncio.Event = disconnected,
+        ) -> dict[str, Any]:
+            nonlocal body_sent
+            if not body_sent:
+                body_sent = True
+                return {"type": "http.request", "body": body, "more_body": False}
+            await disconnect_event.wait()
+            return {"type": "http.disconnect"}
+
+        async def send(
+            message: dict[str, Any],
+            stream_started_event: asyncio.Event = stream_started,
+        ) -> None:
+            if message["type"] != "http.response.start":
+                return
+            headers = dict(message.get("headers", []))
+            if headers.get(b"content-type", b"").startswith(b"text/event-stream"):
+                stream_started_event.set()
+
+        scope: dict[str, Any] = {
+            "type": "http",
+            "asgi": {"version": "3.0", "spec_version": "2.3"},
+            "http_version": "1.1",
+            "method": "POST",
+            "scheme": "http",
+            "path": ENDPOINT,
+            "raw_path": ENDPOINT.encode("ascii"),
+            "query_string": b"",
+            "root_path": "",
+            "headers": [
+                (b"authorization", f"Bearer {GOOD_TOKEN}".encode("ascii")),
+                (b"accept", b"application/json, text/event-stream"),
+                (b"content-type", b"application/json"),
+            ],
+            "client": ("127.0.0.1", 12345),
+            "server": ("testserver", 80),
+        }
+        call = asyncio.create_task(app(scope, receive, send))
+        await asyncio.wait_for(stream_started.wait(), timeout=5)
+        disconnected.set()
+        await asyncio.wait_for(call, timeout=5)
+        await asyncio.sleep(0)
+
+        pending = [task for task in asyncio.all_tasks() - existing_tasks if not task.done()]
+        assert pending == []
+
+    assert len(portal.confirmations) == 5
+    assert portal.deleted == []
 
 
 @pytest.mark.asyncio

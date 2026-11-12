@@ -218,6 +218,7 @@ class _StreamableHTTPApp:
         worker = loop.run_in_executor(self._executor, process)
         disconnect = asyncio.create_task(_watch_disconnect(receive, cancel_event))
         first_notification = asyncio.create_task(notifications.get())
+        next_notification: asyncio.Task[dict[str, Any]] | None = None
         try:
             finished, _ = await asyncio.wait(
                 {worker, disconnect, first_notification},
@@ -265,12 +266,17 @@ class _StreamableHTTPApp:
             if not worker.done():
                 await worker
         finally:
+            cancel_event.set()
+            tasks: list[asyncio.Task[Any]] = [disconnect, first_notification]
+            if next_notification is not None:
+                tasks.append(next_notification)
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            await asyncio.gather(worker, return_exceptions=True)
             if pending_key is not None:
                 await self._release(pending_key)
-            if not disconnect.done():
-                disconnect.cancel()
-            if not first_notification.done():
-                first_notification.cancel()
 
     async def _reserve(self, login_key: str, settings: HostedMCPSettings) -> bool:
         async with self._pending_lock:
@@ -298,6 +304,7 @@ def _cors_sender(send: Any, origin: str) -> Any:
             headers.extend(
                 [
                     (b"access-control-allow-origin", origin.encode("latin-1")),
+                    (b"access-control-expose-headers", b"WWW-Authenticate"),
                     (b"vary", b"Origin"),
                 ]
             )
