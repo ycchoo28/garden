@@ -22,14 +22,27 @@ try:
         save_manifest,
     )
 except ModuleNotFoundError:
-    from scripts.install_manifest import (
-        load_manifest,
-        manifest_path,
-        owns_artifact,
-        record_artifact,
-        record_path_entry,
-        save_manifest,
-    )
+    try:
+        from scripts.install_manifest import (
+            load_manifest,
+            manifest_path,
+            owns_artifact,
+            record_artifact,
+            record_path_entry,
+            save_manifest,
+        )
+    except ModuleNotFoundError:
+        import sys
+
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from install_manifest import (
+            load_manifest,
+            manifest_path,
+            owns_artifact,
+            record_artifact,
+            record_path_entry,
+            save_manifest,
+        )
 
 
 def _path_key(folder, system):

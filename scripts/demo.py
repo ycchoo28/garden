@@ -39,20 +39,39 @@ try:
         without_owned_path_entries,
     )
 except ModuleNotFoundError:
-    from scripts.install_manifest import (
-        apply_artifact_plan,
-        artifact_plan,
-        load_manifest,
-        manifest_path,
-        owns_artifact,
-        record_artifact,
-        record_demo_project,
-        record_docker_image,
-        record_login,
-        save_manifest,
-        trash_path,
-        without_owned_path_entries,
-    )
+    try:
+        from scripts.install_manifest import (
+            apply_artifact_plan,
+            artifact_plan,
+            load_manifest,
+            manifest_path,
+            owns_artifact,
+            record_artifact,
+            record_demo_project,
+            record_docker_image,
+            record_login,
+            save_manifest,
+            trash_path,
+            without_owned_path_entries,
+        )
+    except ModuleNotFoundError:
+        import sys
+
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from install_manifest import (
+            apply_artifact_plan,
+            artifact_plan,
+            load_manifest,
+            manifest_path,
+            owns_artifact,
+            record_artifact,
+            record_demo_project,
+            record_docker_image,
+            record_login,
+            save_manifest,
+            trash_path,
+            without_owned_path_entries,
+        )
 
 ROOT = Path(__file__).resolve().parents[1]
 MODEL_KEYS = tuple(
@@ -60,6 +79,22 @@ MODEL_KEYS = tuple(
 )
 FAKE_FLAG = "GARDEN_DEMO_FAKE_MODEL"
 JUST_DOTENV_PATH = "GARDEN_DEMO_JUST_DOTENV_PATH"
+# Compose reads these from the process environment. A docker.cmd bridge that starts Docker in
+# WSL does not inherit Windows variables, so WSLENV has to name them for the bridge.
+COMPOSE_ENV_KEYS = (
+    "GARDEN_DEV_POSTGRES_IMAGE",
+    "GARDEN_DEV_POSTGRES_PORT",
+    "GARDEN_DEV_OIDC_PORT",
+    "AO_SESSION_ID",
+)
+
+
+def wsl_env(existing: str, keys: tuple[str, ...]) -> str:
+    """Add keys to a WSLENV value without dropping or repeating existing entries."""
+    parts = [part for part in existing.split(":") if part]
+    names = {part.split("/", 1)[0] for part in parts}
+    return ":".join([*parts, *(key for key in keys if key not in names)])
+
 
 DOCKER_GUIDANCE = {
     "Linux": (
@@ -289,6 +324,8 @@ class Demo:
             self.env[FAKE_FLAG] = "0"
         self.procs = []
         self.servers = []
+        self.control_server = None
+        self.control_thread = None
         self.work = Path(tempfile.mkdtemp(prefix="garden-demo-"))
         self.api_port = int(self.env.get("GARDEN_DEMO_API_PORT", "55000"))
         self.web_port = int(self.env.get("GARDEN_DEMO_WEB_PORT", "55173"))
@@ -296,7 +333,10 @@ class Demo:
         self.web = f"http://localhost:{self.web_port}"
         self.manifest_file = manifest_path()
         self.project = demo_project_name(ROOT, Path.home())
-        self.postgres_image = demo_image_reference(ROOT, Path.home())
+        self.postgres_image = self.env.get("GARDEN_DEV_POSTGRES_IMAGE") or demo_image_reference(
+            ROOT, Path.home()
+        )
+        self.env["GARDEN_DEV_POSTGRES_IMAGE"] = self.postgres_image
         self.env["GARDEN_PUBLIC_URL"] = self.web
         self.compose_postgres_port = int(self.env.get("GARDEN_DEMO_POSTGRES_PORT", "55433"))
         self.compose_oidc_port = int(self.env.get("GARDEN_DEMO_OIDC_PORT", "55082"))
@@ -627,7 +667,7 @@ class Demo:
 
     def stack(self):
         # Do not execute shell-only Just recipes: this path also runs natively on Windows.
-        postgres_image = self.postgres_image
+        postgres_image = self.env.get("GARDEN_DEV_POSTGRES_IMAGE") or self.postgres_image
         manifest = load_manifest(self.manifest_file)
         existing = subprocess.run(
             command_for(["docker", "image", "inspect", "--format", "{{.Id}}", postgres_image]),
@@ -678,6 +718,8 @@ class Demo:
             env_file=str(self.env_file),
         )
         save_manifest(self.manifest_file, manifest)
+        if os.name == "nt":
+            self.env["WSLENV"] = wsl_env(self.env.get("WSLENV", ""), COMPOSE_ENV_KEYS)
         self.run(
             [
                 "docker",
@@ -888,10 +930,10 @@ class Demo:
         for server in self.servers:
             server.shutdown()
             server.server_close()
-        if self.control_server:
+        if getattr(self, "control_server", None):
             self.control_server.shutdown()
             self.control_server.server_close()
-            if self.control_thread:
+            if getattr(self, "control_thread", None):
                 self.control_thread.join(timeout=5)
             manifest = load_manifest(self.manifest_file)
             for project in manifest["demo_projects"]:
@@ -1062,6 +1104,8 @@ class DemoCleanup:
             return False
         env = os.environ.copy()
         env["COMPOSE_PROJECT_NAME"] = project["name"]
+        if os.name == "nt":
+            env["WSLENV"] = wsl_env(env.get("WSLENV", ""), COMPOSE_ENV_KEYS)
         result = subprocess.run(
             command_for(
                 [

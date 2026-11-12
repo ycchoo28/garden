@@ -240,6 +240,7 @@ def test_just_demo_model_check_flag_order_does_not_require_docker(tmp_path, argu
             "HOME": str(tmp_path),
             "USERPROFILE": str(tmp_path),
             "GARDEN_DEMO_JUST_DOTENV_PATH": str(just_env_file),
+            "GARDEN_DEMO_MODEL_PORT": "0",
         }
     )
     result = subprocess.run(
@@ -471,6 +472,7 @@ def test_interactive_repair_hides_the_key_and_reuses_saved_settings(tmp_path):
         stdout=slave,
         stderr=slave,
         env=env,
+        start_new_session=True,
     )
     os.close(slave)
     transcript = ""
@@ -507,3 +509,8 @@ def test_interactive_repair_hides_the_key_and_reuses_saved_settings(tmp_path):
         server.shutdown()
         server.server_close()
         thread.join()
+
+
+def test_wsl_env_adds_compose_settings_once_and_keeps_existing_entries():
+    assert DEMO.wsl_env("", ("A", "B")) == "A:B"
+    assert DEMO.wsl_env("KEEP/p:A", ("A", "B")) == "KEEP/p:A:B"
