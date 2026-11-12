@@ -1182,7 +1182,12 @@ class DemoCleanup:
                 env["GARDEN_HOME"] = login["garden_home"]
             # Give the child CLI a network timeout that finishes well before the subprocess limit,
             # so remote timeouts trigger the forced local deletion instead of getting killed.
-            env["GARDEN_CLIENT_TIMEOUT"] = "10"
+            client_timeout = env.get("GARDEN_CLIENT_TIMEOUT")
+            try:
+                if client_timeout is None or float(client_timeout) >= 30:
+                    env["GARDEN_CLIENT_TIMEOUT"] = "10"
+            except ValueError:
+                env["GARDEN_CLIENT_TIMEOUT"] = "10"
             force = bool(
                 getattr(getattr(self, "args", None), "force", False)
                 or getattr(getattr(self, "args", None), "drop_login", False)

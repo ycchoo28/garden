@@ -392,3 +392,43 @@ def test_client_converts_timeout_and_http_exception_to_garden_error(
     with pytest.raises(GardenError) as exc_info:
         client.request("GET", "/test")
     assert exc_info.value.title == "The portal cannot be reached"
+
+
+def test_valid_client_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    from garden.engine.client import PortalClient, parse_client_timeout
+
+    monkeypatch.setenv("GARDEN_CLIENT_TIMEOUT", "15.5")
+    assert parse_client_timeout() == 15.5
+    client = PortalClient("http://127.0.0.1:55000")
+    assert client.timeout == 15.5
+
+
+def test_invalid_client_timeout_falls_back_to_default_with_warning(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from garden.engine.client import (
+        DEFAULT_TIMEOUT_SECONDS,
+        PortalClient,
+        parse_client_timeout,
+        reset_client_timeout_warning,
+    )
+
+    reset_client_timeout_warning()
+    monkeypatch.setenv("GARDEN_CLIENT_TIMEOUT", "invalid_value")
+    timeout = parse_client_timeout()
+    assert timeout == DEFAULT_TIMEOUT_SECONDS
+    err = capsys.readouterr().err
+    assert "warning: invalid GARDEN_CLIENT_TIMEOUT value 'invalid_value'" in err
+
+    # Subsequent calls with invalid values warn only once
+    monkeypatch.setenv("GARDEN_CLIENT_TIMEOUT", "nan")
+    assert parse_client_timeout() == DEFAULT_TIMEOUT_SECONDS
+    assert capsys.readouterr().err == ""
+
+    # Negative / zero / inf also reject and return default
+    for invalid in ("-10", "0", "inf"):
+        monkeypatch.setenv("GARDEN_CLIENT_TIMEOUT", invalid)
+        assert parse_client_timeout() == DEFAULT_TIMEOUT_SECONDS
+
+    client = PortalClient("http://127.0.0.1:55000")
+    assert client.timeout == DEFAULT_TIMEOUT_SECONDS

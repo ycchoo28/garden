@@ -6,6 +6,10 @@ import json
 import socket
 import subprocess
 import sys
+import threading
+import time
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -324,6 +328,76 @@ def test_logout_child_client_timeout_is_below_subprocess_limit(tmp_path: Path, m
     assert client_timeout < subprocess_timeout
     assert client_timeout == 10.0
     assert subprocess_timeout == 30.0
+
+
+@contextmanager
+def hanging_server() -> Generator[str]:
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind(("127.0.0.1", 0))
+    server.listen(5)
+    port = server.getsockname()[1]
+    running = True
+
+    def handler() -> None:
+        while running:
+            try:
+                server.settimeout(0.2)
+                conn, _ = server.accept()
+                while running:
+                    time.sleep(0.1)
+                conn.close()
+            except (TimeoutError, OSError):
+                pass
+
+    thread = threading.Thread(target=handler, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{port}"
+    finally:
+        running = False
+        server.close()
+        thread.join(timeout=1.0)
+
+
+def test_logout_force_drop_completes_when_portal_never_responds(
+    tmp_path: Path, monkeypatch
+) -> None:
+    agent_dir = Path(__file__).resolve().parents[2] / "agent"
+    launcher = tmp_path / ("garden.cmd" if sys.platform == "win32" else "garden")
+    if sys.platform == "win32":
+        launcher.write_text(f'@echo off\nuv run --project "{agent_dir}" python -m garden %*\n')
+    else:
+        launcher.write_text(
+            f'#!/bin/sh\nexec uv run --project "{agent_dir}" python -m garden "$@"\n'
+        )
+        launcher.chmod(0o755)
+
+    with hanging_server() as portal_url:
+        secrets_file = tmp_path / "secrets.json"
+        secrets_file.write_text(
+            json.dumps({portal_url: json.dumps({"token": "secret-token", "device": "laptop"})})
+        )
+        monkeypatch.setenv("GARDEN_SECRET_STORE", f"file:{secrets_file}")
+        monkeypatch.setenv("GARDEN_CLIENT_TIMEOUT", "0.3")
+
+        cleanup = object.__new__(DEMO.DemoCleanup)
+        cleanup.args = argparse.Namespace(force=True)
+        cleanup.data = {
+            "logins": [
+                {
+                    "portal": portal_url,
+                    "launcher": str(launcher),
+                    "garden_home": str(tmp_path / ".garden"),
+                }
+            ]
+        }
+        cleanup.failed = False
+
+        cleanup.logout()
+
+        assert cleanup.failed is False
+        assert len(cleanup.data["logins"]) == 0
+        assert "secret-token" not in secrets_file.read_text()
 
 
 def test_force_keeps_record_on_os_error(tmp_path: Path, monkeypatch, capsys) -> None:

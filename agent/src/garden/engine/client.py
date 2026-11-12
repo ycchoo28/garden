@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import http.client
 import json
+import math
 import os
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -30,7 +32,37 @@ from garden.shared import (
 
 CONTRACT_HEADER = "x-garden-contract-version"
 MIN_CLI_HEADER = "x-garden-min-cli-version"
-TIMEOUT_SECONDS = float(os.environ.get("GARDEN_CLIENT_TIMEOUT", "30"))
+DEFAULT_TIMEOUT_SECONDS = 30.0
+_timeout_warned = False
+
+
+def reset_client_timeout_warning() -> None:
+    global _timeout_warned
+    _timeout_warned = False
+
+
+def parse_client_timeout() -> float:
+    global _timeout_warned
+    raw = os.environ.get("GARDEN_CLIENT_TIMEOUT")
+    if raw is None:
+        return DEFAULT_TIMEOUT_SECONDS
+    try:
+        val = float(raw)
+        if not math.isfinite(val) or val <= 0:
+            raise ValueError("timeout must be a finite positive number")
+        return val
+    except ValueError:
+        if not _timeout_warned:
+            print(
+                f"warning: invalid GARDEN_CLIENT_TIMEOUT value {raw!r}; "
+                f"falling back to {DEFAULT_TIMEOUT_SECONDS:g}s.",
+                file=sys.stderr,
+            )
+            _timeout_warned = True
+        return DEFAULT_TIMEOUT_SECONDS
+
+
+TIMEOUT_SECONDS = parse_client_timeout()
 
 
 @dataclass(frozen=True)
@@ -82,11 +114,11 @@ class PortalClient:
         self,
         portal_url: str,
         token: str | None = None,
-        timeout: float = TIMEOUT_SECONDS,
+        timeout: float | None = None,
     ) -> None:
         self.portal_url = portal_url.rstrip("/")
         self.token = token
-        self.timeout = timeout
+        self.timeout = parse_client_timeout() if timeout is None else timeout
 
     def url(self, path: str, query: dict[str, Any] | None = None) -> str:
         full = f"{self.portal_url}{path}"
