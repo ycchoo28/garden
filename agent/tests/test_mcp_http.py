@@ -5,8 +5,9 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import threading
 import time
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -424,53 +425,58 @@ async def test_repeated_sse_disconnects_leave_no_pending_tasks(portal: FakePorta
     assert portal.deleted == []
 
 
+async def _until(condition: Callable[[], bool]) -> None:
+    deadline = time.monotonic() + 5
+    while not condition():
+        if time.monotonic() >= deadline:
+            raise AssertionError("The condition never held.")
+        await asyncio.sleep(0.01)
+
+
 @pytest.mark.asyncio
-async def test_confirmation_wait_caps_are_enforced_per_login_and_globally(
+async def test_confirmation_wait_caps_refuse_a_second_wait_per_login_and_one_over_the_total(
     portal: FakePortal,
 ) -> None:
+    # One wait per login and two in total: a second login may still wait, a third may not.
+    portal.extra_tokens = frozenset({"ag_second-token", "ag_third-token"})
     settings = HostedMCPSettings(
         enabled=True,
         api_base_url=portal.url,
         files_max_bytes=1024,
         pending_per_login=1,
-        pending_total=1,
+        pending_total=2,
     )
     app = create_streamable_http_app(lambda: settings)
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
-        first = asyncio.create_task(
-            client.post(
+
+        async def delete(token: str, request_id: int, digest: str) -> httpx.Response:
+            return await client.post(
                 ENDPOINT,
-                headers=HEADERS,
+                headers={**HEADERS, "Authorization": f"Bearer {token}"},
                 json=_message(
-                    1,
+                    request_id,
                     "tools/call",
-                    {"name": "files_file_delete", "arguments": {"sha256": "cd" * 32}},
+                    {"name": "files_file_delete", "arguments": {"sha256": digest}},
                 ),
             )
-        )
-        deadline = time.monotonic() + 5
-        for _ in range(500):
-            if portal.confirmations or time.monotonic() >= deadline:
-                break
-            await asyncio.sleep(0.01)
-        assert portal.confirmations
 
-        second = await client.post(
-            ENDPOINT,
-            headers=HEADERS,
-            json=_message(
-                2,
-                "tools/call",
-                {"name": "files_file_delete", "arguments": {"sha256": "ef" * 32}},
-            ),
-        )
-        assert "too many confirmations are pending" in second.json()["error"]["message"].lower()
+        first = asyncio.create_task(delete(GOOD_TOKEN, 1, "cd" * 32))
+        await _until(lambda: len(portal.confirmations) == 1)
+        same_login = await delete(GOOD_TOKEN, 2, "ef" * 32)
+        assert "too many confirmations" in same_login.json()["error"]["message"].lower()
+
+        second_login = asyncio.create_task(delete("ag_second-token", 3, "12" * 32))
+        await _until(lambda: len(portal.confirmations) == 2)
+        over_total = await delete("ag_third-token", 4, "34" * 32)
+        assert "too many confirmations" in over_total.json()["error"]["message"].lower()
+        assert len(portal.confirmations) == 2
 
         portal.decide("conf-1", "approved")
-        completed = await asyncio.wait_for(first, timeout=5)
-        assert completed.status_code == 200
-        assert portal.deleted == ["cd" * 32]
+        portal.decide("conf-2", "approved")
+        assert (await asyncio.wait_for(first, timeout=5)).status_code == 200
+        assert (await asyncio.wait_for(second_login, timeout=5)).status_code == 200
+        assert sorted(portal.deleted) == sorted(["cd" * 32, "12" * 32])
 
 
 def test_confirmation_wait_limit_stays_below_worker_pool_size() -> None:
@@ -505,3 +511,139 @@ async def test_official_mcp_client_connects_lists_and_calls_a_read_tool(
         content = result.content[0]
         assert content.type == "text"
         assert json.loads(content.text)["sha256"] == "12" * 32
+
+
+@pytest.mark.asyncio
+async def test_hosted_requests_fetch_the_contract_once_and_read_permissions_once_per_request(
+    portal: FakePortal, hosted_http: httpx.AsyncClient
+) -> None:
+    for request_id in (1, 2):
+        listing = await hosted_http.post(
+            ENDPOINT, headers=HEADERS, json=_message(request_id, "tools/list")
+        )
+        assert listing.status_code == 200, listing.text
+    assert portal.contract_fetches == 1
+    assert portal.me_reads == 2
+
+    reads_before_call = portal.me_reads
+    read = await hosted_http.post(
+        ENDPOINT,
+        headers=HEADERS,
+        json=_message(
+            3, "tools/call", {"name": "files_file_read", "arguments": {"sha256": "12" * 32}}
+        ),
+    )
+    assert read.status_code == 200, read.text
+    assert read.json()["result"]["isError"] is False
+    assert portal.me_reads == reads_before_call + 1
+
+
+def test_the_contract_is_fetched_without_holding_the_shared_lock(portal: FakePortal) -> None:
+    lock = threading.Lock()
+    engine = Engine(
+        PortalClient(portal.url, token=GOOD_TOKEN),
+        cache_dir=None,
+        contract_cache={},
+        contract_cache_lock=lock,
+    )
+    lock.acquire()
+    try:
+        worker = threading.Thread(target=engine.contract_version, daemon=True)
+        worker.start()
+        deadline = time.monotonic() + 5
+        while portal.contract_fetches == 0 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        fetched_while_locked = portal.contract_fetches == 1
+    finally:
+        lock.release()
+    worker.join(timeout=5)
+    assert fetched_while_locked, "the contract fetch waited for the shared lock"
+    assert not worker.is_alive()
+    assert engine.contract_version() == portal.version
+
+
+@pytest.mark.asyncio
+async def test_a_portal_failure_before_a_tool_runs_is_a_json_rpc_error(
+    portal: FakePortal, hosted_http: httpx.AsyncClient
+) -> None:
+    # The permission reply names no contract version, so the pre-check must fetch the contract,
+    # and the portal fails that fetch.
+    portal.omit_contract_header = True
+    portal.contract_down = True
+    refused = await hosted_http.post(
+        ENDPOINT,
+        headers=HEADERS,
+        json=_message(
+            7, "tools/call", {"name": "files_file_read", "arguments": {"sha256": "12" * 32}}
+        ),
+    )
+    assert refused.status_code == 502, refused.text
+    assert refused.headers["content-type"] == "application/json"
+    assert refused.json()["jsonrpc"] == "2.0"
+    assert refused.json()["id"] == 7
+    assert refused.json()["error"]["code"] == -32000
+
+
+@pytest.mark.asyncio
+async def test_a_socket_failure_before_a_tool_runs_is_a_json_rpc_error(
+    hosted_http: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def timed_out(self: Engine, name: str) -> None:
+        raise TimeoutError(f"{name} did not answer in time")
+
+    monkeypatch.setattr(Engine, "tool", timed_out)
+    slow = await hosted_http.post(
+        ENDPOINT,
+        headers=HEADERS,
+        json=_message(
+            8, "tools/call", {"name": "files_file_read", "arguments": {"sha256": "12" * 32}}
+        ),
+    )
+    assert slow.status_code == 502, slow.text
+    assert slow.json()["id"] == 8
+    assert slow.json()["error"] == {
+        "code": -32000,
+        "message": "The portal could not be reached.",
+    }
+
+
+@pytest.mark.asyncio
+async def test_deeply_nested_json_is_a_parse_error_not_a_server_error(portal: FakePortal) -> None:
+    # 50,000 open brackets are past the parser's recursion limit, and the body fits a 64 KiB cap.
+    settings = HostedMCPSettings(enabled=True, api_base_url=portal.url, files_max_bytes=64 * 1024)
+    transport = httpx.ASGITransport(app=create_streamable_http_app(lambda: settings))
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        nested = b"[" * 50_000 + b"]" * 50_000
+        body = b'{"jsonrpc":"2.0","id":1,"method":"ping","params":' + nested + b"}"
+        response = await client.post(
+            ENDPOINT,
+            headers={**HEADERS, "Content-Type": "application/json"},
+            content=body,
+        )
+    assert response.status_code == 400, response.text
+    assert response.json() == {
+        "jsonrpc": "2.0",
+        "id": None,
+        "error": {"code": -32700, "message": "The JSON is nested too deeply."},
+    }
+
+
+@pytest.mark.asyncio
+async def test_transport_errors_are_rfc_9457_problem_documents(
+    hosted_http: httpx.AsyncClient,
+) -> None:
+    unauthorized = await hosted_http.post(
+        ENDPOINT,
+        headers={"Authorization": "Bearer ag_not-a-login", "Accept": HEADERS["Accept"]},
+        json=_message(1, "ping"),
+    )
+    assert unauthorized.status_code == 401
+    assert unauthorized.headers["www-authenticate"] == "Bearer"
+    assert unauthorized.headers["content-type"] == "application/problem+json"
+    assert unauthorized.json()["status"] == 401
+
+    listed = await hosted_http.get(ENDPOINT, headers=HEADERS)
+    assert listed.status_code == 405
+    assert listed.headers["content-type"] == "application/problem+json"
+    assert listed.headers["allow"] == "POST, OPTIONS"
+    assert listed.json()["title"] == "Method not allowed"

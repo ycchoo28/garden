@@ -24,7 +24,8 @@ _BEARER = re.compile(r"ag_[A-Za-z0-9_-]+\Z")
 @dataclass(frozen=True)
 class HostedMCPSettings:
     enabled: bool = True
-    api_base_url: str = "http://127.0.0.1:55000"
+    # The address the Engine calls. None means the loopback address of the request's own port.
+    api_base_url: str | None = None
     allowed_origins: frozenset[str] = frozenset()
     files_max_bytes: int = 5 * 1024 * 1024
     pending_per_login: int = 3
@@ -65,10 +66,10 @@ class _StreamableHTTPApp:
             return
         settings = self._settings_provider()
         if not settings.enabled:
-            await _respond(send, 404, b"Not found.", [(b"content-type", b"text/plain")])
+            await _problem(send, 404, "Not found", "The hosted MCP endpoint is turned off.")
             return
         if scope.get("path", "/") not in ("", "/", "/api/agent/mcp"):
-            await _respond(send, 404, b"Not found.", [(b"content-type", b"text/plain")])
+            await _problem(send, 404, "Not found", "There is no MCP endpoint at this path.")
             return
 
         headers: dict[bytes, bytes] = {}
@@ -82,12 +83,12 @@ class _StreamableHTTPApp:
                 b"access-control-request-method",
                 b"access-control-request-headers",
             }:
-                await _respond(send, 400, b"Duplicate request header.", [])
+                await _problem(send, 400, "Duplicate header", "A header was sent more than once.")
                 return
             headers[normalized] = value
         origin = headers.get(b"origin")
         if origin is not None and origin.decode("latin-1") not in settings.allowed_origins:
-            await _respond(send, 403, b"Origin is not allowed.", [(b"content-type", b"text/plain")])
+            await _problem(send, 403, "Origin not allowed", "This browser origin may not call MCP.")
             return
         if origin is not None:
             send = _cors_sender(send, origin.decode("latin-1"))
@@ -96,11 +97,12 @@ class _StreamableHTTPApp:
             await _preflight(send, headers, origin is not None)
             return
         if method != "POST":
-            await _respond(
+            await _problem(
                 send,
                 405,
-                b"Method not allowed.",
-                [(b"content-type", b"text/plain"), (b"allow", b"POST, OPTIONS")],
+                "Method not allowed",
+                "Use POST. The endpoint has no server-initiated stream.",
+                [(b"allow", b"POST, OPTIONS")],
             )
             return
         token = _bearer_token(headers.get(b"authorization", b""))
@@ -110,30 +112,45 @@ class _StreamableHTTPApp:
 
         content_type = headers.get(b"content-type", b"").decode("latin-1")
         if content_type.split(";", 1)[0].strip().lower() != "application/json":
-            await _respond(send, 415, b"Expected application/json.", [])
+            await _problem(
+                send, 415, "Unsupported media type", "Send Content-Type: application/json."
+            )
             return
         if not _accepts_streamable_http(headers.get(b"accept", b"")):
-            await _respond(send, 406, b"Accept application/json and text/event-stream.", [])
+            await _problem(
+                send,
+                406,
+                "Not acceptable",
+                "Accept application/json and text/event-stream.",
+            )
             return
 
+        api_base_url = settings.api_base_url or _loopback_api_url(scope)
+        if api_base_url is None:
+            await _problem(
+                send,
+                503,
+                "API address unknown",
+                "The server did not report its port. Set the hosted MCP API base URL.",
+            )
+            return
         engine = Engine(
-            PortalClient(settings.api_base_url, token=token),
+            PortalClient(api_base_url, token=token),
             cache_dir=None,
             hosted_files=True,
             max_file_bytes=settings.files_max_bytes,
             contract_cache=self._contract_cache,
             contract_cache_lock=self._contract_cache_lock,
+            snapshot_permissions=True,
         )
         loop = asyncio.get_running_loop()
         try:
             await loop.run_in_executor(self._executor, engine.permissions)
-        except GardenError as error:
-            if error.status == 401:
-                await _unauthorized(send)
-            elif error.status == 403:
-                await _respond(send, 403, b"Forbidden.", [])
-            else:
-                await _json_response(send, 502, _rpc_error(None, -32000, error.title))
+        except (GardenError, OSError) as error:
+            if isinstance(error, GardenError) and error.status == 403:
+                await _problem(send, 403, "Forbidden", "This CLI login may not use MCP.")
+                return
+            await _portal_failure(send, None, error)
             return
 
         max_body_bytes = (settings.files_max_bytes * 14 + 9) // 10 + 16_384
@@ -142,13 +159,13 @@ class _StreamableHTTPApp:
             try:
                 size = int(content_length)
                 if size < 0:
-                    await _respond(send, 400, b"Invalid Content-Length.", [])
+                    await _problem(send, 400, "Invalid Content-Length", "The length is negative.")
                     return
                 if size > max_body_bytes:
                     await _too_large(send, settings.files_max_bytes)
                     return
             except ValueError:
-                await _respond(send, 400, b"Invalid Content-Length.", [])
+                await _problem(send, 400, "Invalid Content-Length", "The length is not a number.")
                 return
         body, oversized = await _read_body(receive, max_body_bytes)
         if body is None:
@@ -183,7 +200,11 @@ class _StreamableHTTPApp:
             arguments = as_object(message.get("params"))
             tool_name = arguments.get("name")
             if isinstance(tool_name, str):
-                tool = await loop.run_in_executor(self._executor, engine.tool, tool_name)
+                try:
+                    tool = await loop.run_in_executor(self._executor, engine.tool, tool_name)
+                except (GardenError, OSError) as error:
+                    await _portal_failure(send, message["id"], error)
+                    return
                 if tool is not None and tool.critical:
                     pending_key = hashlib.sha256(token.encode("utf-8")).hexdigest()
                     if not await self._reserve(pending_key, settings):
@@ -317,14 +338,17 @@ def _cors_sender(send: Any, origin: str) -> Any:
 async def _preflight(send: Any, headers: dict[bytes, bytes], has_origin: bool) -> None:
     request_method = headers.get(b"access-control-request-method", b"").decode("latin-1")
     if not has_origin or not request_method:
-        await _respond(send, 400, b"Invalid CORS preflight.", [])
+        await _problem(
+            send, 400, "Invalid CORS preflight", "The preflight names no origin or method."
+        )
         return
     if request_method.upper() != "POST":
-        await _respond(
+        await _problem(
             send,
             405,
-            b"Method not allowed.",
-            [(b"content-type", b"text/plain"), (b"allow", b"POST, OPTIONS")],
+            "Method not allowed",
+            "Preflight may only ask for POST.",
+            [(b"allow", b"POST, OPTIONS")],
         )
         return
 
@@ -340,7 +364,12 @@ async def _preflight(send: Any, headers: dict[bytes, bytes], has_origin: bool) -
         if item.strip()
     }
     if not requested_headers <= allowed_headers:
-        await _respond(send, 400, b"A requested CORS header is not allowed.", [])
+        await _problem(
+            send,
+            400,
+            "CORS header not allowed",
+            "The preflight asks for a header MCP does not accept.",
+        )
         return
     await _respond(
         send,
@@ -401,6 +430,8 @@ async def _read_body(receive: Any, limit: int) -> tuple[bytes | None, bool]:
 def _parse_message(body: bytes) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     try:
         value = json.loads(body, parse_constant=_reject_json_constant)
+    except RecursionError:
+        return None, _rpc_error(None, -32700, "The JSON is nested too deeply.")
     except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
         return None, _rpc_error(None, -32700, "Not JSON.")
     if isinstance(value, list):
@@ -433,24 +464,60 @@ def _rpc_error(request_id: Any, code: int, message: str) -> dict[str, Any]:
 
 
 async def _unauthorized(send: Any) -> None:
-    await _respond(
+    await _problem(
         send,
         401,
-        b"Unauthorized.",
-        [(b"content-type", b"text/plain"), (b"www-authenticate", b"Bearer")],
+        "Unauthorized",
+        "Send Authorization: Bearer with a valid CLI login.",
+        [(b"www-authenticate", b"Bearer")],
     )
 
 
 async def _too_large(send: Any, max_file_bytes: int) -> None:
+    await _problem(
+        send,
+        413,
+        "Request too large",
+        f"The maximum file size is {max_file_bytes} bytes.",
+    )
+
+
+async def _problem(
+    send: Any,
+    status: int,
+    title: str,
+    detail: str,
+    headers: list[tuple[bytes, bytes]] | None = None,
+) -> None:
+    """A transport error as an RFC 9457 problem document (ADR 0028)."""
     body = json.dumps(
-        {
-            "type": "about:blank",
-            "title": "Request too large",
-            "status": 413,
-            "detail": f"The maximum file size is {max_file_bytes} bytes.",
-        }
+        {"type": "about:blank", "title": title, "status": status, "detail": detail},
+        ensure_ascii=False,
     ).encode("utf-8")
-    await _respond(send, 413, body, [(b"content-type", b"application/problem+json")])
+    await _respond(
+        send,
+        status,
+        body,
+        [(b"content-type", b"application/problem+json"), *(headers or [])],
+    )
+
+
+async def _portal_failure(send: Any, request_id: Any, error: GardenError | OSError) -> None:
+    """A portal failure before a tool runs: 401 when the portal refuses the login, otherwise a
+    JSON-RPC error. A raw socket or timeout error is reported as the portal being unreachable."""
+    if isinstance(error, GardenError) and error.status == 401:
+        await _unauthorized(send)
+        return
+    message = error.title if isinstance(error, GardenError) else "The portal could not be reached."
+    await _json_response(send, 502, _rpc_error(request_id, -32000, message))
+
+
+def _loopback_api_url(scope: dict[str, Any]) -> str | None:
+    """The API address for the Engine when none is configured: the port this request arrived on."""
+    server = scope.get("server")
+    if not server or server[1] is None:
+        return None
+    return f"http://127.0.0.1:{server[1]}"
 
 
 async def _json_response(send: Any, status: int, body: dict[str, Any] | None) -> None:

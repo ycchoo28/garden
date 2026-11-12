@@ -4,6 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Self
 
+from garden.mcp import THREAD_POOL_SIZE
 from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -37,7 +38,8 @@ class Settings(BaseSettings):
     # The hosted MCP endpoint is mounted but answers 404 until an operator enables it.
     agent_mcp_enabled: bool = False
     # The hosted Engine calls the backend through this address with the caller's bearer token.
-    agent_mcp_api_base_url: str = "http://127.0.0.1:55000"
+    # Empty means the loopback address of the port this backend listens on.
+    agent_mcp_api_base_url: str = ""
     # Comma-separated browser origins allowed to call the hosted MCP endpoint.
     agent_mcp_allowed_origins: str = ""
     agent_mcp_pending_per_login: int = 3
@@ -100,8 +102,11 @@ class Settings(BaseSettings):
             raise ValueError("GARDEN_AGENT_MCP_PENDING limits must be positive")
         if self.agent_mcp_pending_per_login > self.agent_mcp_pending_total:
             raise ValueError("GARDEN_AGENT_MCP_PENDING_PER_LOGIN cannot exceed PENDING_TOTAL")
-        if self.agent_mcp_pending_total >= 40:
-            raise ValueError("GARDEN_AGENT_MCP_PENDING_TOTAL must be below the 40-thread MCP pool")
+        if self.agent_mcp_pending_total >= THREAD_POOL_SIZE:
+            raise ValueError(
+                "GARDEN_AGENT_MCP_PENDING_TOTAL must be below the "
+                f"{THREAD_POOL_SIZE}-thread MCP pool"
+            )
         return self
 
     @model_validator(mode="after")

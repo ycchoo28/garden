@@ -107,7 +107,11 @@ def test_public_mounts_exist() -> None:
         for route in installed.router.routes
         if isinstance(route, Mount)
     )
-    assert present >= PUBLIC_MOUNTS
+    # Both ways: every declared public mount is installed, and every installed mount is declared.
+    assert present >= PUBLIC_MOUNTS, f"undeclared missing mounts: {PUBLIC_MOUNTS - present}"
+    assert present <= PUBLIC_MOUNTS, (
+        f"mounts without a public declaration: {present - PUBLIC_MOUNTS}"
+    )
 
 
 def test_critical_routes_are_listed() -> None:

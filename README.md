@@ -233,8 +233,8 @@ Create a CLI login on the CLI logins page (`/agent/logins`), choose an expiry, a
 Send it as `Authorization: Bearer ag_...` on every request.
 The browser-made login has the same agent permissions and confirmation gate as a `garden` command login, and can be revoked from that page.
 
-For local development, the handler calls the backend at `http://127.0.0.1:55000` by default.
-Set `GARDEN_AGENT_MCP_API_BASE_URL` if the backend uses another address, and list browser origins in the comma-separated `GARDEN_AGENT_MCP_ALLOWED_ORIGINS` setting when a browser client needs them.
+The handler calls the backend on the loopback address of the port the request arrived on, so a port moved by `just demo` needs no setting.
+Set `GARDEN_AGENT_MCP_API_BASE_URL` only when the backend cannot be reached at its own port on loopback, and list browser origins in the comma-separated `GARDEN_AGENT_MCP_ALLOWED_ORIGINS` setting when a browser client needs them.
 Confirmation waits default to three per login and twenty in total; `GARDEN_AGENT_MCP_PENDING_PER_LOGIN` and `GARDEN_AGENT_MCP_PENDING_TOTAL` can lower these limits.
 The total must stay below the 40-thread MCP worker pool.
 

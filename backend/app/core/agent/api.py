@@ -42,7 +42,7 @@ def _hosted_mcp_settings() -> HostedMCPSettings:
     settings = get_settings()
     return HostedMCPSettings(
         enabled=settings.agent_mcp_enabled,
-        api_base_url=settings.agent_mcp_api_base_url,
+        api_base_url=settings.agent_mcp_api_base_url or None,
         allowed_origins=settings.agent_mcp_origins,
         files_max_bytes=settings.files_max_bytes,
         pending_per_login=settings.agent_mcp_pending_per_login,

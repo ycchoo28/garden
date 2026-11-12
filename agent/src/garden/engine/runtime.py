@@ -16,6 +16,7 @@ import os
 import threading
 import time
 from collections.abc import Callable
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -65,6 +66,10 @@ class Engine:
         max_file_bytes: int | None = None,
         contract_cache: ContractCache | None = None,
         contract_cache_lock: threading.Lock | None = None,
+        # A hosted request builds one engine for one request, so it reads the person's permissions
+        # once and reuses them for every lookup in that request. The stdio command keeps reading
+        # them, so a permission change shows on the next listing.
+        snapshot_permissions: bool = False,
         sleep: Callable[[float], None] = time.sleep,
         clock: Callable[[], float] = time.time,
         poll_seconds: float = POLL_SECONDS,
@@ -76,6 +81,8 @@ class Engine:
         self._max_file_bytes = max_file_bytes
         self._contract_cache = contract_cache
         self._contract_cache_lock = contract_cache_lock
+        self._snapshot_permissions = snapshot_permissions
+        self._permissions: frozenset[str] | None = None
         self._openapi: dict[str, Any] | None = None
         self._version: str | None = None
         self._sleep = sleep
@@ -108,8 +115,13 @@ class Engine:
         return target
 
     def permissions(self) -> frozenset[str]:
+        if self._permissions is not None:
+            return self._permissions
         body = as_object(self._send("GET", ME_PATH).body)
-        return frozenset(as_text(item) for item in as_list(body.get("permissions")))
+        permissions = frozenset(as_text(item) for item in as_list(body.get("permissions")))
+        if self._snapshot_permissions:
+            self._permissions = permissions
+        return permissions
 
     def me(self) -> dict[str, Any]:
         return as_object(self._send("GET", ME_PATH).body)
@@ -221,18 +233,12 @@ class Engine:
         return self._openapi
 
     def _refresh(self, expected_version: str | None = None) -> None:
-        if self._contract_cache_lock is not None:
-            with self._contract_cache_lock:
-                self._refresh_unlocked(expected_version)
-            return
-        self._refresh_unlocked(expected_version)
-
-    def _refresh_unlocked(self, expected_version: str | None) -> None:
-        if expected_version and self._contract_cache is not None:
-            cached = self._contract_cache.get(expected_version)
+        if expected_version:
+            cached = self._cached_contract(expected_version)
             if cached is not None:
                 self._openapi, self._version = cached
                 return
+        # The fetch runs outside the lock, so a slow portal does not hold up other requests.
         reply = self._client.request("GET", CONTRACT_PATH)
         version = reply.headers.get(CONTRACT_HEADER, "")
         openapi = as_object(reply.body)
@@ -243,9 +249,23 @@ class Engine:
             )
         self._openapi = openapi
         self._version = version
-        if self._contract_cache is not None:
-            self._contract_cache[version] = (openapi, version)
+        self._store_contract(version, openapi)
         self._write_cache(version, openapi)
+
+    def _cached_contract(self, version: str) -> tuple[dict[str, Any], str] | None:
+        if self._contract_cache is None:
+            return None
+        with self._shared_lock():
+            return self._contract_cache.get(version)
+
+    def _store_contract(self, version: str, openapi: dict[str, Any]) -> None:
+        if self._contract_cache is None:
+            return
+        with self._shared_lock():
+            self._contract_cache[version] = (openapi, version)
+
+    def _shared_lock(self) -> AbstractContextManager[object]:
+        return self._contract_cache_lock if self._contract_cache_lock is not None else nullcontext()
 
     def _send(
         self,

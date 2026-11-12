@@ -153,3 +153,20 @@ def test_a_json_value_that_is_not_a_message_gets_an_error_and_the_server_carries
     assert replies[3]["error"]["code"] == -32602
     assert replies[3]["id"] == 7
     assert replies[4] == {"jsonrpc": "2.0", "id": 8, "result": {}}
+
+
+def test_an_explicit_null_params_means_no_params_on_stdio(
+    portal: FakePortal, env: dict[str, str]
+) -> None:
+    store_token(env, portal.url, GOOD_TOKEN)
+    replies = _serve(
+        env,
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "ping", "params": None},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": None},
+        ],
+    )
+    assert _by_id(replies, 1) == {"jsonrpc": "2.0", "id": 1, "result": {}}
+    listing = _by_id(replies, 2)
+    assert "error" not in listing
+    assert any(tool["name"] == "files_file_read" for tool in listing["result"]["tools"])

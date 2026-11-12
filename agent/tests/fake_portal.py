@@ -77,6 +77,15 @@ class FakePortal:
         default_factory=lambda: dict[str, dict[str, Any]]()
     )
     logouts: list[str] = field(default_factory=lambda: list[str]())
+    # Counts for tests: how often the contract is fetched, and how often the person's permissions
+    # are read.
+    contract_fetches: int = 0
+    me_reads: int = 0
+    # Logins accepted besides GOOD_TOKEN, so one test can hold several CLI logins at once.
+    extra_tokens: frozenset[str] = frozenset()
+    # Leave the contract version header off every response, or fail the contract document.
+    omit_contract_header: bool = False
+    contract_down: bool = False
     url: str = ""
     _server: ThreadingHTTPServer | None = None
 
@@ -250,7 +259,8 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header(
             "Content-Type", "application/problem+json" if problem else "application/json"
         )
-        self.send_header("X-Garden-Contract-Version", self.fake.version)
+        if not self.fake.omit_contract_header:
+            self.send_header("X-Garden-Contract-Version", self.fake.version)
         self.send_header("X-Garden-Min-CLI-Version", self.fake.min_cli)
         for name, value in (headers or {}).items():
             self.send_header(name, value)
@@ -267,11 +277,16 @@ class _Handler(BaseHTTPRequestHandler):
         return json.loads(raw) if raw else {}
 
     def _bearer_ok(self) -> bool:
-        return self.headers.get("Authorization") == f"Bearer {GOOD_TOKEN}"
+        accepted = {f"Bearer {token}" for token in (GOOD_TOKEN, *self.fake.extra_tokens)}
+        return self.headers.get("Authorization") in accepted
 
     def do_GET(self) -> None:
         parts = urlsplit(self.path)
         if parts.path == "/api/openapi.json":
+            self.fake.contract_fetches += 1
+            if self.fake.contract_down:
+                self._problem(503, "Service Unavailable")
+                return
             self._send(200, self.fake.contract())
             return
         if parts.path == "/api/agent/manifest":
@@ -299,6 +314,7 @@ class _Handler(BaseHTTPRequestHandler):
             )
             return
         if parts.path == "/api/users/me":
+            self.fake.me_reads += 1
             self._send(
                 200,
                 {
