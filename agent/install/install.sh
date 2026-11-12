@@ -157,6 +157,8 @@ action, *values = sys.argv[2:]
 manifest_path.parent.mkdir(parents=True, exist_ok=True)
 if manifest_path.exists():
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    for prop in ("artifacts", "path_entries", "demo_projects", "docker_images", "logins"):
+        manifest.setdefault(prop, [])
 else:
     manifest = {"version": 1, "artifacts": [], "path_entries": [], "demo_projects": [], "docker_images": [], "logins": []}
 if action == "artifact":

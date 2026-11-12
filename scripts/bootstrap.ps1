@@ -14,6 +14,11 @@ New-Item -ItemType Directory -Force $manifestRoot | Out-Null
 if (Test-Path -LiteralPath $manifestPath) {
     $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
     if ($manifest.version -ne 1) { throw 'Unsupported Garden install manifest version.' }
+    foreach ($prop in @('artifacts', 'path_entries', 'demo_projects', 'docker_images', 'logins')) {
+        if (-not (Get-Member -InputObject $manifest -Name $prop)) {
+            $manifest | Add-Member -MemberType NoteProperty -Name $prop -Value @()
+        }
+    }
 } else {
     $manifest = [pscustomobject]@{
         version = 1
