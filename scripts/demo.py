@@ -1118,7 +1118,7 @@ class DemoCleanup:
                     "--project-name",
                     project["name"],
                     "-f",
-                    str(compose),
+                    "dev/compose.yaml",
                     "down",
                     "--volumes",
                     "--remove-orphans",
