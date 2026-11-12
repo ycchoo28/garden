@@ -14,11 +14,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from garden.engine import ContractCache, Engine, PortalClient
+from garden.limits import THREAD_POOL_SIZE
 from garden.mcp.server import handle
 from garden.shared import GardenError, as_object, is_object
 
-THREAD_POOL_SIZE = 40
 _BEARER = re.compile(r"ag_[A-Za-z0-9_-]+\Z")
+_UNREACHABLE = "The portal could not be reached."
 
 
 @dataclass(frozen=True)
@@ -147,9 +148,6 @@ class _StreamableHTTPApp:
         try:
             await loop.run_in_executor(self._executor, engine.permissions)
         except (GardenError, OSError) as error:
-            if isinstance(error, GardenError) and error.status == 403:
-                await _problem(send, 403, "Forbidden", "This CLI login may not use MCP.")
-                return
             await _portal_failure(send, None, error)
             return
 
@@ -238,11 +236,14 @@ class _StreamableHTTPApp:
             }
             loop.call_soon_threadsafe(notifications.put_nowait, notification)
 
-        def process() -> dict[str, Any] | None:
+        def process() -> tuple[int, dict[str, Any] | None]:
             try:
-                return handle(engine, message, notify=notify, cancel_event=cancel_event)
+                return 200, handle(engine, message, notify=notify, cancel_event=cancel_event)
+            except OSError:
+                # The same answer as a portal failure before the tool runs.
+                return 502, _rpc_error(message.get("id"), -32000, _UNREACHABLE)
             except Exception:
-                return _rpc_error(message.get("id"), -32603, "Internal error.")
+                return 200, _rpc_error(message.get("id"), -32603, "Internal error.")
 
         worker = loop.run_in_executor(self._executor, process)
         disconnect = asyncio.create_task(_watch_disconnect(receive, cancel_event))
@@ -257,7 +258,8 @@ class _StreamableHTTPApp:
                 await worker
                 return
             if first_notification not in finished:
-                await _json_response(send, 200, await worker)
+                status, body = await worker
+                await _json_response(send, status, body)
                 return
 
             await send(
@@ -285,7 +287,7 @@ class _StreamableHTTPApp:
                     await _send_sse(send, next_notification.result())
                     continue
                 next_notification.cancel()
-                reply = await worker
+                _, reply = await worker
                 if reply is not None:
                     await _send_sse(send, reply)
                 await send({"type": "http.response.body", "body": b"", "more_body": False})
@@ -511,12 +513,15 @@ async def _problem(
 
 
 async def _portal_failure(send: Any, request_id: Any, error: GardenError | OSError) -> None:
-    """A portal failure before a tool runs: 401 when the portal refuses the login, otherwise a
-    JSON-RPC error. A raw socket or timeout error is reported as the portal being unreachable."""
+    """A portal failure that stops a request. A 401 or 403 answers for the CLI login, so it is a
+    problem document wherever it happens. Any other failure is a JSON-RPC error with HTTP 502."""
     if isinstance(error, GardenError) and error.status == 401:
         await _unauthorized(send)
         return
-    message = error.title if isinstance(error, GardenError) else "The portal could not be reached."
+    if isinstance(error, GardenError) and error.status == 403:
+        await _problem(send, 403, "Forbidden", "This CLI login may not use MCP.")
+        return
+    message = error.title if isinstance(error, GardenError) else _UNREACHABLE
     await _json_response(send, 502, _rpc_error(request_id, -32000, message))
 
 

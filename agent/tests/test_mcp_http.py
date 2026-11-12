@@ -20,6 +20,7 @@ from mcp.client.streamable_http import streamable_http_client
 
 from garden.engine import Engine, PortalClient
 from garden.mcp import HostedMCPSettings, create_streamable_http_app, handle
+from garden.shared import GardenError
 
 ENDPOINT = "/api/agent/mcp"
 HEADERS = {
@@ -621,6 +622,63 @@ async def test_a_socket_failure_before_a_tool_runs_is_a_json_rpc_error(
         "code": -32000,
         "message": "The portal could not be reached.",
     }
+
+
+@pytest.mark.asyncio
+async def test_a_socket_failure_during_a_tool_call_is_the_same_502(
+    hosted_http: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def hung_up(self: Engine, *args: Any, **kwargs: Any) -> None:
+        raise ConnectionResetError("the portal hung up")
+
+    monkeypatch.setattr(Engine, "call", hung_up)
+    response = await hosted_http.post(
+        ENDPOINT,
+        headers=HEADERS,
+        json=_message(
+            9, "tools/call", {"name": "files_file_read", "arguments": {"sha256": "12" * 32}}
+        ),
+    )
+    assert response.status_code == 502, response.text
+    assert response.json() == {
+        "jsonrpc": "2.0",
+        "id": 9,
+        "error": {"code": -32000, "message": "The portal could not be reached."},
+    }
+
+
+@pytest.mark.asyncio
+async def test_a_login_refused_for_a_tool_is_the_same_403_as_the_permission_check(
+    hosted_http: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def refused(self: Engine, name: str) -> None:
+        raise GardenError("Forbidden", status=403)
+
+    monkeypatch.setattr(Engine, "tool", refused)
+    response = await hosted_http.post(
+        ENDPOINT,
+        headers=HEADERS,
+        json=_message(
+            10, "tools/call", {"name": "files_file_read", "arguments": {"sha256": "12" * 32}}
+        ),
+    )
+    assert response.status_code == 403, response.text
+    assert response.headers["content-type"] == "application/problem+json"
+    assert response.json()["title"] == "Forbidden"
+
+
+@pytest.mark.asyncio
+async def test_a_login_refused_by_the_permission_check_is_a_403_problem(
+    hosted_http: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def refused(self: Engine) -> None:
+        raise GardenError("Forbidden", status=403)
+
+    monkeypatch.setattr(Engine, "permissions", refused)
+    response = await hosted_http.post(ENDPOINT, headers=HEADERS, json=_message(11, "ping"))
+    assert response.status_code == 403, response.text
+    assert response.headers["content-type"] == "application/problem+json"
+    assert response.json()["title"] == "Forbidden"
 
 
 @pytest.mark.asyncio

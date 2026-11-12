@@ -26,11 +26,11 @@ Errors are split by where they happen.
 A refusal before a JSON-RPC message is accepted is an RFC 9457 problem document (`application/problem+json`): 404, 400 for a bad header or framing, 403 for an origin or a CLI login that may not use MCP, 405 with `Allow`, 406, 413, 415, 401 with `WWW-Authenticate`, and 503 when no API address is known.
 Once a message is accepted, its failure is a JSON-RPC error that carries the request's id, as MCP requires.
 A body that is not JSON is a `-32700` parse error with HTTP 400, and a portal that cannot be reached is a `-32000` error with HTTP 502.
-A portal that rejects the login with 401 still answers as a 401 problem document.
+A portal that rejects the login with 401 or 403 still answers as a problem document with that status, whether the permission check or a tool call hits the refusal.
 
 Critical calls stream the existing confirmation notification and then the result over SSE.
 The engine waits in a worker thread and stops when the caller disconnects, before retrying the action.
-Concurrent confirmation waits are capped per CLI login and in total, with the total below `THREAD_POOL_SIZE`, the 40-thread worker pool defined in the agent package and imported by the backend settings.
+Concurrent confirmation waits are capped per CLI login and in total, with the total below `THREAD_POOL_SIZE`, the 40-thread worker pool defined in `garden.limits`, a leaf module that the backend settings import.
 
 Hosted file fields use `{filename, content_type, data_base64}` objects.
 The engine decodes only in-memory bytes in hosted mode and refuses strings and path-like filenames.
