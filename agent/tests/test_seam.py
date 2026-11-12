@@ -384,3 +384,11 @@ def test_client_converts_timeout_and_http_exception_to_garden_error(
     with pytest.raises(GardenError) as exc_info:
         client.request("GET", "/test")
     assert exc_info.value.title == "The portal cannot be reached"
+
+    def raise_conn_reset(*_args: object, **_kwargs: object) -> None:
+        raise ConnectionResetError("Connection reset by peer")
+
+    monkeypatch.setattr(urllib.request, "urlopen", raise_conn_reset)
+    with pytest.raises(GardenError) as exc_info:
+        client.request("GET", "/test")
+    assert exc_info.value.title == "The portal cannot be reached"

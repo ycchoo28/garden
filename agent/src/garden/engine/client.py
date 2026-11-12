@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import os
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -29,7 +30,7 @@ from garden.shared import (
 
 CONTRACT_HEADER = "x-garden-contract-version"
 MIN_CLI_HEADER = "x-garden-min-cli-version"
-TIMEOUT_SECONDS = 30
+TIMEOUT_SECONDS = float(os.environ.get("GARDEN_CLIENT_TIMEOUT", "30"))
 
 
 @dataclass(frozen=True)
@@ -77,9 +78,15 @@ def parse_version(text: str) -> tuple[int, ...]:
 
 
 class PortalClient:
-    def __init__(self, portal_url: str, token: str | None = None) -> None:
+    def __init__(
+        self,
+        portal_url: str,
+        token: str | None = None,
+        timeout: float = TIMEOUT_SECONDS,
+    ) -> None:
         self.portal_url = portal_url.rstrip("/")
         self.token = token
+        self.timeout = timeout
 
     def url(self, path: str, query: dict[str, Any] | None = None) -> str:
         full = f"{self.portal_url}{path}"
@@ -118,15 +125,20 @@ class PortalClient:
             self.url(path, query), data=data, method=method, headers=request_headers
         )
         try:
-            with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as reply:
+            with urllib.request.urlopen(request, timeout=self.timeout) as reply:
                 response = Response(
                     reply.status, _lower_headers(reply.headers), _decode(reply.read())
                 )
         except urllib.error.HTTPError as error:
-            problem = _decode(error.read())
+            try:
+                problem = _decode(error.read())
+            except (OSError, http.client.HTTPException):
+                problem = None
             raise _problem_error(error.code, problem) from None
-        except (urllib.error.URLError, TimeoutError, http.client.HTTPException) as error:
-            reason = getattr(error, "reason", None) or str(error) or "timed out"
+        except (urllib.error.URLError, OSError, http.client.HTTPException) as error:
+            reason = (
+                getattr(error, "reason", None) or str(error) or type(error).__name__ or "timed out"
+            )
             raise GardenError(
                 title="The portal cannot be reached",
                 detail=str(reason),

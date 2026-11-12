@@ -159,7 +159,49 @@ def test_logout_with_force_deletes_token_when_revoke_times_out(
     def timing_out_revoke(_token: str) -> None:
         raise TimeoutError("timed out")
 
+    # Without force, keeps the token
+    previous, warning = logout(settings=settings, revoke_remote=timing_out_revoke, force=False)
+    assert previous is not None and previous.token == "timeout-token"
+    assert warning == "The portal cannot be reached"
+    assert load_session(settings) is not None
+
     forced, force_warning = logout(settings=settings, revoke_remote=timing_out_revoke, force=True)
     assert forced is not None and forced.token == "timeout-token"
+    assert force_warning == "The portal cannot be reached"
+    assert load_session(settings) is None
+
+
+def test_logout_with_force_deletes_token_when_revoke_resets_connection(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
+    entries: dict[tuple[str, str], str] = {}
+
+    def get(service: str, account: str) -> str | None:
+        return entries.get((service, account))
+
+    def save(service: str, account: str, value: str) -> None:
+        entries[service, account] = value
+
+    def delete(service: str, account: str) -> None:
+        entries.pop((service, account), None)
+
+    monkeypatch.setattr(keyring, "get_password", get)
+    monkeypatch.setattr(keyring, "set_password", save)
+    monkeypatch.setattr(keyring, "delete_password", delete)
+
+    store_token("reset-token", settings=settings)
+
+    def resetting_revoke(_token: str) -> None:
+        raise ConnectionResetError("Connection reset by peer")
+
+    # Without force, keeps the token
+    previous, warning = logout(settings=settings, revoke_remote=resetting_revoke, force=False)
+    assert previous is not None and previous.token == "reset-token"
+    assert warning == "The portal cannot be reached"
+    assert load_session(settings) is not None
+
+    # With force, deletes the token
+    forced, force_warning = logout(settings=settings, revoke_remote=resetting_revoke, force=True)
+    assert forced is not None and forced.token == "reset-token"
     assert force_warning == "The portal cannot be reached"
     assert load_session(settings) is None
