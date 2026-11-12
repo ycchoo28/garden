@@ -272,7 +272,9 @@ def test_auth_logout_warning_on_remote_error(
     prev, warning = logout(settings=settings, revoke_remote=failing_revoke)
     assert prev is not None
     assert warning == "Portal unreachable"
-    assert load_session(settings) is None
+    active = load_session(settings)
+    assert active is not None
+    assert active.token == "token-xyz"
 
 
 def test_engine_connect_and_call_by_name(portal: FakePortal, tmp_path: Path) -> None:

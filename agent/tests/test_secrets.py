@@ -96,3 +96,36 @@ def test_logout_clears_only_the_current_portals_keychain_entry(
     assert load_session(settings) is None
     remaining = load_session(other)
     assert remaining is not None and remaining.token == "other-token"
+
+
+def test_logout_keeps_token_when_remote_revoke_fails(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
+    entries: dict[tuple[str, str], str] = {}
+
+    def get(service: str, account: str) -> str | None:
+        return entries.get((service, account))
+
+    def save(service: str, account: str, value: str) -> None:
+        entries[service, account] = value
+
+    def delete(service: str, account: str) -> None:
+        entries.pop((service, account), None)
+
+    monkeypatch.setattr(keyring, "get_password", get)
+    monkeypatch.setattr(keyring, "set_password", save)
+    monkeypatch.setattr(keyring, "delete_password", delete)
+
+    store_token("active-token", settings=settings)
+
+    def failing_revoke(_token: str) -> None:
+        from garden.shared.errors import GardenError
+
+        raise GardenError(title="Unreachable portal")
+
+    previous, warning = logout(settings=settings, revoke_remote=failing_revoke)
+    assert previous is not None and previous.token == "active-token"
+    assert warning == "Unreachable portal"
+    active = load_session(settings)
+    assert active is not None
+    assert active.token == "active-token"

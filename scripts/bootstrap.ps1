@@ -96,6 +96,10 @@ if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
     }
 }
 Add-BootstrapPath $bin
+$toolsDir = Join-Path $env:USERPROFILE '.local\share\garden-tools'
+$toolsDirExisted = Test-Path -LiteralPath $toolsDir
+$savedBootstrapToolsCreated = $env:GARDEN_BOOTSTRAP_TOOLS_CREATED
+if (-not $toolsDirExisted) { $env:GARDEN_BOOTSTRAP_TOOLS_CREATED = '1' }
 $bash = @("$env:ProgramFiles\Git\bin\bash.exe", "$env:LOCALAPPDATA\Programs\Git\bin\bash.exe", "$env:USERPROFILE\.local\share\garden-tools\git\bin\bash.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
 if (-not $bash) {
     $gitHome = Join-Path $env:USERPROFILE '.local\share\garden-tools\git'
@@ -103,16 +107,17 @@ if (-not $bash) {
     if ($gitExisted -and -not (@($manifest.artifacts | Where-Object { $_.path -ieq $gitHome -and $_.kind -eq 'tree' }).Count)) {
         throw "Refusing to replace the unmanaged PortableGit folder $gitHome"
     }
+    if (-not $gitExisted) {
+        New-Item -ItemType Directory -Path $gitHome -Force | Out-Null
+        Record-Artifact $gitHome 'tree' (Split-Path $gitHome)
+    }
     Get-CheckedFile 'https://github.com/git-for-windows/git/releases/download/v2.56.1.windows.1/PortableGit-2.56.1-64-bit.7z.exe' "$tmp\git.exe" '9dd04a608ceb5f6ab32a73709e0ecb159d211da71b697c45ff81f6dd0c6b49c7'
     & "$tmp\git.exe" -y "-o$gitHome"
     if ($LASTEXITCODE -ne 0) { throw 'Portable Git extraction failed' }
-    if (-not $gitExisted) { Record-Artifact $gitHome 'tree' (Split-Path $gitHome) }
     $bash = "$gitHome\bin\bash.exe"
 }
 Add-BootstrapPath (Split-Path $bash)
 Add-BootstrapPath (Join-Path (Split-Path (Split-Path $bash)) 'usr\bin')
-$toolsDir = Join-Path $env:USERPROFILE '.local\share\garden-tools'
-if (-not (Test-Path -LiteralPath $toolsDir)) { $env:GARDEN_BOOTSTRAP_TOOLS_CREATED = '1' }
 $savedUvPythonInstallDir = $env:UV_PYTHON_INSTALL_DIR
 $env:UV_PYTHON_INSTALL_DIR = Join-Path $toolsDir 'python'
 try {

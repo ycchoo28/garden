@@ -121,6 +121,12 @@ write_install_manifest() {
     record_file "$bin_dir/garden" "$garden_launcher_existed" "$bin_dir"
     record_file "$bin_dir/dsh" "$dsh_launcher_existed" "$bin_dir"
     record_tree "$dsh_home" "$dsh_home_existed" "$(dirname "$dsh_home")"
+    if [ "${dsh_patch_written:-0}" = 1 ]; then
+        manifest_update artifact file "$dsh_home/cordis.patch.yml" "$dsh_home"
+    fi
+    if [ -n "${dsh_patch_backup:-}" ] && [ -f "$dsh_patch_backup" ]; then
+        manifest_update artifact file "$dsh_patch_backup" "$dsh_home"
+    fi
     record_tree "$garden_home/python" "$python_home_existed" "$garden_home"
     record_tree "$garden_home/tools/uv-$uv_version" "$uv_dir_existed" "$garden_home"
     if [ -n "${node_tree:-}" ]; then
@@ -133,9 +139,6 @@ write_install_manifest() {
         record_tree "$garden_home/skills" "$skills_existed" "$garden_home"
         if [ -d "$garden_home/dsh" ] && [ "${dsh_replaced:-0}" = 1 ]; then
             manifest_update artifact tree "$garden_home/dsh" "$garden_home"
-        fi
-        if [ "${dsh_patch_written:-0}" = 1 ]; then
-            manifest_update artifact file "$dsh_home/cordis.patch.yml" "$dsh_home"
         fi
     fi
     if [ "$login_succeeded" = 1 ]; then
@@ -461,7 +464,8 @@ finish_step
 
 # dsh reads its home patch on start. An existing file is kept as a dated backup.
 if [ -e "$dsh_home/cordis.patch.yml" ]; then
-    mv "$dsh_home/cordis.patch.yml" "$dsh_home/cordis.patch.yml.bak-$stamp"
+    dsh_patch_backup="$dsh_home/cordis.patch.yml.bak-$stamp"
+    mv "$dsh_home/cordis.patch.yml" "$dsh_patch_backup"
 fi
 fetch_artifact dsh-config.yml
 begin_step "Installing dsh configuration template..."

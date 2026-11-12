@@ -53,6 +53,51 @@ def test_fake_selection_is_saved_and_reused_without_a_prompt(tmp_path):
     assert "local-demo-only" not in first.stdout + first.stderr
 
 
+def test_fake_model_does_not_clobber_saved_real_model(tmp_path):
+    class Upstream(DEMO.FakeModel):
+        def do_GET(self):
+            if self.headers.get("Authorization") != "Bearer real-secret-token":
+                self.send_error(401)
+            else:
+                super().do_GET()
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Upstream)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        url = f"http://127.0.0.1:{server.server_port}/v1"
+        path = tmp_path / ".env"
+        real_settings = dict(
+            zip(
+                DEMO.MODEL_KEYS,
+                (url, "real-secret-token", "garden-demo", "garden-demo"),
+                strict=True,
+            )
+        )
+        first = run_model(path, "--non-interactive", extra=real_settings)
+        assert first.returncode == 0, first.stderr
+        saved_first = dotenv_values(path)
+        assert saved_first[DEMO.MODEL_KEYS[1]] == "real-secret-token"
+        assert saved_first.get(DEMO.FAKE_FLAG, "0") != "1"
+
+        # Running with --fake-model overrides in-memory for this run without clobbering .env
+        faked = run_model(path, "--fake-model", "--non-interactive")
+        assert faked.returncode == 0, faked.stderr
+        saved_faked = dotenv_values(path)
+        assert saved_faked[DEMO.MODEL_KEYS[1]] == "real-secret-token"
+        assert saved_faked[DEMO.MODEL_KEYS[0]] == url
+        assert saved_faked.get(DEMO.FAKE_FLAG, "0") != "1"
+
+        # Subsequent run without --fake-model reuses the saved real upstream
+        again = run_model(path, "--non-interactive")
+        assert again.returncode == 0, again.stderr
+        assert "Reusing validated" in again.stdout
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+
 def test_missing_model_fails_without_waiting_for_input(tmp_path):
     result = run_model(tmp_path / ".env", "--non-interactive")
     assert result.returncode != 0

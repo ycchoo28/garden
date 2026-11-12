@@ -32,7 +32,15 @@ garden_bootstrap() (
         install -m 0755 "$staging/uv-$target/uv" "$HOME/.local/bin/uv"
         export GARDEN_BOOTSTRAP_UV_CREATED=1
     fi
-    uv run --no-project --python 3.12 "$(dirname "${BASH_SOURCE[0]}")/bootstrap.py"
+    local script_dir
+    if [ -n "${ZSH_VERSION:-}" ]; then
+        script_dir="$(cd -- "$(dirname -- "${(%):-%x}")" && pwd)"
+    elif [ -n "${BASH_SOURCE[0]:-}" ]; then
+        script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+    else
+        script_dir="$(cd -- "$(dirname -- "$0")" && pwd)"
+    fi
+    uv run --no-project --python 3.12 "$script_dir/bootstrap.py"
 )
 if garden_bootstrap; then
     export PATH="$HOME/.local/bin:$PATH"

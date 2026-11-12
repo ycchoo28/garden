@@ -216,5 +216,6 @@ def logout(
             revoke_remote(current.token)
         except GardenError as error:
             warning = error.title
-    active_store.delete(active_settings.portal_url)
+    if warning is None:
+        active_store.delete(active_settings.portal_url)
     return (current, warning)

@@ -154,7 +154,8 @@ def test_unreachable_portal_warns_where_to_revoke_login(
 
     cleanup.logout()
 
-    assert cleanup.data["logins"] == []
+    assert cleanup.failed is True
+    assert len(cleanup.data["logins"]) == 1
     assert "Revoke it in the portal's CLI logins page" in capsys.readouterr().err
 
 
@@ -221,3 +222,31 @@ def test_shared_directory_is_removed_only_when_empty(tmp_path: Path) -> None:
     assert bin_dir.exists()
     assert any("Directory not empty" in warning or "not empty" in warning for warning in warnings)
     assert remaining["artifacts"] == [manifest["artifacts"][0]]
+
+
+def test_restore_user_path_prunes_manifest_when_path_already_cleared(monkeypatch) -> None:
+    import contextlib
+    import sys
+    import types
+
+    monkeypatch.setattr(DEMO.os, "name", "nt")
+    fake_winreg = types.ModuleType("winreg")
+    fake_winreg.HKEY_CURRENT_USER = 1
+    fake_winreg.KEY_ALL_ACCESS = 1
+    fake_winreg.REG_EXPAND_SZ = 1
+    fake_winreg.OpenKey = lambda *args, **kwargs: contextlib.nullcontext(object())
+    fake_winreg.QueryValueEx = lambda _key, _name: (r"C:\Other\bin", 1)
+    monkeypatch.setitem(sys.modules, "winreg", fake_winreg)
+
+    cleanup = object.__new__(DEMO.DemoCleanup)
+    cleanup.data = {
+        "path_entries": [
+            {
+                "scope": "windows-user",
+                "value": r"C:\Users\test\.local\bin",
+                "owner": "agent-installer",
+            }
+        ]
+    }
+    cleanup.restore_user_path()
+    assert cleanup.data["path_entries"] == []

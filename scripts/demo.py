@@ -502,10 +502,19 @@ class Demo:
         self.env[FAKE_FLAG] = "1"
 
     def configure_model(self):
-        fake = self.args.fake_model or self.env.get(FAKE_FLAG) == "1"
+        valid = validate_model(self.env)
+        fake = self.args.fake_model or (self.env.get(FAKE_FLAG) == "1" and not valid)
         if fake:
+            saved_keys = {
+                key: value
+                for key, value in load_env(self.env_file).items()
+                if key in (MODEL_KEYS[0], MODEL_KEYS[1]) and value.strip()
+            }
             self.fake_model()
-        elif validate_model(self.env):
+            if not saved_keys:
+                save_env(self.env_file, {FAKE_FLAG: "1", MODEL_KEYS[3]: "garden-demo"})
+            return
+        if valid:
             print("Reusing validated model upstream.", flush=True)
         else:
             if self.args.non_interactive or not sys.stdin.isatty():
@@ -518,7 +527,8 @@ class Demo:
                 url = input("OpenAI-compatible base URL, or 'fake' for a local demo: ").strip()
                 if url == "fake":
                     self.fake_model()
-                    break
+                    save_env(self.env_file, {FAKE_FLAG: "1", MODEL_KEYS[3]: "garden-demo"})
+                    return
                 key = getpass.getpass("API key/token: ")
                 try:
                     names = [
@@ -1175,23 +1185,17 @@ class DemoCleanup:
                 (line for line in result.stderr.splitlines() if "portal did not confirm" in line),
                 None,
             )
-            if result.returncode:
+            if result.returncode or warning:
+                message = warning or result.stderr.strip() or result.stdout.strip()
+                print(f"Warning: {message}", file=sys.stderr)
                 print(
-                    f"Warning: garden logout failed for {login['portal']}: "
-                    f"{result.stderr.strip() or result.stdout.strip()}",
+                    "The portal login may still be active. Revoke it in the portal's "
+                    "CLI logins page or start the portal and retry.",
                     file=sys.stderr,
                 )
                 self.failed = True
                 continue
-            if warning:
-                print(f"Warning: {warning}", file=sys.stderr)
-                print(
-                    "The portal login may still be active. Revoke it in the portal's "
-                    "CLI logins page.",
-                    file=sys.stderr,
-                )
-            else:
-                print(f"Signed out of {login['portal']}.", flush=True)
+            print(f"Signed out of {login['portal']}.", flush=True)
             self.data["logins"].remove(login)
 
     def remove_images(self, references: set[str]):
@@ -1309,6 +1313,9 @@ class DemoCleanup:
             updated, removed = without_owned_path_entries(
                 self.data, current, scope="windows-user", separator=";"
             )
+            self.data["path_entries"] = [
+                entry for entry in self.data["path_entries"] if entry not in entries
+            ]
             if not removed:
                 return
             if updated:
@@ -1318,9 +1325,6 @@ class DemoCleanup:
                     winreg.DeleteValue(key, "Path")
             else:
                 winreg.SetValueEx(key, "Path", 0, value_type, "")
-            self.data["path_entries"] = [
-                entry for entry in self.data["path_entries"] if entry not in entries
-            ]
 
     def run(self):
         preview = cleanup_preview(

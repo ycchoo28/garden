@@ -171,9 +171,14 @@ def main():
         staging = Path(tempfile.mkdtemp(prefix=f"garden-bootstrap-{name}-"))
         archive = staging / pin["url"].rsplit("/", 1)[1]
         print(f"Installing {name} from {pin['url']}", flush=True)
-        urllib.request.urlretrieve(pin["url"], archive)
-        if hashlib.file_digest(archive.open("rb"), "sha256").hexdigest() != pin["sha256"]:
-            raise RuntimeError(f"{name} checksum mismatch; nothing extracted")
+        with (
+            urllib.request.urlopen(pin["url"], timeout=60) as response,
+            archive.open("wb") as handle,
+        ):
+            shutil.copyfileobj(response, handle)
+        with archive.open("rb") as handle:
+            if hashlib.file_digest(handle, "sha256").hexdigest() != pin["sha256"]:
+                raise RuntimeError(f"{name} checksum mismatch; nothing extracted")
         destination = tools / name
         if destination.exists():
             if not owns_artifact(manifest, destination):

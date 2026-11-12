@@ -68,6 +68,7 @@ $dshLauncherExisted = Test-Path -LiteralPath (Join-Path $binDir 'dsh.cmd')
 $dshPatchExisted = Test-Path -LiteralPath (Join-Path $dshHome 'cordis.patch.yml')
 $script:DshFolderCreated = $false
 $script:DshPatchWritten = $false
+$script:DshPatchBackup = $null
 $script:LoginSucceeded = $false
 $script:NodeTreePath = $null
 $script:NodeTreeExisted = $true
@@ -168,7 +169,8 @@ function Write-InstallManifest {
     if (-not $gardenLauncherExisted) { Record-InstallArtifact (Join-Path $binDir 'garden.cmd') 'file' $binDir }
     if (-not $dshLauncherExisted) { Record-InstallArtifact (Join-Path $binDir 'dsh.cmd') 'file' $binDir }
     if (-not $dshHomeExisted) { Record-InstallArtifact $dshHome 'tree' (Split-Path $dshHome) }
-    elseif ($script:DshPatchWritten -and -not $dshPatchExisted) { Record-InstallArtifact (Join-Path $dshHome 'cordis.patch.yml') 'file' $dshHome }
+    if ($script:DshPatchWritten) { Record-InstallArtifact (Join-Path $dshHome 'cordis.patch.yml') 'file' $dshHome }
+    if ($script:DshPatchBackup -and (Test-Path -LiteralPath $script:DshPatchBackup)) { Record-InstallArtifact $script:DshPatchBackup 'file' $dshHome }
     if ($script:NodeTreePath -and -not $script:NodeTreeExisted) { Record-InstallArtifact $script:NodeTreePath 'tree' (Split-Path $script:NodeTreePath) }
     if ($script:WebDirCreated) { Record-InstallArtifact (Join-Path $gardenHome 'web') 'tree' $gardenHome }
     if ($script:ProgramShortcutDirCreated) { Record-InstallArtifact $script:ProgramShortcutDir 'directory' (Split-Path $script:ProgramShortcutDir) }
@@ -415,18 +417,30 @@ Start-Process $address
 # Stops the Garden Agent browser UI. Started by the "Stop Garden Agent" shortcut.
 $port = __PORT__
 $webDir = '__WEBDIR__'
+$launcher = '__LAUNCHER__'
 $pidFile = Join-Path $webDir 'web.pid'
 if (Test-Path $pidFile) {
     $started = Get-Content -Path $pidFile -ErrorAction SilentlyContinue
-    if ($started) { & taskkill.exe /PID $started /T /F *> $null }
+    if ($started) {
+        $cim = Get-CimInstance Win32_Process -Filter "ProcessId = $started" -ErrorAction SilentlyContinue
+        if ($cim -and ($cim.CommandLine -like "*$launcher*" -or $cim.CommandLine -like "*dsh*web*" -or $cim.CommandLine -like "*garden*")) {
+            & taskkill.exe /PID $started /T /F *> $null
+        }
+    }
     Move-Item -Path $pidFile -Destination "$pidFile.stopped" -Force -ErrorAction SilentlyContinue
 }
-# A server started by hand is found by the port it listens on.
+# A server started by hand is stopped only when its command line matches the launcher or dsh web.
 Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue |
-    ForEach-Object { & taskkill.exe /PID $_.OwningProcess /T /F *> $null }
+    ForEach-Object {
+        $ownerPid = $_.OwningProcess
+        $cim = Get-CimInstance Win32_Process -Filter "ProcessId = $ownerPid" -ErrorAction SilentlyContinue
+        if ($cim -and ($cim.CommandLine -like "*$launcher*" -or $cim.CommandLine -like "*dsh*web*")) {
+            & taskkill.exe /PID $ownerPid /T /F *> $null
+        }
+    }
 '@
     $startText = $startText.Replace('__PORT__', "$webPort").Replace('__WEBDIR__', (& $quoted $webDir)).Replace('__LAUNCHER__', (& $quoted $launcher)).Replace('__GARDENFOLDER__', (& $quoted $gardenFolder))
-    $stopText = $stopText.Replace('__PORT__', "$webPort").Replace('__WEBDIR__', (& $quoted $webDir))
+    $stopText = $stopText.Replace('__PORT__', "$webPort").Replace('__WEBDIR__', (& $quoted $webDir)).Replace('__LAUNCHER__', (& $quoted $launcher))
     $startScript = Join-Path $webDir 'start-web.ps1'
     $stopScript = Join-Path $webDir 'stop-web.ps1'
     if ((Test-Path -LiteralPath $startScript) -and -not (Test-ManifestOwnsPath $startScript)) { return }
@@ -635,7 +649,11 @@ try {
 
     # dsh reads its home patch on start. An existing file is kept as a dated backup.
     $patch = Join-Path $dshHome 'cordis.patch.yml'
-    if (Test-Path $patch) { Move-Item -Path $patch -Destination "$patch.bak-$stamp" }
+    if (Test-Path $patch) {
+        $backup = "$patch.bak-$stamp"
+        Move-Item -Path $patch -Destination $backup
+        $script:DshPatchBackup = $backup
+    }
     # The template is installed beside garden; garden writes the patch once it is signed in (below).
     $configFile = Get-Artifact 'dsh-config.yml'
     Start-Step 'Installing dsh configuration template...'

@@ -203,9 +203,10 @@ def _logout(args: argparse.Namespace, *, get_settings: Callable[[], Settings]) -
     if warning:
         print(
             f"warning: the portal did not confirm the sign-out ({warning}). "
-            "Removing the login here.",
+            "The login was kept locally so sign-out can be retried.",
             file=sys.stderr,
         )
+        sys.exit(1)
     render(
         {"signed_out": True, "device": previous.device if previous else None},
         as_json=args.json,
