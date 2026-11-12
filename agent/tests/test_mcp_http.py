@@ -366,6 +366,40 @@ async def test_critical_call_streams_confirmation_then_result(
 
 
 @pytest.mark.asyncio
+async def test_a_socket_failure_while_a_critical_call_waits_is_a_32000_reply(
+    hosted_http: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def times_out_waiting(self: Engine, *args: Any, notify: Any = None, **kwargs: Any) -> None:
+        notify("https://portal.example/agent/confirmations/conf-1")
+        # Let the approval link reach the client first, so the failure is the last event.
+        time.sleep(0.2)
+        raise TimeoutError("the approval poll timed out")
+
+    monkeypatch.setattr(Engine, "call", times_out_waiting)
+    raw = await hosted_http.post(
+        ENDPOINT,
+        headers=HEADERS,
+        json=_message(
+            12,
+            "tools/call",
+            {"name": "files_file_delete", "arguments": {"sha256": "ab" * 32}},
+        ),
+    )
+    assert raw.headers["content-type"].startswith("text/event-stream")
+    events = [
+        json.loads(line.removeprefix("data: "))
+        for line in raw.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    assert events[0]["method"] == "notifications/message"
+    assert events[-1] == {
+        "jsonrpc": "2.0",
+        "id": 12,
+        "error": {"code": -32000, "message": "The portal could not be reached."},
+    }
+
+
+@pytest.mark.asyncio
 async def test_repeated_sse_disconnects_leave_no_pending_tasks(portal: FakePortal) -> None:
     settings = HostedMCPSettings(
         enabled=True,
