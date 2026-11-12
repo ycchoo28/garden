@@ -16,9 +16,11 @@ garden = "garden.cli:main"
 dev = [
     "pyyaml==6.0.3",
     "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
     "ruff==0.16.10",
     "pyright==1.1.414",
     "import-linter==2.15",
+    "mcp==1.30.0",
 ]
 
 [build-system]

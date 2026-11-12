@@ -18,6 +18,7 @@ VIA_AGENT = "agent"
 @dataclass(frozen=True)
 class RequestLogin:
     via: str
+    source: str | None = None
     device: str | None = None
     created_at: datetime | None = None
     # The CLI login's id, so the model gateway can count one login's requests on their own.

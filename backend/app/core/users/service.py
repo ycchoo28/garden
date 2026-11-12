@@ -34,6 +34,10 @@ def token_hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+def _new_cli_token() -> str:
+    return f"ag_{secrets.token_urlsafe(32)}"
+
+
 def _pkce_challenge(verifier: str) -> str:
     digest = hashlib.sha256(verifier.encode()).digest()
     return base64.urlsafe_b64encode(digest).decode().rstrip("=")
@@ -224,7 +228,7 @@ class UserService:
         person = await self._repo.person_by_subject(claims.subject)
         if person is None or not person.is_active:
             raise Forbidden("This account is not set up for Garden.")
-        raw_token = secrets.token_urlsafe(32)
+        raw_token = _new_cli_token()
         row = CliLogin(
             id=new_id(),
             person_id=person.id,
@@ -233,10 +237,40 @@ class UserService:
             created_at=now,
             last_used_at=None,
             revoked_at=None,
+            expires_at=None,
+            source="cli",
         )
         self._repo.add_cli_login(row)
         await self._repo.commit()
         return raw_token, row
+
+    async def create_web_cli_login(
+        self,
+        *,
+        person_id: uuid.UUID,
+        device: str,
+        expires_in_days: int | None,
+    ) -> tuple[str, CliLogin]:
+        """Stage a browser-created login; the caller records its audit row before committing."""
+        now = self._clock.now()
+        raw_token = _new_cli_token()
+        row = CliLogin(
+            id=new_id(),
+            person_id=person_id,
+            token_hash=token_hash(raw_token),
+            device=device,
+            created_at=now,
+            last_used_at=None,
+            revoked_at=None,
+            expires_at=now + timedelta(days=expires_in_days) if expires_in_days else None,
+            source="web",
+        )
+        self._repo.add_cli_login(row)
+        await self._repo.flush()
+        return raw_token, row
+
+    async def commit(self) -> None:
+        await self._repo.commit()
 
     async def current_cli_person(
         self,
@@ -252,6 +286,8 @@ class UserService:
         login, person = found
         if login.revoked_at is not None:
             raise Unauthorized("This CLI login was revoked. Run garden login again.")
+        if login.expires_at is not None and login.expires_at <= now:
+            raise Unauthorized("This CLI login expired. Create a new CLI login to continue.")
         if not person.is_active:
             raise Forbidden("This account is not set up for Garden.")
         await self._repo.touch_cli_login(token_hash(raw_token), now)

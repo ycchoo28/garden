@@ -33,6 +33,10 @@ PUBLIC_ROUTES = {
     ("GET", "/api/agent/downloads/{name}"),
 }
 
+# The MCP mount is a self-contained ASGI app in the agent package, and bearer auth is its public
+# boundary. Its handler validates every token through the normal CLI login API.
+PUBLIC_MOUNTS = {"/api/agent/mcp"}
+
 # Routes an agent may only call after the person approves, listed explicitly.
 CRITICAL_ROUTES: frozenset[str] = frozenset(
     {
@@ -91,6 +95,19 @@ def test_contract_names_the_permission_of_every_guarded_route() -> None:
 def test_public_routes_exist() -> None:
     present = {(method, route.path) for route in _api_routes() for method in route.methods}
     assert present >= PUBLIC_ROUTES
+
+
+def test_public_mounts_exist() -> None:
+    from starlette.routing import Mount
+
+    present = {route.path for route in app.routes if isinstance(route, Mount)}
+    present.update(
+        route.path
+        for installed in MODULES
+        for route in installed.router.routes
+        if isinstance(route, Mount)
+    )
+    assert present >= PUBLIC_MOUNTS
 
 
 def test_critical_routes_are_listed() -> None:

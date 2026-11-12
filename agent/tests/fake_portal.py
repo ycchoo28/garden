@@ -15,7 +15,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 CONFIRMATION_HEADER = "x-garden-confirmation"
-GOOD_TOKEN = "good-token"
+GOOD_TOKEN = "ag_good-token"
 BATCH_UPLOAD = re.compile(r"/api/knowledge/batches/([^/]+)/files")
 
 
@@ -70,6 +70,8 @@ class FakePortal:
     polls: dict[str, int] = field(default_factory=lambda: dict[str, int]())
     # How long a confirmation stays open, from the moment the portal asks for it.
     expires_in_seconds: float = 600.0
+    # Some database drivers return UTC timestamps without an offset.
+    naive_confirmation_expiry: bool = False
     # Routes a test adds to the contract. Each answers with the method, path and JSON body it got.
     extra_paths: dict[str, dict[str, Any]] = field(
         default_factory=lambda: dict[str, dict[str, Any]]()
@@ -450,15 +452,16 @@ class _Handler(BaseHTTPRequestHandler):
         if presented is None:
             confirmation_id = f"conf-{len(self.fake.confirmations) + 1}"
             self.fake.confirmations[confirmation_id] = "pending"
+            expires_at = datetime.now(UTC) + timedelta(seconds=self.fake.expires_in_seconds)
+            if self.fake.naive_confirmation_expiry:
+                expires_at = expires_at.replace(tzinfo=None)
             self._problem(
                 428,
                 "Confirmation Required",
                 detail="The person must approve this action in the browser first.",
                 confirmation_id=confirmation_id,
                 confirmation_url=f"{self.fake.url}/agent/confirmations/{confirmation_id}",
-                expires_at=(
-                    datetime.now(UTC) + timedelta(seconds=self.fake.expires_in_seconds)
-                ).isoformat(),
+                expires_at=expires_at.isoformat(),
             )
             return False
         self.fake.retries.append(presented)

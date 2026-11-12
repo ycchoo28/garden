@@ -23,6 +23,8 @@ The terms are grouped by area, and the last section lists the words to avoid.
   It ends after 30 minutes without a request.
 - **Agent**: a program that acts for a person through a CLI login, such as a coding agent running the `garden` command or its MCP server.
 - **CLI login**: an agent's sign-in, which is one bearer token for one person on one device.
+  A person can create one in the browser for a hosted agent or sign in with the `garden` command.
+  Its source is `web` or `cli`, and it may expire.
   Every save made through it is marked as made by an agent, and the person can revoke it under CLI logins.
 - **Device**: the machine a CLI login belongs to, named when the login is made.
 - **Acting as agent**: a request that came through a CLI login, so the audit row and the confirmation gate treat it as the agent's.

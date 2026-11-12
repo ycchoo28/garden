@@ -25,6 +25,7 @@ ROLES: tuple[Role, ...] = (
                 "files.view",
                 "files.delete",
                 "agent.logins.view",
+                "agent.logins.create",
                 "agent.logins.revoke",
                 "agent.confirmations.decide",
                 "agent.model.use",

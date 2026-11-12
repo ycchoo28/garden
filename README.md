@@ -225,6 +225,23 @@ The `GARDEN_API_URL` variable is required, because the command has no default po
 The tools are named after the operation ids with underscores, such as `claims_claim_create`.
 To install the skill file that tells an agent how to use the command, run `garden skills install`, which copies it to `~/.garden/skills`.
 
+## Hosted MCP endpoint
+
+Garden can also serve the same tools to hosted clients at `POST https://<portal>/api/agent/mcp` using MCP Streamable HTTP.
+The endpoint is disabled by default; set `GARDEN_AGENT_MCP_ENABLED=true` to enable it.
+Create a CLI login on the CLI logins page (`/agent/logins`), choose an expiry, and store the one-time `ag_` token as a secret in the agent platform.
+Send it as `Authorization: Bearer ag_...` on every request.
+The browser-made login has the same agent permissions and confirmation gate as a `garden` command login, and can be revoked from that page.
+
+For local development, the handler calls the backend at `http://127.0.0.1:55000` by default.
+Set `GARDEN_AGENT_MCP_API_BASE_URL` if the backend uses another address, and list browser origins in the comma-separated `GARDEN_AGENT_MCP_ALLOWED_ORIGINS` setting when a browser client needs them.
+Confirmation waits default to three per login and twenty in total; `GARDEN_AGENT_MCP_PENDING_PER_LOGIN` and `GARDEN_AGENT_MCP_PENDING_TOTAL` can lower these limits.
+The total must stay below the 40-thread MCP worker pool.
+
+Hosted file tools accept `{ "filename": "receipt.pdf", "content_type": "application/pdf", "data_base64": "..." }` instead of a local path.
+The hosted handler never reads a path from its own filesystem, while stdio file arguments keep their local-path behavior.
+See [ADR 0028](docs/adr/0028-hosted-mcp-endpoint.md) for the transport, security and confirmation details.
+
 ## Commands
 
 Run `just` with no arguments to list them.
