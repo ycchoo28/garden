@@ -559,15 +559,15 @@ try {
     if ($versionCheck.Code -ne 0) { throw "Python 3.12 or newer is needed; $python is older." }
 
     # The manifest lists each artifact with its URL and SHA-256. It needs no sign-in.
-    $manifestPath = Join-Path $tmp 'manifest.json'
+    $downloadManifestPath = Join-Path $tmp 'manifest.json'
     Start-Step 'Fetching download manifest...'
-    Invoke-WebRequest -UseBasicParsing -Uri "$portal/api/agent/manifest" -OutFile $manifestPath
+    Invoke-WebRequest -UseBasicParsing -Uri "$portal/api/agent/manifest" -OutFile $downloadManifestPath
     Complete-Step
-    $manifest = Get-Content -Raw -Path $manifestPath | ConvertFrom-Json
+    $downloadManifest = Get-Content -Raw -Path $downloadManifestPath | ConvertFrom-Json
 
     # Downloads one artifact into $tmp as one stage, and checks it against the manifest. Nothing is installed here.
     function Get-Artifact([string]$name) {
-        $entry = $manifest.artifacts.PSObject.Properties[$name]
+        $entry = $downloadManifest.artifacts.PSObject.Properties[$name]
         if (-not $entry) { throw "The portal does not offer $name. Ask your administrator for an installer that includes it." }
         $artifact = $entry.Value
         $source = Join-Path $tmp $name
