@@ -356,3 +356,31 @@ def test_dsh_configure_and_run(portal: FakePortal, tmp_path: Path) -> None:
     assert "--headless" in commands_run[0]
     assert envs_received[0]["GARDEN_AGENT_MODEL_TOKEN"] == GOOD_TOKEN
     assert envs_received[0]["DSH_HOME"] == str(dsh_home)
+
+
+def test_client_converts_timeout_and_http_exception_to_garden_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import http.client
+    import urllib.request
+
+    from garden.engine import PortalClient
+    from garden.shared.errors import GardenError
+
+    client = PortalClient("http://127.0.0.1:55000")
+
+    def raise_timeout(*_args: object, **_kwargs: object) -> None:
+        raise TimeoutError("connection timed out")
+
+    monkeypatch.setattr(urllib.request, "urlopen", raise_timeout)
+    with pytest.raises(GardenError) as exc_info:
+        client.request("GET", "/test")
+    assert exc_info.value.title == "The portal cannot be reached"
+
+    def raise_http_exception(*_args: object, **_kwargs: object) -> None:
+        raise http.client.RemoteDisconnected("remote end closed connection")
+
+    monkeypatch.setattr(urllib.request, "urlopen", raise_http_exception)
+    with pytest.raises(GardenError) as exc_info:
+        client.request("GET", "/test")
+    assert exc_info.value.title == "The portal cannot be reached"

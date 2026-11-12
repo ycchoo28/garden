@@ -6,6 +6,7 @@ so the engine can refresh the tool list and refuse to run an old `garden`.
 
 from __future__ import annotations
 
+import http.client
 import json
 import urllib.error
 import urllib.parse
@@ -124,10 +125,11 @@ class PortalClient:
         except urllib.error.HTTPError as error:
             problem = _decode(error.read())
             raise _problem_error(error.code, problem) from None
-        except urllib.error.URLError as error:
+        except (urllib.error.URLError, TimeoutError, http.client.HTTPException) as error:
+            reason = getattr(error, "reason", None) or str(error) or "timed out"
             raise GardenError(
                 title="The portal cannot be reached",
-                detail=str(error.reason),
+                detail=str(reason),
                 fix="Check the network, and that the portal address is right, then try again.",
             ) from error
         check_min_version(response.headers)

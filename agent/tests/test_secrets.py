@@ -134,3 +134,32 @@ def test_logout_keeps_token_when_remote_revoke_fails(
     assert forced is not None and forced.token == "active-token"
     assert force_warning == "Unreachable portal"
     assert load_session(settings) is None
+
+
+def test_logout_with_force_deletes_token_when_revoke_times_out(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
+    entries: dict[tuple[str, str], str] = {}
+
+    def get(service: str, account: str) -> str | None:
+        return entries.get((service, account))
+
+    def save(service: str, account: str, value: str) -> None:
+        entries[service, account] = value
+
+    def delete(service: str, account: str) -> None:
+        entries.pop((service, account), None)
+
+    monkeypatch.setattr(keyring, "get_password", get)
+    monkeypatch.setattr(keyring, "set_password", save)
+    monkeypatch.setattr(keyring, "delete_password", delete)
+
+    store_token("timeout-token", settings=settings)
+
+    def timing_out_revoke(_token: str) -> None:
+        raise TimeoutError("timed out")
+
+    forced, force_warning = logout(settings=settings, revoke_remote=timing_out_revoke, force=True)
+    assert forced is not None and forced.token == "timeout-token"
+    assert force_warning == "The portal cannot be reached"
+    assert load_session(settings) is None

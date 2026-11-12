@@ -217,6 +217,8 @@ def logout(
             revoke_remote(current.token)
         except GardenError as error:
             warning = error.title
+        except TimeoutError:
+            warning = "The portal cannot be reached"
     if warning is None or force:
         active_store.delete(active_settings.portal_url)
     return (current, warning)
