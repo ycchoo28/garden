@@ -251,6 +251,22 @@ async def test_json_rpc_errors_are_returned_at_the_public_endpoint(
 
 
 @pytest.mark.asyncio
+async def test_hosted_params_must_be_an_object_or_absent_or_null(
+    hosted_http: httpx.AsyncClient,
+) -> None:
+    for params in ([], 0, "", False, ["x"]):
+        refused = await hosted_http.post(
+            ENDPOINT, headers=HEADERS, json={**_message(1, "ping"), "params": params}
+        )
+        assert refused.status_code == 200
+        assert refused.json()["error"]["code"] == -32602
+    for body in (_message(2, "ping"), {**_message(3, "ping"), "params": None}):
+        accepted = await hosted_http.post(ENDPOINT, headers=HEADERS, json=body)
+        assert accepted.status_code == 200
+        assert "error" not in accepted.json()
+
+
+@pytest.mark.asyncio
 async def test_hosted_upload_uses_bytes_and_refuses_paths(
     hosted_http: httpx.AsyncClient,
     portal: FakePortal,

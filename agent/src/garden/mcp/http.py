@@ -195,6 +195,14 @@ class _StreamableHTTPApp:
             )
             return
 
+        # The hosted endpoint is stricter than stdio: params are an object, or absent or null.
+        params = message.get("params")
+        if params is not None and not is_object(params):
+            await _json_response(
+                send, 200, _rpc_error(message["id"], -32602, "Params must be an object.")
+            )
+            return
+
         pending_key: str | None = None
         if message.get("method") == "tools/call":
             arguments = as_object(message.get("params"))

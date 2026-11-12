@@ -48,7 +48,8 @@ The audit schema stays unchanged; the source is included in the event summary al
   Two gaps remain. A caller that disconnects after the cancel check but before the retry is sent leaves the action in place, because the portal cannot tell that caller from one that completed.
   The approval can also expire or be rejected between the status read and the retry, in which case the portal refuses the retry and the action does not run.
   Closing the first gap needs the portal to take the approval and run the action in one step, or to accept a cancellation of a retry it has not started. Neither exists today.
-- **Stdio parity.** Stdio treats an explicit `"params": null` as no params, and it still rejects other non-object params with `-32602`, which the hosted endpoint also does.
+- **Params per transport.** Stdio keeps main's behavior: any falsy `params` (null, `[]`, `0`, `""`, `false`) counts as no params, and a truthy non-object is refused with `-32602`.
+  The hosted endpoint is stricter: only absent or null params count as none, and any other non-object is refused with `-32602`.
 
 ## Consequences
 

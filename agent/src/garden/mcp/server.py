@@ -99,10 +99,7 @@ def handle(
     request_id = message.get("id")
     if request_id is None:
         return None
-    # A null params means no params, as an absent one does. Stdio keeps this behavior.
-    raw_params: Any = message.get("params")
-    if raw_params is None:
-        raw_params = {}
+    raw_params: Any = message.get("params") or {}
     if not is_object(raw_params):
         return {
             "jsonrpc": "2.0",

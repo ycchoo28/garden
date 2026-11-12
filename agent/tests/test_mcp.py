@@ -7,6 +7,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+import pytest
 from conftest import as_json, run_garden, store_token
 from fake_portal import GOOD_TOKEN, FakePortal
 
@@ -170,3 +171,20 @@ def test_an_explicit_null_params_means_no_params_on_stdio(
     listing = _by_id(replies, 2)
     assert "error" not in listing
     assert any(tool["name"] == "files_file_read" for tool in listing["result"]["tools"])
+
+
+@pytest.mark.parametrize("params", [[], 0, "", False])
+def test_falsy_params_mean_no_params_on_stdio_as_on_main(
+    portal: FakePortal, env: dict[str, str], params: object
+) -> None:
+    store_token(env, portal.url, GOOD_TOKEN)
+    replies = _serve(env, [{"jsonrpc": "2.0", "id": 1, "method": "ping", "params": params}])
+    assert _by_id(replies, 1) == {"jsonrpc": "2.0", "id": 1, "result": {}}
+
+
+def test_truthy_non_object_params_are_refused_on_stdio(
+    portal: FakePortal, env: dict[str, str]
+) -> None:
+    store_token(env, portal.url, GOOD_TOKEN)
+    replies = _serve(env, [{"jsonrpc": "2.0", "id": 1, "method": "ping", "params": ["x"]}])
+    assert _by_id(replies, 1)["error"]["code"] == -32602
