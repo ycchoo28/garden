@@ -123,6 +123,8 @@ def test_installer_runs_unattended_and_the_launchers_and_dsh_patch_work(
     dsh_home = tmp_path / "dsh"
     install_env = {
         **env,
+        "HOME": str(tmp_path),
+        "USERPROFILE": str(tmp_path),
         "GARDEN_API_URL": portal.url,
         "GARDEN_PYTHON": sys.executable,
         "GARDEN_BIN_DIR": str(bin_dir),
@@ -138,6 +140,14 @@ def test_installer_runs_unattended_and_the_launchers_and_dsh_patch_work(
         check=False,
     )
     assert installed.returncode == 0, installed.stdout + installed.stderr
+    manifest = json.loads(
+        (tmp_path / ".local" / "share" / "garden" / "install-manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    recorded_paths = {item["path"] for item in manifest["artifacts"]}
+    assert str(bin_dir / "garden") in recorded_paths
+    assert str(bin_dir / "dsh") in recorded_paths
     # The installer reports the smoke check and emits no uv warning or force suggestion.
     assert "Ready:" in installed.stdout
     assert "Approve the sign-in in your browser: http" in installed.stdout

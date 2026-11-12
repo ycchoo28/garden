@@ -53,6 +53,123 @@ $userFolder = $env:USERPROFILE
 $binDir = if ($env:GARDEN_BIN_DIR) { $env:GARDEN_BIN_DIR } else { Join-Path $userFolder '.local\bin' }
 $gardenHome = if ($env:GARDEN_HOME) { $env:GARDEN_HOME } else { Join-Path $userFolder '.garden' }
 $dshHome = if ($env:GARDEN_DSH_HOME) { $env:GARDEN_DSH_HOME } else { Join-Path $userFolder '.dsh' }
+$manifestPath = Join-Path $userFolder '.local\share\garden\install-manifest.json'
+$gardenHomeExisted = Test-Path -LiteralPath $gardenHome
+$binDirExisted = Test-Path -LiteralPath $binDir
+$dshHomeExisted = Test-Path -LiteralPath $dshHome
+$pythonHomeExisted = Test-Path -LiteralPath (Join-Path $gardenHome 'python')
+$uvDirExisted = Test-Path -LiteralPath (Join-Path $gardenHome "tools\uv-$uvVersion")
+$pyzExisted = Test-Path -LiteralPath (Join-Path $gardenHome 'garden.pyz')
+$configExisted = Test-Path -LiteralPath (Join-Path $gardenHome 'config.json')
+$skillsExisted = Test-Path -LiteralPath (Join-Path $gardenHome 'skills')
+$dshConfigExisted = Test-Path -LiteralPath (Join-Path $gardenHome 'dsh-config.yml')
+$gardenLauncherExisted = Test-Path -LiteralPath (Join-Path $binDir 'garden.cmd')
+$dshLauncherExisted = Test-Path -LiteralPath (Join-Path $binDir 'dsh.cmd')
+$dshPatchExisted = Test-Path -LiteralPath (Join-Path $dshHome 'cordis.patch.yml')
+$script:DshFolderCreated = $false
+$script:DshPatchWritten = $false
+$script:LoginSucceeded = $false
+$script:NodeTreePath = $null
+$script:NodeTreeExisted = $true
+$script:WebDirCreated = $false
+$script:ProgramShortcutDirCreated = $false
+$script:WebShortcutFiles = @()
+$manifestRoot = Split-Path $manifestPath
+New-Item -ItemType Directory -Path $manifestRoot -Force | Out-Null
+if (Test-Path -LiteralPath $manifestPath) {
+    $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
+    if ($manifest.version -ne 1) { throw 'Unsupported Garden install manifest version.' }
+} else {
+    $manifest = [pscustomobject]@{
+        version = 1
+        artifacts = @()
+        path_entries = @()
+        demo_projects = @()
+        docker_images = @()
+        logins = @()
+    }
+}
+$manifestEncoding = New-Object System.Text.UTF8Encoding $false
+function Save-InstallManifest {
+    $temporary = "$manifestPath.tmp"
+    $json = ConvertTo-Json -InputObject $manifest -Depth 20
+    [System.IO.File]::WriteAllText($temporary, $json, $manifestEncoding)
+    Move-Item -LiteralPath $temporary -Destination $manifestPath -Force
+}
+function Test-ManifestOwnsPath([string]$path) {
+    $full = [System.IO.Path]::GetFullPath($path)
+    foreach ($entry in @($manifest.artifacts)) {
+        if ([string]::Equals($entry.path, $full, [StringComparison]::OrdinalIgnoreCase)) { return $true }
+        if ($entry.kind -eq 'tree' -and $full.StartsWith($entry.path.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    }
+    return $false
+}
+function Record-InstallArtifact([string]$path, [string]$kind, [string]$root) {
+    if (-not (Test-Path -LiteralPath $path)) { return }
+    $full = [System.IO.Path]::GetFullPath($path)
+    $entry = [pscustomobject]@{
+        path = $full
+        resolved_path = $full
+        root = [System.IO.Path]::GetFullPath($root)
+        kind = $kind
+        owner = 'agent-installer'
+    }
+    if ($kind -eq 'file') {
+        $entry | Add-Member -NotePropertyName sha256 -NotePropertyValue (Get-FileHash -Algorithm SHA256 -LiteralPath $full).Hash.ToLowerInvariant()
+    }
+    $items = @($manifest.artifacts)
+    $index = -1
+    for ($i = 0; $i -lt $items.Count; $i++) {
+        if ([string]::Equals($items[$i].path, $full, [StringComparison]::OrdinalIgnoreCase)) { $index = $i; break }
+    }
+    if ($index -ge 0) {
+        if ($items[$index].kind -eq 'tree') { $entry.kind = 'tree'; $entry.root = $items[$index].root }
+        $items[$index] = $entry
+    } else {
+        $items += $entry
+    }
+    $manifest.artifacts = @($items)
+    Save-InstallManifest
+}
+function Record-UserPathEntry([string]$value, [bool]$createdValue = $false) {
+    foreach ($entry in @($manifest.path_entries)) {
+        if ($entry.scope -eq 'windows-user' -and [string]::Equals($entry.value.TrimEnd('\'), $value.TrimEnd('\'), [StringComparison]::OrdinalIgnoreCase)) { return }
+    }
+    $manifest.path_entries = @(@($manifest.path_entries) + [pscustomobject]@{ value = $value; scope = 'windows-user'; owner = 'agent-installer'; created_value = $createdValue })
+    Save-InstallManifest
+}
+function Record-InstallLogin([string]$portalUrl, [string]$launcher, [string]$gardenFolder) {
+    $logins = @($manifest.logins)
+    $entry = [pscustomobject]@{ portal = $portalUrl; launcher = $launcher; garden_home = $gardenFolder }
+    $index = -1
+    for ($i = 0; $i -lt $logins.Count; $i++) { if ($logins[$i].portal -eq $portalUrl) { $index = $i; break } }
+    if ($index -ge 0) { $logins[$index] = $entry } else { $logins += $entry }
+    $manifest.logins = @($logins)
+    Save-InstallManifest
+}
+function Write-InstallManifest {
+    if (-not $gardenHomeExisted -and (Test-Path -LiteralPath $gardenHome)) {
+        Record-InstallArtifact $gardenHome 'tree' (Split-Path $gardenHome)
+    } else {
+        if (-not $pythonHomeExisted) { Record-InstallArtifact (Join-Path $gardenHome 'python') 'tree' $gardenHome }
+        if (-not $uvDirExisted) { Record-InstallArtifact (Join-Path $gardenHome "tools\uv-$uvVersion") 'tree' $gardenHome }
+        if (-not $pyzExisted) { Record-InstallArtifact (Join-Path $gardenHome 'garden.pyz') 'file' $gardenHome }
+        if (-not $configExisted) { Record-InstallArtifact (Join-Path $gardenHome 'config.json') 'file' $gardenHome }
+        if (-not $skillsExisted) { Record-InstallArtifact (Join-Path $gardenHome 'skills') 'tree' $gardenHome }
+        if ($script:DshFolderCreated) { Record-InstallArtifact (Join-Path $gardenHome 'dsh') 'tree' $gardenHome }
+        if (-not $dshConfigExisted) { Record-InstallArtifact (Join-Path $gardenHome 'dsh-config.yml') 'file' $gardenHome }
+    }
+    if (-not $binDirExisted) { Record-InstallArtifact $binDir 'directory' (Split-Path $binDir) }
+    if (-not $gardenLauncherExisted) { Record-InstallArtifact (Join-Path $binDir 'garden.cmd') 'file' $binDir }
+    if (-not $dshLauncherExisted) { Record-InstallArtifact (Join-Path $binDir 'dsh.cmd') 'file' $binDir }
+    if (-not $dshHomeExisted) { Record-InstallArtifact $dshHome 'tree' (Split-Path $dshHome) }
+    elseif ($script:DshPatchWritten -and -not $dshPatchExisted) { Record-InstallArtifact (Join-Path $dshHome 'cordis.patch.yml') 'file' $dshHome }
+    if ($script:NodeTreePath -and -not $script:NodeTreeExisted) { Record-InstallArtifact $script:NodeTreePath 'tree' (Split-Path $script:NodeTreePath) }
+    if ($script:WebDirCreated) { Record-InstallArtifact (Join-Path $gardenHome 'web') 'tree' $gardenHome }
+    if ($script:ProgramShortcutDirCreated) { Record-InstallArtifact $script:ProgramShortcutDir 'directory' (Split-Path $script:ProgramShortcutDir) }
+    foreach ($path in $script:WebShortcutFiles) { Record-InstallArtifact $path 'file' (Split-Path $path) }
+    if ($script:LoginSucceeded) { Record-InstallLogin $portal (Join-Path $binDir 'garden.cmd') $gardenHome }
+}
 $stamp = Get-Date -Format 'yyyyMMddHHmmss'
 $utf8 = New-Object System.Text.UTF8Encoding $false
 
@@ -201,6 +318,7 @@ function Add-UserPath([string]$folder) {
     $wanted = $folder.TrimEnd('\')
     if (-not $env:GARDEN_INSTALL_TEST -and -not ($entries | Where-Object { $_.TrimEnd('\') -ieq $wanted })) {
         [Environment]::SetEnvironmentVariable('Path', (@($folder) + $entries) -join ';', 'User')
+        Record-UserPathEntry $folder (-not [bool]$current)
         Write-Output "Added $folder to your PATH. Open a new terminal to run garden and dsh by name."
     }
     $env:Path = "$folder;$env:Path"
@@ -223,6 +341,8 @@ function Ensure-Node {
     $nodeToolsDir = Join-Path $gardenHome "tools\node-v$nodeVersion"
     $nodeDir = Join-Path $nodeToolsDir "node-v$nodeVersion-win-x64"
     $nodeExe = Join-Path $nodeDir 'node.exe'
+    $script:NodeTreePath = $nodeToolsDir
+    $script:NodeTreeExisted = Test-Path -LiteralPath $nodeToolsDir
 
     if (-not (Test-Path $nodeExe)) {
         $zip = Join-Path $tmp 'node.zip'
@@ -250,7 +370,13 @@ $webPort = 8765
 function Install-WebShortcuts([string]$launcher, [string]$gardenFolder) {
     if ($env:GARDEN_INSTALL_TEST) { return }
     $webDir = Join-Path $gardenFolder 'web'
+    $webDirExisted = Test-Path -LiteralPath $webDir
+    if ($webDirExisted -and -not (Test-ManifestOwnsPath $webDir)) {
+        Write-Warning "Preserving the existing, unrecorded web folder at $webDir."
+        return
+    }
     New-Item -ItemType Directory -Force -Path $webDir | Out-Null
+    if (-not $webDirExisted) { $script:WebDirCreated = $true }
     # The paths are written into the scripts as single-quoted strings, so an apostrophe in a path is doubled.
     $quoted = { param([string]$text) $text.Replace("'", "''") }
     $startText = @'
@@ -298,8 +424,11 @@ Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinu
     $stopText = $stopText.Replace('__PORT__', "$webPort").Replace('__WEBDIR__', (& $quoted $webDir))
     $startScript = Join-Path $webDir 'start-web.ps1'
     $stopScript = Join-Path $webDir 'stop-web.ps1'
+    if ((Test-Path -LiteralPath $startScript) -and -not (Test-ManifestOwnsPath $startScript)) { return }
+    if ((Test-Path -LiteralPath $stopScript) -and -not (Test-ManifestOwnsPath $stopScript)) { return }
     [System.IO.File]::WriteAllText($startScript, $startText, $utf8)
     [System.IO.File]::WriteAllText($stopScript, $stopText, $utf8)
+    $script:WebShortcutFiles += @($startScript, $stopScript)
 
     # A shortcut that starts PowerShell directly leaves PowerShell's own console window visible, so the
     # shortcuts start wscript, which runs PowerShell in a hidden window (style 0) with a small script.
@@ -311,21 +440,38 @@ CreateObject("WScript.Shell").Run """__PS__"" -NoProfile -ExecutionPolicy Bypass
 '@
     $startVbs = Join-Path $webDir 'start-web.vbs'
     $stopVbs = Join-Path $webDir 'stop-web.vbs'
+    if ((Test-Path -LiteralPath $startVbs) -and -not (Test-ManifestOwnsPath $startVbs)) { return }
+    if ((Test-Path -LiteralPath $stopVbs) -and -not (Test-ManifestOwnsPath $stopVbs)) { return }
     [System.IO.File]::WriteAllText($startVbs, $vbsTemplate.Replace('__PS__', $powershell).Replace('__SCRIPT__', $startScript), [System.Text.Encoding]::ASCII)
     [System.IO.File]::WriteAllText($stopVbs, $vbsTemplate.Replace('__PS__', $powershell).Replace('__SCRIPT__', $stopScript), [System.Text.Encoding]::ASCII)
+    $script:WebShortcutFiles += @($startVbs, $stopVbs)
     $programs = Join-Path ([Environment]::GetFolderPath('Programs')) 'Garden Agent'
     $desktop = [Environment]::GetFolderPath('Desktop')
-    # The shortcuts are replaced each time, so a re-run leaves one of each.
-    if (Test-Path $programs) { Move-Item -Path $programs -Destination "$programs.bak-$stamp-$([Guid]::NewGuid())" }
-    New-Item -ItemType Directory -Force -Path $programs | Out-Null
+    if (Test-Path -LiteralPath $programs) {
+        if (-not (Test-ManifestOwnsPath $programs)) {
+            Write-Warning "Preserving the existing, unrecorded shortcuts folder at $programs."
+            $programs = $null
+        }
+    } else {
+        New-Item -ItemType Directory -Force -Path $programs | Out-Null
+        $script:ProgramShortcutDirCreated = $true
+        $script:ProgramShortcutDir = $programs
+    }
     $shell = New-Object -ComObject WScript.Shell
     $shortcuts = @(
-        @{ Path = (Join-Path $programs 'Garden Agent.lnk'); Script = $startVbs; Text = 'Start the Garden Agent browser UI' },
-        @{ Path = (Join-Path $programs 'Stop Garden Agent.lnk'); Script = $stopVbs; Text = 'Stop the Garden Agent browser UI' },
         @{ Path = (Join-Path $desktop 'Garden Agent.lnk'); Script = $startVbs; Text = 'Start the Garden Agent browser UI' }
     )
+    if ($programs) {
+        $shortcuts += @(
+            @{ Path = (Join-Path $programs 'Garden Agent.lnk'); Script = $startVbs; Text = 'Start the Garden Agent browser UI' },
+            @{ Path = (Join-Path $programs 'Stop Garden Agent.lnk'); Script = $stopVbs; Text = 'Stop the Garden Agent browser UI' }
+        )
+    }
     foreach ($item in $shortcuts) {
-        if (Test-Path $item.Path) { Move-Item -Path $item.Path -Destination "$($item.Path).bak-$stamp-$([Guid]::NewGuid())" }
+        if ((Test-Path -LiteralPath $item.Path) -and -not (Test-ManifestOwnsPath $item.Path)) {
+            Write-Warning "Preserving the existing, unrecorded shortcut at $($item.Path)."
+            continue
+        }
         $link = $shell.CreateShortcut($item.Path)
         $link.TargetPath = $wscript
         $link.Arguments = "//B //Nologo `"$($item.Script)`""
@@ -333,6 +479,7 @@ CreateObject("WScript.Shell").Run """__PS__"" -NoProfile -ExecutionPolicy Bypass
         $link.WindowStyle = 7
         $link.Description = $item.Text
         $link.Save()
+        $script:WebShortcutFiles += $item.Path
     }
 }
 
@@ -370,8 +517,7 @@ function Invoke-SignIn([string]$python, [string]$pyz) {
     if ($login.ExitCode -ne 0) { throw 'garden login exited with an error' }
 }
 
-$manifest = $null
-$tar =Join-Path $env:SystemRoot 'System32\tar.exe'
+$tar = Join-Path $env:SystemRoot 'System32\tar.exe'
 if (-not (Test-Path $tar)) { $tar = 'tar' }
 
 try {
@@ -462,8 +608,17 @@ try {
     $bundle = Get-Artifact 'dsh-bundle-windows-x64.tar.gz'
     $dshFolder = Join-Path $gardenHome 'dsh'
     Start-Step 'Unpacking dsh...'
-    if (Test-Path $dshFolder) { Move-Item -Path $dshFolder -Destination "$dshFolder.bak-$stamp-$([Guid]::NewGuid())" }
+    if (Test-Path -LiteralPath $dshFolder) {
+        $existingDsh = Get-Item -LiteralPath $dshFolder -Force
+        if (($existingDsh.Attributes -band [IO.FileAttributes]::ReparsePoint) -or -not (Test-ManifestOwnsPath $dshFolder)) {
+            throw "Refusing to replace the existing unrecorded dsh folder at $dshFolder."
+        }
+        $dshBackup = "$dshFolder.bak-$stamp-$([Guid]::NewGuid())"
+        Move-Item -LiteralPath $dshFolder -Destination $dshBackup
+        Record-InstallArtifact $dshBackup 'tree' $gardenHome
+    }
     New-Item -ItemType Directory -Path $dshFolder | Out-Null
+    $script:DshFolderCreated = $true
     & $tar -xzf $bundle -C $dshFolder
     if ($LASTEXITCODE -ne 0) { throw 'dsh could not be unpacked from the portal''s bundle.' }
     Complete-Step
@@ -491,12 +646,14 @@ try {
     # leaves them in place, and the error names the one command to retry.
     try {
         Invoke-SignIn $python $pyz
+        $script:LoginSucceeded = $true
     } catch {
         throw "Sign-in did not finish ($($_.Exception.Message)). Everything else is installed. Run garden login to sign in."
     }
     # The patch names the portal's default model, which needs the sign-in, so garden writes it now.
     $patchWrite = Invoke-Program $launcher @('dsh-config')
     if ($patchWrite.Code -ne 0) { throw 'Writing the dsh patch failed. Run garden dsh-config for details.' }
+    $script:DshPatchWritten = $true
 
     # A smoke check: the signed-in person can list their tools.
     $tools = Invoke-Program $launcher @('tools', '--json')
@@ -520,6 +677,7 @@ try {
     if ($script:CurrentStep) { Write-Host "[$($script:StepNumber)/$($script:TotalSteps)] Failed: $($script:CurrentStep)" }
     throw
 } finally {
+    try { Write-InstallManifest } catch { Write-Warning "Could not update the Garden install manifest: $($_.Exception.Message)" }
     # Keep temporary downloads recoverable rather than permanently deleting them.
     if (Get-Command trash -ErrorAction SilentlyContinue) { & trash $tmp }
     $env:GARDEN_HOME = $savedGardenHome

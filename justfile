@@ -91,6 +91,18 @@ demo-web *args:
     GARDEN_DEMO_JUST_DOTENV_PATH="{{demo_just_dotenv_path}}" uv run --no-project --python 3.12 python scripts/demo.py --check-docker --web-only "$@"
     GARDEN_DEMO_JUST_DOTENV_PATH="{{demo_just_dotenv_path}}" uv run --project backend python scripts/demo.py --web-only "$@"
 
+# Stop this clone's demo processes and remove only its Compose containers, networks and volumes.
+demo-clean *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    uv run --no-project --python 3.12 python scripts/demo.py --clean "$@"
+
+# Revoke the Garden CLI login, then remove this clone's recorded Garden installation and demo artifacts.
+demo-uninstall *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    uv run --no-project --python 3.12 python scripts/demo.py --uninstall "$@"
+
 # Exercise both demo commands with fresh test databases, ports, environment files and homes.
 demo-e2e: up
     GARDEN_DEMO_E2E=1 uv run --project backend pytest scripts/tests/test_demo_e2e.py -q

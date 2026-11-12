@@ -27,10 +27,10 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import re
-import shutil
 import signal
 import socket
 import subprocess
@@ -56,6 +56,12 @@ ROOT = Path(__file__).resolve().parents[1]
 REPO = ROOT.parent
 OUT = ROOT / "dist" / "e2e"
 SERVE_OUT = ROOT / "dist" / "e2e-serve"
+MANIFEST_SPEC = importlib.util.spec_from_file_location(
+    "garden_install_manifest", REPO / "scripts" / "install_manifest.py"
+)
+assert MANIFEST_SPEC and MANIFEST_SPEC.loader
+MANIFEST = importlib.util.module_from_spec(MANIFEST_SPEC)
+MANIFEST_SPEC.loader.exec_module(MANIFEST)
 # The installer files serve mode checks through the web app, as a Windows laptop fetches them.
 WINDOWS_FILES = ("install.ps1", "dsh-bundle-windows-x64.tar.gz")
 API_PORT = 56000
@@ -565,7 +571,11 @@ def main(serve: bool = False) -> int:
         services.stop_all()
         upstream.shutdown()
         drop_database(database, run)
-        shutil.rmtree(work, ignore_errors=True)
+        try:
+            MANIFEST.trash_path(work)
+        except OSError as error:
+            run.say(f"Could not move temporary E2E work to Trash: {error}")
+            status = 1
         out.mkdir(parents=True, exist_ok=True)
         transcript = out / "transcript.md"
         transcript.write_text("\n".join(run.lines) + "\n", encoding="utf-8")
@@ -604,7 +614,10 @@ def _run(
     upstream_port = upstream.server_address[1]
     media = out / "media"
     if out.exists() and not serve:
-        shutil.rmtree(out)
+        try:
+            MANIFEST.trash_path(out)
+        except OSError as error:
+            raise StepFailed(f"Cannot move previous E2E output to Trash: {error}") from error
     media.mkdir(parents=True, exist_ok=True)
     downloads = work / "downloads"
     files_root = work / "files"

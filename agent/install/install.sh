@@ -29,6 +29,31 @@ bin_dir="${GARDEN_BIN_DIR:-$HOME/.local/bin}"
 garden_home="${GARDEN_HOME:-$HOME/.garden}"
 dsh_home="${GARDEN_DSH_HOME:-$HOME/.dsh}"
 stamp="$(date +%Y%m%d%H%M%S)"
+uv_version="0.13.1"
+manifest_path="$HOME/.local/share/garden/install-manifest.json"
+garden_home_existed=0
+bin_dir_existed=0
+dsh_home_existed=0
+python_home_existed=0
+uv_dir_existed=0
+pyz_existed=0
+config_existed=0
+garden_launcher_existed=0
+dsh_launcher_existed=0
+dsh_config_existed=0
+skills_existed=0
+login_succeeded=0
+[ -e "$garden_home" ] && garden_home_existed=1
+[ -e "$bin_dir" ] && bin_dir_existed=1
+[ -e "$dsh_home" ] && dsh_home_existed=1
+[ -e "$garden_home/python" ] && python_home_existed=1
+[ -e "$garden_home/tools/uv-$uv_version" ] && uv_dir_existed=1
+[ -e "$garden_home/garden.pyz" ] && pyz_existed=1
+[ -e "$garden_home/config.json" ] && config_existed=1
+[ -e "$bin_dir/garden" ] && garden_launcher_existed=1
+[ -e "$bin_dir/dsh" ] && dsh_launcher_existed=1
+[ -e "$garden_home/dsh-config.yml" ] && dsh_config_existed=1
+[ -e "$garden_home/skills" ] && skills_existed=1
 
 command -v curl >/dev/null 2>&1 || { echo "curl is needed. Install it, then run the installer again." >&2; exit 1; }
 
@@ -61,8 +86,107 @@ on_exit() {
     if [ "$code" -ne 0 ] && [ -n "$current_step" ]; then
         printf '[%s/%s] Failed: %s\n' "$step" "$total_steps" "$current_step" >&2
     fi
+    write_install_manifest || true
     cleanup
     exit "$code"
+}
+
+write_install_manifest() {
+    local interpreter="${python:-}"
+    if [ -z "$interpreter" ] || [ ! -x "$interpreter" ]; then
+        interpreter="$(command -v python3 || true)"
+    fi
+    [ -n "$interpreter" ] || return 0
+    local record_tree
+    record_tree() {
+        local path="$1" existed="$2" root="$3"
+        if [ "$existed" = 0 ] && [ -d "$path" ]; then
+            manifest_update artifact tree "$path" "$root"
+        fi
+    }
+    record_directory() {
+        local path="$1" existed="$2" root="$3"
+        if [ "$existed" = 0 ] && [ -d "$path" ]; then
+            manifest_update artifact directory "$path" "$root"
+        fi
+    }
+    record_file() {
+        local path="$1" existed="$2" root="$3"
+        if [ "$existed" = 0 ] && [ -f "$path" ]; then
+            manifest_update artifact file "$path" "$root"
+        fi
+    }
+    record_tree "$garden_home" "$garden_home_existed" "$(dirname "$garden_home")"
+    record_directory "$bin_dir" "$bin_dir_existed" "$(dirname "$bin_dir")"
+    record_file "$bin_dir/garden" "$garden_launcher_existed" "$bin_dir"
+    record_file "$bin_dir/dsh" "$dsh_launcher_existed" "$bin_dir"
+    record_tree "$dsh_home" "$dsh_home_existed" "$(dirname "$dsh_home")"
+    record_tree "$garden_home/python" "$python_home_existed" "$garden_home"
+    record_tree "$garden_home/tools/uv-$uv_version" "$uv_dir_existed" "$garden_home"
+    if [ -n "${node_tree:-}" ]; then
+        record_tree "$node_tree" "$node_tree_existed" "$garden_home/tools"
+    fi
+    if [ "$garden_home_existed" = 1 ]; then
+        record_file "$garden_home/garden.pyz" "$pyz_existed" "$garden_home"
+        record_file "$garden_home/config.json" "$config_existed" "$garden_home"
+        record_file "$garden_home/dsh-config.yml" "$dsh_config_existed" "$garden_home"
+        record_tree "$garden_home/skills" "$skills_existed" "$garden_home"
+        if [ -d "$garden_home/dsh" ] && [ "${dsh_replaced:-0}" = 1 ]; then
+            manifest_update artifact tree "$garden_home/dsh" "$garden_home"
+        fi
+        if [ "${dsh_patch_written:-0}" = 1 ]; then
+            manifest_update artifact file "$dsh_home/cordis.patch.yml" "$dsh_home"
+        fi
+    fi
+    if [ "$login_succeeded" = 1 ]; then
+        manifest_update login "$portal" "$bin_dir/garden" "$garden_home"
+    fi
+}
+
+manifest_update() {
+    "$interpreter" - "$manifest_path" "$@" <<'PY'
+import hashlib
+import json
+import os
+import sys
+import tempfile
+from pathlib import Path
+
+manifest_path = Path(sys.argv[1])
+action, *values = sys.argv[2:]
+manifest_path.parent.mkdir(parents=True, exist_ok=True)
+if manifest_path.exists():
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+else:
+    manifest = {"version": 1, "artifacts": [], "path_entries": [], "demo_projects": [], "docker_images": [], "logins": []}
+if action == "artifact":
+    kind, value, root = values
+    path = Path(value).absolute()
+    entry = {"path": str(path), "resolved_path": str(path.resolve(strict=False)), "root": str(Path(root).absolute().resolve(strict=False)), "kind": kind, "owner": "agent-installer"}
+    if kind == "file":
+        entry["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    found = next((item for item in manifest["artifacts"] if os.path.normcase(item["path"]) == os.path.normcase(str(path))), None)
+    if found and found.get("kind") == "tree":
+        entry["kind"] = "tree"
+        entry["root"] = found.get("root", entry["root"])
+    if found:
+        manifest["artifacts"][manifest["artifacts"].index(found)] = entry
+    else:
+        manifest["artifacts"].append(entry)
+elif action == "login":
+    portal, launcher, garden_home = values
+    found = next((item for item in manifest["logins"] if item["portal"] == portal), None)
+    entry = {"portal": portal, "launcher": launcher, "garden_home": garden_home}
+    if found:
+        manifest["logins"][manifest["logins"].index(found)] = entry
+    else:
+        manifest["logins"].append(entry)
+temporary = manifest_path.with_suffix(".tmp")
+temporary.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+os.chmod(temporary, 0o600)
+os.replace(temporary, manifest_path)
+os.chmod(manifest_path, 0o600)
+PY
 }
 
 format_size() {
@@ -93,7 +217,6 @@ trap on_exit EXIT
 
 # uv and the Python it installs are pinned here. Each uv release tarball is checked against the
 # SHA-256 that its release publishes, so a changed download is refused before anything runs.
-uv_version="0.13.1"
 python_version="3.12.15"
 uv_dir="$garden_home/tools/uv-$uv_version"
 uv="$uv_dir/uv"
@@ -166,6 +289,8 @@ if [ -z "${GARDEN_PYTHON:-}" ]; then
 fi
 # Keep Node under Garden's home, and prepend it in the launcher for future shells too.
 node_bin=""
+node_tree=""
+node_tree_existed=1
 if ! command -v node >/dev/null 2>&1 || ! node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 24 ? 0 : 1)' 2>/dev/null; then
     case "$(uname -s)/$(uname -m)" in
         Linux/x86_64) node_asset=node-v26.13.0-linux-x64; node_sha=5848553868b402d3fabb5b09270649977780a390f832155721025a08b5104455 ;;
@@ -175,6 +300,8 @@ if ! command -v node >/dev/null 2>&1 || ! node -e 'process.exit(Number(process.v
         *) echo "No pinned Node runtime for this platform." >&2; exit 1 ;;
     esac
     node_bin="$garden_home/tools/$node_asset/bin"
+    node_tree="$garden_home/tools/$node_asset"
+    [ -e "$node_tree" ] || node_tree_existed=0
     if [ ! -x "$node_bin/node" ]; then
         total_steps=$((total_steps + 2))
     fi
@@ -293,8 +420,37 @@ finish_step
 # fresh copy each time, so an older dsh never mixes with a newer one.
 fetch_artifact dsh-bundle.tar.gz
 begin_step "Unpacking dsh..."
-if [ -e "$garden_home/dsh" ]; then mv "$garden_home/dsh" "$garden_home/dsh.bak-$stamp-$$"; fi
+if [ -e "$garden_home/dsh" ]; then
+    if [ -L "$garden_home/dsh" ] || ! "$python" - "$manifest_path" "$garden_home/dsh" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")) if Path(sys.argv[1]).exists() else {}
+target = Path(os.path.normcase(os.path.abspath(sys.argv[2])))
+for item in manifest.get("artifacts", []):
+    recorded = Path(os.path.normcase(os.path.abspath(item["path"])))
+    if target == recorded:
+        raise SystemExit(0)
+    if item.get("kind") == "tree":
+        try:
+            target.relative_to(recorded)
+        except ValueError:
+            continue
+        raise SystemExit(0)
+raise SystemExit(1)
+PY
+    then
+        echo "Refusing to replace the existing unrecorded dsh folder at $garden_home/dsh." >&2
+        exit 1
+    fi
+    backup="$garden_home/dsh.bak-$stamp-$$"
+    mv "$garden_home/dsh" "$backup"
+    manifest_update artifact tree "$backup" "$garden_home"
+fi
 mkdir -p "$garden_home/dsh"
+dsh_replaced=1
 tar -xzf "$tmp/dsh-bundle.tar.gz" -C "$garden_home/dsh"
 finish_step
 
@@ -316,9 +472,11 @@ if ! sign_in; then
     echo "Sign-in did not finish. Everything else is installed. Run garden login to sign in." >&2
     exit 1
 fi
+login_succeeded=1
 
 # The patch names the portal's default model, which needs the sign-in, so garden writes it now.
 "$bin_dir/garden" dsh-config >/dev/null
+dsh_patch_written=1
 
 # A smoke check: the signed-in person can list their tools.
 tool_count="$("$bin_dir/garden" tools --json | "$python" -c 'import json,sys; print(len(json.load(sys.stdin)))')"

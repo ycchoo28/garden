@@ -5,9 +5,11 @@ from __future__ import annotations
 import argparse
 import contextlib
 import getpass
+import hashlib
 import json
 import os
 import platform
+import secrets
 import shutil
 import signal
 import socket
@@ -20,6 +22,37 @@ import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+
+try:
+    from install_manifest import (
+        apply_artifact_plan,
+        artifact_plan,
+        load_manifest,
+        manifest_path,
+        owns_artifact,
+        record_artifact,
+        record_demo_project,
+        record_docker_image,
+        record_login,
+        save_manifest,
+        trash_path,
+        without_owned_path_entries,
+    )
+except ModuleNotFoundError:
+    from scripts.install_manifest import (
+        apply_artifact_plan,
+        artifact_plan,
+        load_manifest,
+        manifest_path,
+        owns_artifact,
+        record_artifact,
+        record_demo_project,
+        record_docker_image,
+        record_login,
+        save_manifest,
+        trash_path,
+        without_owned_path_entries,
+    )
 
 ROOT = Path(__file__).resolve().parents[1]
 MODEL_KEYS = tuple(
@@ -68,6 +101,16 @@ def check_docker() -> None:
             )
         except (OSError, subprocess.SubprocessError):
             raise RuntimeError(f"{label} is unavailable or not running. {guidance}") from None
+
+
+def check_demo_port(port: int) -> None:
+    with socket.socket() as probe:
+        if os.name != "nt":
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            probe.bind(("127.0.0.1", port))
+        except OSError as error:
+            raise RuntimeError(f"Demo loopback port {port} is unavailable: {error}") from error
 
 
 def windows_batch_command(command: list[str]) -> list[str]:
@@ -146,6 +189,17 @@ def validate_model(env: dict[str, str]) -> bool:
         return bool(reply.get("choices"))
     except (OSError, ValueError, KeyError, TypeError):
         return False
+
+
+def demo_project_name(root: Path, home: Path | None = None) -> str:
+    scope = f"{root.resolve()}\0{(home or Path.home()).resolve()}"
+    digest = hashlib.sha256(scope.encode()).hexdigest()[:12]
+    return f"garden-demo-{digest}"
+
+
+def demo_image_reference(root: Path, home: Path | None = None) -> str:
+    scope = f"{root.resolve()}\0{(home or Path.home()).resolve()}"
+    return f"garden-demo-postgres:{hashlib.sha256(scope.encode()).hexdigest()[:12]}"
 
 
 class FakeModel(BaseHTTPRequestHandler):
@@ -240,18 +294,77 @@ class Demo:
         self.web_port = int(self.env.get("GARDEN_DEMO_WEB_PORT", "55173"))
         self.api = f"http://127.0.0.1:{self.api_port}"
         self.web = f"http://localhost:{self.web_port}"
+        self.manifest_file = manifest_path()
+        self.project = demo_project_name(ROOT, Path.home())
+        self.postgres_image = demo_image_reference(ROOT, Path.home())
         self.env["GARDEN_PUBLIC_URL"] = self.web
+        self.compose_postgres_port = int(self.env.get("GARDEN_DEMO_POSTGRES_PORT", "55433"))
+        self.compose_oidc_port = int(self.env.get("GARDEN_DEMO_OIDC_PORT", "55082"))
+        self.env["GARDEN_DEV_POSTGRES_PORT"] = str(self.compose_postgres_port)
+        self.env["GARDEN_DEV_OIDC_PORT"] = str(self.compose_oidc_port)
+        example = load_env(ROOT / ".env.example")
+        if self.env.get("GARDEN_DATABASE_URL") == example.get("GARDEN_DATABASE_URL"):
+            self.env["GARDEN_DATABASE_URL"] = self.env["GARDEN_DATABASE_URL"].replace(
+                ":55432/", f":{self.compose_postgres_port}/", 1
+            )
+        if self.env.get("GARDEN_OIDC_ISSUER") == example.get("GARDEN_OIDC_ISSUER"):
+            self.env["GARDEN_OIDC_ISSUER"] = self.env["GARDEN_OIDC_ISSUER"].replace(
+                ":55081/", f":{self.compose_oidc_port}/", 1
+            )
+        self.env["COMPOSE_PROJECT_NAME"] = self.project
         self.env.pop("VIRTUAL_ENV", None)
+        self.stop_event = threading.Event()
+        self.control_server = None
+        self.control_thread = None
+
+    def start_control(self):
+        token = secrets.token_urlsafe(24)
+        stop_event = self.stop_event
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(handler_self):
+                if handler_self.path != "/stop/" + token:
+                    handler_self.send_error(404)
+                    return
+                stop_event.set()
+                handler_self.send_response(202)
+                handler_self.end_headers()
+
+            def log_message(self, *_args):
+                pass
+
+        self.control_server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.control_thread = threading.Thread(
+            target=self.control_server.serve_forever, daemon=True
+        )
+        self.control_thread.start()
+        data = load_manifest(self.manifest_file)
+        record_demo_project(
+            data,
+            ROOT,
+            self.project,
+            image=self.postgres_image,
+            active=True,
+            control_url=f"http://127.0.0.1:{self.control_server.server_port}/stop/{token}",
+            env_file=str(self.env_file),
+        )
+        save_manifest(self.manifest_file, data)
+
+    def check_stop(self):
+        if self.stop_event.is_set():
+            raise KeyboardInterrupt
 
     def run(self, args, cwd=ROOT, env=None, **kwargs):
         # Resolve .cmd commands explicitly on Windows (npm, bun, and installed launchers).
-        return subprocess.run(
+        result = subprocess.run(
             command_for(args, path=(env or self.env).get("PATH")),
             cwd=cwd,
             env=env or self.env,
             check=True,
             **kwargs,
         )
+        self.check_stop()
+        return result
 
     def start(self, args, cwd=ROOT, env=None):
         effective = env or self.env
@@ -286,23 +399,45 @@ class Demo:
             raise RuntimeError("A demo service stopped. See its output above.")
 
     def setup(self):
-        for port in (self.api_port, self.web_port):
-            with socket.socket() as probe:
-                probe.bind(("127.0.0.1", port))
+        for port in (
+            self.api_port,
+            self.web_port,
+            self.compose_postgres_port,
+            self.compose_oidc_port,
+        ):
+            check_demo_port(port)
         for folder in ("backend", "agent"):
-            if not (
-                ROOT
-                / folder
-                / ".venv"
-                / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-            ).exists():
+            venv_dir = ROOT / folder / ".venv"
+            venv_dir_existed = venv_dir.exists()
+            venv_python = venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+            if not venv_python.exists():
                 self.run(["uv", "sync", "--frozen"], ROOT / folder)
-        if not (ROOT / "frontend/node_modules").exists():
+                if not venv_dir_existed:
+                    manifest = load_manifest(self.manifest_file)
+                    record_artifact(
+                        manifest,
+                        venv_dir,
+                        owner="demo-dependencies",
+                        kind="tree",
+                        root=venv_dir.parent,
+                    )
+                    save_manifest(self.manifest_file, manifest)
+        frontend_modules = ROOT / "frontend/node_modules"
+        if not frontend_modules.exists():
             command = ["bun", "install", "--frozen-lockfile"]
             if os.name == "nt":
                 # Bun 1.4.3's default Windows link backend produced InvalidBinContent shims.
                 command.append("--backend=copyfile")
             self.run(command, ROOT / "frontend")
+            manifest = load_manifest(self.manifest_file)
+            record_artifact(
+                manifest,
+                frontend_modules,
+                owner="demo-dependencies",
+                kind="tree",
+                root=frontend_modules.parent,
+            )
+            save_manifest(self.manifest_file, manifest)
 
     def fake_model(self):
         port = int(self.env.get("GARDEN_DEMO_MODEL_PORT", "55085"))
@@ -359,7 +494,13 @@ class Demo:
                     or models.split(",")[0].strip()
                 )
                 self.env.update(
-                    dict(zip(MODEL_KEYS, (url.rstrip("/"), key, models, default), strict=True))
+                    dict(
+                        zip(
+                            MODEL_KEYS,
+                            (url.rstrip("/"), key, models, default),
+                            strict=True,
+                        )
+                    )
                 )
                 self.env[FAKE_FLAG] = "0"
                 if validate_model(self.env):
@@ -416,8 +557,18 @@ class Demo:
         destination = Path(
             self.env.get("GARDEN_AGENT_DOWNLOADS_DIR", str(ROOT / "backend/var/agent-downloads"))
         ).resolve()
+        destination_existed = destination.exists()
         destination.mkdir(parents=True, exist_ok=True)
         self.env["GARDEN_AGENT_DOWNLOADS_DIR"] = str(destination)
+        manifest = load_manifest(self.manifest_file)
+        if not destination_existed:
+            record_artifact(
+                manifest,
+                destination,
+                owner="demo-publish",
+                kind="tree",
+                root=destination.parent,
+            )
         for name in (
             "garden.pyz",
             "dsh-bundle.tar.gz",
@@ -426,16 +577,71 @@ class Demo:
             # Windows serves its host bundle under its own name.
             source = ROOT / "agent/dist" / name
             if source.exists():
-                shutil.copy2(source, destination / name)
+                target = destination / name
+                created = not target.exists()
+                shutil.copy2(source, target)
+                if destination_existed and (created or owns_artifact(manifest, target)):
+                    record_artifact(
+                        manifest,
+                        target,
+                        owner="demo-publish",
+                        kind="file",
+                        root=destination,
+                    )
         for name in ("install.sh", "install.ps1"):
-            shutil.copy2(ROOT / "agent/install" / name, destination / name)
-        shutil.copy2(ROOT / "agent/install/dsh/cordis.patch.yml", destination / "dsh-config.yml")
+            target = destination / name
+            created = not target.exists()
+            shutil.copy2(ROOT / "agent/install" / name, target)
+            if destination_existed and (created or owns_artifact(manifest, target)):
+                record_artifact(
+                    manifest,
+                    target,
+                    owner="demo-publish",
+                    kind="file",
+                    root=destination,
+                )
+        config_target = destination / "dsh-config.yml"
+        config_created = not config_target.exists()
+        shutil.copy2(ROOT / "agent/install/dsh/cordis.patch.yml", config_target)
+        if destination_existed and (config_created or owns_artifact(manifest, config_target)):
+            record_artifact(
+                manifest,
+                config_target,
+                owner="demo-publish",
+                kind="file",
+                root=destination,
+            )
         commit = self.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True).stdout
-        (destination / "build-commit").write_text(commit)
+        commit_file = destination / "build-commit"
+        commit_created = not commit_file.exists()
+        commit_file.write_text(commit)
+        if destination_existed and (commit_created or owns_artifact(manifest, commit_file)):
+            record_artifact(
+                manifest,
+                commit_file,
+                owner="demo-publish",
+                kind="file",
+                root=destination,
+            )
+        save_manifest(self.manifest_file, manifest)
 
     def stack(self):
         # Do not execute shell-only Just recipes: this path also runs natively on Windows.
-        postgres_image = self.env.get("GARDEN_DEV_POSTGRES_IMAGE") or "garden-postgres:local"
+        postgres_image = self.postgres_image
+        manifest = load_manifest(self.manifest_file)
+        existing = subprocess.run(
+            command_for(["docker", "image", "inspect", "--format", "{{.Id}}", postgres_image]),
+            cwd=ROOT,
+            env=self.env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if existing.returncode == 0 and not any(
+            image.get("reference") == postgres_image and image.get("id") == existing.stdout.strip()
+            for image in manifest["docker_images"]
+        ):
+            raise RuntimeError(f"Refusing to replace the unrecorded Docker image {postgres_image}")
         pins = dict(
             line.split("=", 1)
             for line in (ROOT / "infra/postgres/versions.env").read_text().splitlines()
@@ -457,7 +663,34 @@ class Demo:
             ]
         )
         self.env["GARDEN_DEV_POSTGRES_IMAGE"] = postgres_image
-        self.run(["docker", "compose", "-f", "dev/compose.yaml", "up", "-d", "--wait"])
+        image = self.run(
+            ["docker", "image", "inspect", "--format", "{{.Id}}", postgres_image],
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        record_docker_image(manifest, postgres_image, image)
+        record_demo_project(
+            manifest,
+            ROOT,
+            self.project,
+            image=postgres_image,
+            active=True,
+            env_file=str(self.env_file),
+        )
+        save_manifest(self.manifest_file, manifest)
+        self.run(
+            [
+                "docker",
+                "compose",
+                "--project-name",
+                self.project,
+                "-f",
+                "dev/compose.yaml",
+                "up",
+                "-d",
+                "--wait",
+            ]
+        )
         self.run(["uv", "run", "python", "-m", "app.migrate"], ROOT / "backend")
         real = self.env.get("GARDEN_EMBEDDING_URL", "http://127.0.0.1:55083")
         try:
@@ -591,6 +824,14 @@ class Demo:
         if process.returncode:
             raise RuntimeError("Installer failed")
         bin_dir = Path(env.get("GARDEN_BIN_DIR", str(Path.home() / ".local/bin")))
+        manifest = load_manifest(self.manifest_file)
+        record_login(
+            manifest,
+            self.api,
+            str(bin_dir / ("garden.cmd" if os.name == "nt" else "garden")),
+            env.get("GARDEN_HOME", str(Path.home() / ".garden")),
+        )
+        save_manifest(self.manifest_file, manifest)
         garden = bin_dir / ("garden.cmd" if os.name == "nt" else "garden")
         dsh = bin_dir / ("dsh.cmd" if os.name == "nt" else "dsh")
         # The Windows installer persists its Node path for subsequent processes.
@@ -647,13 +888,475 @@ class Demo:
         for server in self.servers:
             server.shutdown()
             server.server_close()
+        if self.control_server:
+            self.control_server.shutdown()
+            self.control_server.server_close()
+            if self.control_thread:
+                self.control_thread.join(timeout=5)
+            manifest = load_manifest(self.manifest_file)
+            for project in manifest["demo_projects"]:
+                if project.get("root") == str(ROOT.resolve()):
+                    project["active"] = False
+                    project.pop("control_url", None)
+            save_manifest(self.manifest_file, manifest)
         # Keep no login links or screenshots after the run; prefer the user's recoverable Trash.
         if shutil.which("trash"):
             subprocess.run(["trash", str(self.work)], check=False)
 
 
+def demo_projects_for(data: dict, root: Path = ROOT) -> list[dict]:
+    resolved = str(root.resolve())
+    return [project for project in data["demo_projects"] if project.get("root") == resolved]
+
+
+def cleanup_artifacts(data: dict, root: Path = ROOT) -> tuple[dict, list[dict]]:
+    selected = []
+    retained = []
+    for entry in data["artifacts"]:
+        owner = entry.get("owner")
+        path = Path(entry["path"])
+        if owner in {"bootstrap", "agent-installer"}:
+            selected.append(entry)
+            continue
+        if owner in {"demo-dependencies", "demo-publish"}:
+            try:
+                path.resolve(strict=False).relative_to(root.resolve())
+            except ValueError:
+                retained.append(entry)
+            else:
+                selected.append(entry)
+            continue
+        retained.append(entry)
+    scoped = {**data, "artifacts": selected}
+    return scoped, artifact_plan(scoped)
+
+
+def cleanup_preview(
+    data: dict,
+    mode: str,
+    root: Path = ROOT,
+    *,
+    remove_env: bool = False,
+    env_file: Path | None = None,
+) -> list[str]:
+    lines = []
+    projects = demo_projects_for(data, root)
+    for project in projects:
+        lines.append(f"Stop demo runner for Compose project {project['name']}")
+        lines.append(f"Compose down --volumes for project {project['name']}")
+    if mode == "clean":
+        if not projects:
+            lines.append("No Garden demo project is recorded for this clone")
+        lines.append("Keep Garden tools, installs, CLI login, PATH entries and .env")
+        return lines
+
+    for login in data["logins"]:
+        lines.append(
+            f"garden logout at {login['portal']} (remote revoke, then local keyring removal)"
+        )
+    if not data["logins"]:
+        lines.append("No Garden CLI login is recorded")
+    project_images = {project.get("image") for project in projects if project.get("image")}
+    for image in data["docker_images"]:
+        if image.get("reference") in project_images:
+            lines.append(f"Remove Garden image {image['reference']} ({image['id']}) if unchanged")
+    _scoped, plan = cleanup_artifacts(data, root)
+    for item in plan:
+        if item["action"] == "remove":
+            if item["kind"] == "directory":
+                lines.append(f"Remove if empty: {item['path']}")
+            else:
+                lines.append(f"Move to Trash: {item['path']}")
+        elif item["action"] == "missing":
+            lines.append(f"Already absent: {item['path']}")
+        else:
+            lines.append(f"Preserve {item['path']}: {item['reason']}")
+    for entry in data["path_entries"]:
+        lines.append(f"Remove Garden-added user PATH entry: {entry['value']}")
+    if env_file and env_file.exists():
+        lines.append(
+            f"Move {env_file} to Trash after separate confirmation"
+            if remove_env
+            else f"Keep {env_file} unless separately confirmed"
+        )
+    if not lines:
+        lines.append("Nothing remains to uninstall")
+    return lines
+
+
+def cleanup_has_work(data: dict, mode: str, root: Path = ROOT) -> bool:
+    if demo_projects_for(data, root):
+        return True
+    if mode == "clean":
+        return False
+    _scoped, plan = cleanup_artifacts(data, root)
+    project_images = {project.get("image") for project in demo_projects_for(data, root)}
+    return bool(
+        data["logins"]
+        or any(image.get("reference") in project_images for image in data["docker_images"])
+        or data["path_entries"]
+        or any(item["action"] not in {"missing"} for item in plan)
+    )
+
+
+class DemoCleanup:
+    def __init__(self, args, mode: str):
+        self.args = args
+        self.mode = mode
+        self.manifest_file = manifest_path()
+        self.data = load_manifest(self.manifest_file)
+        self.projects = demo_projects_for(self.data)
+        self.failed = False
+
+    def confirm(self, preview: list[str]) -> bool:
+        print("Garden demo cleanup preview:", flush=True)
+        for line in preview:
+            print(f"  {line}", flush=True)
+        if self.args.dry_run or not cleanup_has_work(self.data, self.mode):
+            return True
+        if self.args.yes:
+            return True
+        if not sys.stdin.isatty():
+            raise RuntimeError("Cleanup needs confirmation. Re-run with --yes or --dry-run.")
+        return input("Proceed with cleanup? [y/N] ").strip().lower() in {"y", "yes"}
+
+    def stop_runner(self, project: dict):
+        url = project.get("control_url")
+        if not project.get("active") or not url:
+            return True
+        try:
+            request = urllib.request.Request(url, data=b"", method="POST")
+            with urllib.request.urlopen(request, timeout=3) as response:
+                if response.status != 202:
+                    raise RuntimeError(f"demo runner returned HTTP {response.status}")
+        except (OSError, urllib.error.URLError, RuntimeError):
+            print(
+                f"Warning: the demo runner for {project['name']} did not respond.",
+                file=sys.stderr,
+            )
+            return False
+        for _ in range(100):
+            try:
+                request = urllib.request.Request(url, data=b"", method="POST")
+                with urllib.request.urlopen(request, timeout=0.5):
+                    pass
+            except OSError:
+                return True
+            time.sleep(0.2)
+        else:
+            print(
+                f"Warning: the demo runner for {project['name']} did not stop in time.",
+                file=sys.stderr,
+            )
+            return False
+        return True
+
+    def compose_down(self, project: dict) -> bool:
+        compose = Path(project.get("root", ROOT)) / "dev" / "compose.yaml"
+        if not compose.exists():
+            print(
+                f"Warning: cannot find {compose}; project {project['name']} was kept "
+                "in the manifest.",
+                file=sys.stderr,
+            )
+            return False
+        env = os.environ.copy()
+        env["COMPOSE_PROJECT_NAME"] = project["name"]
+        result = subprocess.run(
+            command_for(
+                [
+                    "docker",
+                    "compose",
+                    "--project-name",
+                    project["name"],
+                    "-f",
+                    str(compose),
+                    "down",
+                    "--volumes",
+                    "--remove-orphans",
+                ],
+                path=env.get("PATH"),
+            ),
+            cwd=compose.parent.parent,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode:
+            print(
+                f"Warning: Compose cleanup for {project['name']} failed: "
+                f"{result.stderr.strip() or result.stdout.strip()}",
+                file=sys.stderr,
+            )
+            return False
+        return True
+
+    def logout(self):
+        for login in list(self.data["logins"]):
+            launcher = Path(login["launcher"])
+            if not launcher.exists():
+                print(
+                    f"Warning: cannot revoke {login['portal']} because {launcher} is missing; "
+                    "the local keyring entry may remain.",
+                    file=sys.stderr,
+                )
+                self.failed = True
+                continue
+            env = os.environ.copy()
+            env["GARDEN_API_URL"] = login["portal"]
+            if login.get("garden_home"):
+                env["GARDEN_HOME"] = login["garden_home"]
+            try:
+                result = subprocess.run(
+                    command_for([str(launcher), "logout", "--json"], path=env.get("PATH")),
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    check=False,
+                )
+            except (OSError, subprocess.SubprocessError) as error:
+                print(
+                    f"Warning: garden logout failed for {login['portal']}: {error}",
+                    file=sys.stderr,
+                )
+                self.failed = True
+                continue
+            warning = next(
+                (line for line in result.stderr.splitlines() if "portal did not confirm" in line),
+                None,
+            )
+            if result.returncode:
+                print(
+                    f"Warning: garden logout failed for {login['portal']}: "
+                    f"{result.stderr.strip() or result.stdout.strip()}",
+                    file=sys.stderr,
+                )
+                self.failed = True
+                continue
+            if warning:
+                print(f"Warning: {warning}", file=sys.stderr)
+                print(
+                    "The portal login may still be active. Revoke it in the portal's "
+                    "CLI logins page.",
+                    file=sys.stderr,
+                )
+            else:
+                print(f"Signed out of {login['portal']}.", flush=True)
+            self.data["logins"].remove(login)
+
+    def remove_images(self, references: set[str]):
+        selected = [
+            image for image in self.data["docker_images"] if image.get("reference") in references
+        ]
+        if not selected:
+            return
+        available = subprocess.run(
+            command_for(["docker", "info"]), capture_output=True, text=True, check=False
+        )
+        if available.returncode:
+            print(
+                f"Warning: Docker is unavailable; recorded demo images were kept: "
+                f"{available.stderr.strip() or available.stdout.strip()}",
+                file=sys.stderr,
+            )
+            self.failed = True
+            return
+        retained = []
+        for image in self.data["docker_images"]:
+            reference = image.get("reference")
+            image_id = image.get("id")
+            if reference not in references:
+                retained.append(image)
+                continue
+            inspect = subprocess.run(
+                command_for(["docker", "image", "inspect", "--format", "{{.Id}}", reference]),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            current_id = inspect.stdout.strip() if inspect.returncode == 0 else ""
+            if current_id == image_id:
+                result = subprocess.run(
+                    command_for(["docker", "image", "rm", reference]),
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if result.returncode:
+                    print(
+                        f"Warning: could not remove {reference}: {result.stderr.strip()}",
+                        file=sys.stderr,
+                    )
+                    retained.append(image)
+                    self.failed = True
+                continue
+            inspect_id = subprocess.run(
+                command_for(
+                    [
+                        "docker",
+                        "image",
+                        "inspect",
+                        "--format",
+                        "{{json .RepoTags}}",
+                        image_id,
+                    ]
+                ),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if inspect_id.returncode:
+                continue
+            try:
+                tags = json.loads(inspect_id.stdout)
+            except ValueError:
+                tags = ["unknown"]
+            if not tags:
+                result = subprocess.run(
+                    command_for(["docker", "image", "rm", image_id]),
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if result.returncode:
+                    print(
+                        f"Warning: could not remove Garden image {image_id}: "
+                        f"{result.stderr.strip()}",
+                        file=sys.stderr,
+                    )
+                    retained.append(image)
+                    self.failed = True
+            elif current_id:
+                print(
+                    f"Preserving {reference}; it now points to a different image.",
+                    file=sys.stderr,
+                )
+            else:
+                print(
+                    f"Preserving Garden image {image_id}; it has another image tag: "
+                    f"{', '.join(tags)}.",
+                    file=sys.stderr,
+                )
+        self.data["docker_images"] = retained
+
+    def restore_user_path(self):
+        if os.name != "nt":
+            return
+        entries = [
+            item for item in self.data["path_entries"] if item.get("scope") == "windows-user"
+        ]
+        if not entries:
+            return
+        import winreg
+
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER, "Environment", 0, winreg.KEY_ALL_ACCESS
+        ) as key:
+            try:
+                current, value_type = winreg.QueryValueEx(key, "Path")
+            except FileNotFoundError:
+                current, value_type = "", winreg.REG_EXPAND_SZ
+            updated, removed = without_owned_path_entries(
+                self.data, current, scope="windows-user", separator=";"
+            )
+            if not removed:
+                return
+            if updated:
+                winreg.SetValueEx(key, "Path", 0, value_type, updated)
+            elif any(entry.get("created_value") for entry in entries):
+                with contextlib.suppress(FileNotFoundError):
+                    winreg.DeleteValue(key, "Path")
+            else:
+                winreg.SetValueEx(key, "Path", 0, value_type, "")
+            self.data["path_entries"] = [
+                entry for entry in self.data["path_entries"] if entry not in entries
+            ]
+
+    def run(self):
+        preview = cleanup_preview(
+            self.data,
+            self.mode,
+            remove_env=self.args.remove_env,
+            env_file=Path(self.args.env_file).resolve(),
+        )
+        if not self.confirm(preview):
+            print("Cleanup cancelled.", flush=True)
+            return 0
+        if self.args.dry_run:
+            return 0
+
+        if self.mode == "uninstall":
+            self.logout()
+        stopped_projects = []
+        for project in self.projects:
+            if not self.stop_runner(project):
+                # The runner may already be gone; still tear down whatever it left in Compose.
+                self.failed = True
+            if self.compose_down(project):
+                project["active"] = False
+                project.pop("control_url", None)
+                stopped_projects.append(project)
+            else:
+                self.failed = True
+        if self.mode == "uninstall":
+            project_images = {
+                project.get("image") for project in stopped_projects if project.get("image")
+            }
+            self.remove_images(project_images)
+            self.restore_user_path()
+            scoped, plan = cleanup_artifacts(self.data)
+            updated, warnings = apply_artifact_plan(scoped, plan)
+            for warning in warnings:
+                print(f"Warning: {warning}", file=sys.stderr)
+            if warnings:
+                self.failed = True
+            self.data["artifacts"] = updated["artifacts"] + [
+                entry for entry in self.data["artifacts"] if entry not in scoped["artifacts"]
+            ]
+            self.data["demo_projects"] = [
+                project for project in self.data["demo_projects"] if project not in stopped_projects
+            ]
+            env_file = Path(self.args.env_file).resolve()
+            if env_file.exists() and (
+                self.args.remove_env
+                or (
+                    sys.stdin.isatty()
+                    and input(f"Also move {env_file} to Trash? [y/N] ").strip().lower()
+                    in {"y", "yes"}
+                )
+            ):
+                trash_path(env_file)
+        save_manifest(self.manifest_file, self.data)
+        if (
+            not self.data["artifacts"]
+            and not self.data["path_entries"]
+            and not self.data["logins"]
+            and not self.data["demo_projects"]
+            and not self.data["docker_images"]
+        ):
+            try:
+                trash_path(self.manifest_file)
+                self.manifest_file.parent.rmdir()
+            except (OSError, FileNotFoundError):
+                pass
+        return 1 if self.failed else 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    cleanup_modes = parser.add_mutually_exclusive_group()
+    cleanup_modes.add_argument(
+        "--clean",
+        action="store_true",
+        help="Stop the demo and remove its Compose volumes",
+    )
+    cleanup_modes.add_argument(
+        "--uninstall",
+        action="store_true",
+        help="Stop the demo and remove recorded Garden installs",
+    )
     parser.add_argument("--web-only", action="store_true")
     parser.add_argument(
         "--fake-model",
@@ -680,7 +1383,30 @@ def main():
         action="store_true",
         help="Check Docker CLI, Compose and daemon availability, then exit",
     )
+    parser.add_argument("--yes", action="store_true", help="Confirm the cleanup preview")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Show cleanup without changing anything"
+    )
+    parser.add_argument(
+        "--remove-env",
+        action="store_true",
+        help="Separately opt in to moving the selected .env file to Trash during uninstall",
+    )
     args = parser.parse_args()
+    if args.clean or args.uninstall:
+        if (
+            args.web_only
+            or args.fake_model
+            or args.non_interactive
+            or args.persona
+            or args.check_model
+            or args.check_docker
+            or args.smoke
+        ):
+            parser.error("Cleanup options cannot be combined with demo startup options")
+        return DemoCleanup(args, "uninstall" if args.uninstall else "clean").run()
+    if args.yes or args.dry_run or args.remove_env:
+        parser.error("--yes, --dry-run and --remove-env require --clean or --uninstall")
     if args.check_docker:
         if not args.check_model:
             check_docker()
@@ -706,6 +1432,7 @@ def main():
             demo.configure_model()
         if args.check_model:
             return 0
+        demo.start_control()
         demo.setup()
         if not args.web_only:
             demo.publish()
@@ -714,9 +1441,8 @@ def main():
             demo.install()
         print("Demo ready. Press Ctrl+C to stop.", flush=True)
         if not args.smoke:
-            while True:
+            while not demo.stop_event.wait(0.5):
                 demo.check_processes()
-                time.sleep(1)
         return 0
     except KeyboardInterrupt:
         return 0

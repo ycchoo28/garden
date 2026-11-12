@@ -3,7 +3,16 @@
 garden_bootstrap() (
     set -eu
     export PATH="$HOME/.local/bin:$PATH"
+    if [ ! -d "$HOME/.local/bin" ]; then export GARDEN_BOOTSTRAP_BIN_CREATED=1; fi
+    mkdir -p "$HOME/.local/bin"
+    local garden_tools="$HOME/.local/share/garden-tools"
+    if [ ! -d "$garden_tools" ]; then export GARDEN_BOOTSTRAP_TOOLS_CREATED=1; fi
+    export UV_PYTHON_INSTALL_DIR="$garden_tools/python"
     if ! command -v uv >/dev/null 2>&1; then
+        if [ -e "$HOME/.local/bin/uv" ]; then
+            echo "Refusing to replace the unmanaged bootstrap file $HOME/.local/bin/uv" >&2
+            exit 1
+        fi
         case "$(uname -s)/$(uname -m)" in
             Linux/x86_64) target=x86_64-unknown-linux-gnu; sha=eadd9d27c134ab5ac1ffd4473b97a741407f3ea238288f03121fc4deddf90220 ;;
             Linux/aarch64|Linux/arm64) target=aarch64-unknown-linux-gnu; sha=9041c73c99fdc5892cf128140beb354eca9231d502068cc36e6cb53a8e59ad14 ;;
@@ -20,8 +29,8 @@ garden_bootstrap() (
         fi
         [ "$actual" = "$sha" ] || { echo 'uv checksum mismatch.' >&2; exit 1; }
         tar -xzf "$staging/uv.tar.gz" -C "$staging"
-        mkdir -p "$HOME/.local/bin"
-        cp "$staging/uv-$target/uv" "$HOME/.local/bin/uv"
+        install -m 0755 "$staging/uv-$target/uv" "$HOME/.local/bin/uv"
+        export GARDEN_BOOTSTRAP_UV_CREATED=1
     fi
     uv run --no-project --python 3.12 "$(dirname "${BASH_SOURCE[0]}")/bootstrap.py"
 )
