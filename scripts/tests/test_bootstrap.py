@@ -131,3 +131,16 @@ def test_bootstrap_closing_message_has_platform_specific_docker_guidance(system,
         assert "Docker CLI installed only inside WSL is not detected" in BOOTSTRAP.docker_guidance(
             system
         )
+
+
+def test_bootstrap_ps1_requires_complete_portable_git_marker():
+    script = (ROOT / "scripts/bootstrap.ps1").read_text()
+    unconditional_check = (
+        'USERPROFILE\\.local\\share\\garden-tools\\git\\bin\\bash.exe") | '
+        "Where-Object { Test-Path $_ }"
+    )
+    assert unconditional_check not in script
+    assert "$gitComplete = Join-Path $gitHome '.complete'" in script
+    assert "$gitCompleteInManifest" in script
+    assert "Set-Content -LiteralPath $gitComplete -Value 'complete'" in script
+    assert "Record-Artifact $gitComplete 'file' $gitHome" in script
