@@ -1201,16 +1201,6 @@ class DemoCleanup:
                     f"Warning: garden logout failed for {login['portal']}: {error}",
                     file=sys.stderr,
                 )
-                if force:
-                    print(
-                        f"Warning: the portal did not confirm sign-out for {login['portal']}. "
-                        "The local login record was removed (--force). "
-                        "The server-side login remains valid on the portal until it expires or is "
-                        "revoked.",
-                        file=sys.stderr,
-                    )
-                    self.data["logins"].remove(login)
-                    continue
                 print(
                     f"The portal login for {login['portal']} could not be revoked and remains "
                     "valid until it expires or is revoked in the portal.",
@@ -1218,25 +1208,34 @@ class DemoCleanup:
                 )
                 self.failed = True
                 continue
+
             warning = next(
                 (line for line in result.stderr.splitlines() if "portal did not confirm" in line),
                 None,
             )
+            forced_drop = (
+                result.returncode == 0 and "local login was dropped (--force)" in result.stderr
+            )
+            if forced_drop:
+                message = warning or result.stderr.strip()
+                if message.lower().startswith("warning: "):
+                    message = message[9:].strip()
+                print(f"Warning: {message}", file=sys.stderr)
+                print(
+                    f"Warning: the portal did not confirm sign-out for {login['portal']}. "
+                    "The local login record was removed (--force). "
+                    "The server-side login remains valid on the portal until it expires or is "
+                    "revoked.",
+                    file=sys.stderr,
+                )
+                self.data["logins"].remove(login)
+                continue
+
             if result.returncode or warning:
                 message = warning or result.stderr.strip() or result.stdout.strip()
                 if message.lower().startswith("warning: "):
                     message = message[9:].strip()
                 print(f"Warning: {message}", file=sys.stderr)
-                if force:
-                    print(
-                        f"Warning: the portal did not confirm sign-out for {login['portal']}. "
-                        "The local login record was removed (--force). "
-                        "The server-side login remains valid on the portal until it expires or is "
-                        "revoked.",
-                        file=sys.stderr,
-                    )
-                    self.data["logins"].remove(login)
-                    continue
                 print(
                     f"The portal login for {login['portal']} could not be revoked and remains "
                     "valid until it expires or is revoked in the portal.",

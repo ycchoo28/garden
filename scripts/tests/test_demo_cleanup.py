@@ -188,7 +188,10 @@ def test_force_removes_record_when_portal_unreachable(
             args=[str(launcher), "logout", "--force"],
             returncode=0,
             stdout='{"signed_out": true, "unconfirmed": true}\n',
-            stderr="warning: the portal did not confirm the sign-out (unreachable).\n",
+            stderr=(
+                "warning: the portal did not confirm the sign-out (unreachable). "
+                "The local login was dropped (--force).\n"
+            ),
         ),
     )
 
@@ -202,6 +205,109 @@ def test_force_removes_record_when_portal_unreachable(
     assert "The local login record was removed (--force)." in err
     assert (
         "The server-side login remains valid on the portal until it expires or is revoked." in err
+    )
+
+
+def test_force_keeps_record_on_nonzero_cli_exit(tmp_path: Path, monkeypatch, capsys) -> None:
+    launcher = tmp_path / "garden"
+    launcher.write_text("Garden launcher")
+    cleanup = object.__new__(DEMO.DemoCleanup)
+    cleanup.args = argparse.Namespace(force=True)
+    cleanup.data = {
+        "logins": [
+            {
+                "portal": "http://127.0.0.1:55000",
+                "launcher": str(launcher),
+                "garden_home": str(tmp_path / ".garden"),
+            }
+        ]
+    }
+    cleanup.failed = False
+    monkeypatch.setattr(
+        DEMO.subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(
+            args=[str(launcher), "logout", "--force"],
+            returncode=2,
+            stdout="",
+            stderr=(
+                "usage: garden logout [-h] [--json]\n"
+                "garden logout: error: unrecognized arguments: --force\n"
+            ),
+        ),
+    )
+
+    cleanup.logout()
+
+    assert cleanup.failed is True
+    assert len(cleanup.data["logins"]) == 1
+    err = capsys.readouterr().err
+    assert (
+        "could not be revoked and remains valid until it expires or is revoked in the portal" in err
+    )
+
+
+def test_force_keeps_record_on_subprocess_timeout(tmp_path: Path, monkeypatch, capsys) -> None:
+    launcher = tmp_path / "garden"
+    launcher.write_text("Garden launcher")
+    cleanup = object.__new__(DEMO.DemoCleanup)
+    cleanup.args = argparse.Namespace(force=True)
+    cleanup.data = {
+        "logins": [
+            {
+                "portal": "http://127.0.0.1:55000",
+                "launcher": str(launcher),
+                "garden_home": str(tmp_path / ".garden"),
+            }
+        ]
+    }
+    cleanup.failed = False
+
+    def timeout_run(*_args, **_kwargs):
+        raise subprocess.TimeoutExpired(cmd=[str(launcher), "logout", "--force"], timeout=30)
+
+    monkeypatch.setattr(DEMO.subprocess, "run", timeout_run)
+
+    cleanup.logout()
+
+    assert cleanup.failed is True
+    assert len(cleanup.data["logins"]) == 1
+    err = capsys.readouterr().err
+    assert "garden logout failed" in err
+    assert (
+        "could not be revoked and remains valid until it expires or is revoked in the portal" in err
+    )
+
+
+def test_force_keeps_record_on_os_error(tmp_path: Path, monkeypatch, capsys) -> None:
+    launcher = tmp_path / "garden"
+    launcher.write_text("Garden launcher")
+    cleanup = object.__new__(DEMO.DemoCleanup)
+    cleanup.args = argparse.Namespace(force=True)
+    cleanup.data = {
+        "logins": [
+            {
+                "portal": "http://127.0.0.1:55000",
+                "launcher": str(launcher),
+                "garden_home": str(tmp_path / ".garden"),
+            }
+        ]
+    }
+    cleanup.failed = False
+
+    def error_run(*_args, **_kwargs):
+        raise OSError("Executable file not found")
+
+    monkeypatch.setattr(DEMO.subprocess, "run", error_run)
+
+    cleanup.logout()
+
+    assert cleanup.failed is True
+    assert len(cleanup.data["logins"]) == 1
+    err = capsys.readouterr().err
+    assert "garden logout failed" in err
+    assert (
+        "could not be revoked and remains valid until it expires or is revoked in the portal" in err
     )
 
 
