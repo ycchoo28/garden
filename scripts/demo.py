@@ -990,6 +990,10 @@ def cleanup_preview(
         if not projects:
             lines.append("No Garden demo project is recorded for this clone")
         lines.append("Keep Garden tools, installs, CLI login, PATH entries and .env")
+        if data.get("logins"):
+            lines.append(
+                "The saved CLI login will no longer work once the demo database is removed"
+            )
         return lines
 
     for login in data["logins"]:

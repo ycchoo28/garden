@@ -42,6 +42,7 @@ def test_clean_preview_keeps_login_and_installs() -> None:
 
     assert any("Compose down --volumes" in line for line in preview)
     assert any("Keep Garden tools, installs, CLI login" in line for line in preview)
+    assert any("will no longer work" in line for line in preview)
     assert not any("garden logout" in line for line in preview)
 
 
