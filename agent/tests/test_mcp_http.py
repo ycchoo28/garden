@@ -141,6 +141,9 @@ async def test_auth_ignores_cookies_and_rejects_bad_tokens_and_origins(
         json=request,
     )
     assert accepted_origin.status_code == 200
+    assert accepted_origin.headers["access-control-allow-origin"] == "https://allowed.example"
+    assert accepted_origin.headers["vary"] == "Origin"
+    assert "access-control-allow-credentials" not in accepted_origin.headers
 
     missing_accept = await hosted_http.post(
         ENDPOINT,
@@ -148,6 +151,42 @@ async def test_auth_ignores_cookies_and_rejects_bad_tokens_and_origins(
         json=request,
     )
     assert missing_accept.status_code == 406
+
+
+@pytest.mark.asyncio
+async def test_cors_preflight_is_limited_to_configured_origins_methods_and_headers(
+    hosted_http: httpx.AsyncClient,
+) -> None:
+    preflight_headers = {
+        "Origin": "https://allowed.example",
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "authorization, content-type, mcp-protocol-version",
+    }
+    allowed = await hosted_http.options(ENDPOINT, headers=preflight_headers)
+    assert allowed.status_code == 204
+    assert allowed.headers["access-control-allow-origin"] == "https://allowed.example"
+    assert allowed.headers["access-control-allow-methods"] == "POST"
+    assert "authorization" in allowed.headers["access-control-allow-headers"].lower()
+    assert "mcp-protocol-version" in allowed.headers["access-control-allow-headers"].lower()
+
+    disallowed_origin = await hosted_http.options(
+        ENDPOINT,
+        headers={**preflight_headers, "Origin": "https://attacker.example"},
+    )
+    assert disallowed_origin.status_code == 403
+
+    disallowed_method = await hosted_http.options(
+        ENDPOINT,
+        headers={**preflight_headers, "Access-Control-Request-Method": "DELETE"},
+    )
+    assert disallowed_method.status_code == 405
+    assert disallowed_method.headers["access-control-allow-origin"] == "https://allowed.example"
+
+    disallowed_header = await hosted_http.options(
+        ENDPOINT,
+        headers={**preflight_headers, "Access-Control-Request-Headers": "x-unexpected"},
+    )
+    assert disallowed_header.status_code == 400
 
 
 @pytest.mark.asyncio
@@ -165,7 +204,7 @@ async def test_notifications_and_method_responses_follow_streamable_http(
     get = await hosted_http.get(ENDPOINT)
     delete = await hosted_http.delete(ENDPOINT)
     assert get.status_code == delete.status_code == 405
-    assert get.headers["allow"] == "POST"
+    assert get.headers["allow"] == "POST, OPTIONS"
 
 
 @pytest.mark.asyncio

@@ -70,14 +70,6 @@ class _StreamableHTTPApp:
         if scope.get("path", "/") not in ("", "/", "/api/agent/mcp"):
             await _respond(send, 404, b"Not found.", [(b"content-type", b"text/plain")])
             return
-        if scope["method"].upper() != "POST":
-            await _respond(
-                send,
-                405,
-                b"Method not allowed.",
-                [(b"content-type", b"text/plain"), (b"allow", b"POST")],
-            )
-            return
 
         headers: dict[bytes, bytes] = {}
         for key, value in scope.get("headers", []):
@@ -87,6 +79,8 @@ class _StreamableHTTPApp:
                 b"origin",
                 b"content-length",
                 b"content-type",
+                b"access-control-request-method",
+                b"access-control-request-headers",
             }:
                 await _respond(send, 400, b"Duplicate request header.", [])
                 return
@@ -94,6 +88,20 @@ class _StreamableHTTPApp:
         origin = headers.get(b"origin")
         if origin is not None and origin.decode("latin-1") not in settings.allowed_origins:
             await _respond(send, 403, b"Origin is not allowed.", [(b"content-type", b"text/plain")])
+            return
+        if origin is not None:
+            send = _cors_sender(send, origin.decode("latin-1"))
+        method = scope["method"].upper()
+        if method == "OPTIONS":
+            await _preflight(send, headers, origin is not None)
+            return
+        if method != "POST":
+            await _respond(
+                send,
+                405,
+                b"Method not allowed.",
+                [(b"content-type", b"text/plain"), (b"allow", b"POST, OPTIONS")],
+            )
             return
         token = _bearer_token(headers.get(b"authorization", b""))
         if token is None:
@@ -281,6 +289,64 @@ class _StreamableHTTPApp:
             else:
                 self._pending_by_login[login_key] = count - 1
             self._pending_total = max(0, self._pending_total - 1)
+
+
+def _cors_sender(send: Any, origin: str) -> Any:
+    async def send_with_cors(message: dict[str, Any]) -> None:
+        if message["type"] == "http.response.start":
+            headers = list(message.get("headers", []))
+            headers.extend(
+                [
+                    (b"access-control-allow-origin", origin.encode("latin-1")),
+                    (b"vary", b"Origin"),
+                ]
+            )
+            message = {**message, "headers": headers}
+        await send(message)
+
+    return send_with_cors
+
+
+async def _preflight(send: Any, headers: dict[bytes, bytes], has_origin: bool) -> None:
+    request_method = headers.get(b"access-control-request-method", b"").decode("latin-1")
+    if not has_origin or not request_method:
+        await _respond(send, 400, b"Invalid CORS preflight.", [])
+        return
+    if request_method.upper() != "POST":
+        await _respond(
+            send,
+            405,
+            b"Method not allowed.",
+            [(b"content-type", b"text/plain"), (b"allow", b"POST, OPTIONS")],
+        )
+        return
+
+    allowed_headers = {
+        b"accept",
+        b"authorization",
+        b"content-type",
+        b"mcp-protocol-version",
+    }
+    requested_headers = {
+        item.strip().lower()
+        for item in headers.get(b"access-control-request-headers", b"").split(b",")
+        if item.strip()
+    }
+    if not requested_headers <= allowed_headers:
+        await _respond(send, 400, b"A requested CORS header is not allowed.", [])
+        return
+    await _respond(
+        send,
+        204,
+        b"",
+        [
+            (b"access-control-allow-methods", b"POST"),
+            (
+                b"access-control-allow-headers",
+                b"Accept, Authorization, Content-Type, MCP-Protocol-Version",
+            ),
+        ],
+    )
 
 
 def _bearer_token(header: bytes) -> str | None:
