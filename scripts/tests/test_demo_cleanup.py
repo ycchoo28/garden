@@ -7,6 +7,7 @@ import socket
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -277,6 +278,52 @@ def test_force_keeps_record_on_subprocess_timeout(tmp_path: Path, monkeypatch, c
     assert (
         "could not be revoked and remains valid until it expires or is revoked in the portal" in err
     )
+
+
+def test_logout_child_client_timeout_is_below_subprocess_limit(tmp_path: Path, monkeypatch) -> None:
+    launcher = tmp_path / "garden"
+    launcher.write_text("Garden launcher")
+    cleanup = object.__new__(DEMO.DemoCleanup)
+    cleanup.args = argparse.Namespace(force=True)
+    cleanup.data = {
+        "logins": [
+            {
+                "portal": "http://127.0.0.1:55000",
+                "launcher": str(launcher),
+                "garden_home": str(tmp_path / ".garden"),
+            }
+        ]
+    }
+    cleanup.failed = False
+
+    captured: dict[str, Any] = {}
+
+    def capture_run(cmd, env=None, timeout=None, **_kwargs):
+        captured["cmd"] = cmd
+        captured["env"] = env or {}
+        captured["timeout"] = timeout
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=0,
+            stdout='{"signed_out": true}',
+            stderr=(
+                "warning: the portal did not confirm the sign-out (The portal cannot be reached). "
+                "The local login was dropped (--force).\n"
+            ),
+        )
+
+    monkeypatch.setattr(DEMO.subprocess, "run", capture_run)
+
+    cleanup.logout()
+
+    assert cleanup.failed is False
+    assert len(cleanup.data["logins"]) == 0
+    assert "GARDEN_CLIENT_TIMEOUT" in captured["env"]
+    client_timeout = float(captured["env"]["GARDEN_CLIENT_TIMEOUT"])
+    subprocess_timeout = float(captured["timeout"])
+    assert client_timeout < subprocess_timeout
+    assert client_timeout == 10.0
+    assert subprocess_timeout == 30.0
 
 
 def test_force_keeps_record_on_os_error(tmp_path: Path, monkeypatch, capsys) -> None:
