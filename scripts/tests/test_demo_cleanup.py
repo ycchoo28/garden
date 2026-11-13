@@ -1005,3 +1005,103 @@ def test_bounded_run_captures_output_and_status() -> None:
     )
 
     assert (result.returncode, result.stdout, result.stderr) == (3, "out\n", "err")
+
+
+def _checkout(tmp_path: Path) -> Path:
+    """A checkout with only its tracked folders, as a fresh clone has before any setup."""
+    checkout = tmp_path / "clone"
+    for folder in ("backend", "agent", "frontend"):
+        (checkout / folder).mkdir(parents=True)
+    return checkout
+
+
+def _make_dependency_folders(checkout: Path, folders: tuple[str, ...]) -> None:
+    for folder in folders:
+        target = checkout / folder
+        target.mkdir(parents=True)
+        (target / "marker.txt").write_text(folder)
+
+
+def _clear_logins(manifest_file: Path) -> None:
+    data = MANIFEST.load_manifest(manifest_file)
+    data["logins"] = []
+    MANIFEST.save_manifest(manifest_file, data)
+
+
+DEPENDENCY_FOLDERS = ("backend/.venv", "agent/.venv", "frontend/node_modules")
+
+
+def test_fresh_clone_dependencies_created_by_setup_are_recorded_and_removed(
+    installed_demo: dict[str, Any], tmp_path: Path, capsys
+) -> None:
+    checkout = _checkout(tmp_path)
+    manifest_file = installed_demo["manifest_file"]
+    # The baseline is taken before setup creates anything, as `just setup` does.
+    DEMO.record_checkout_baseline(manifest_file, checkout)
+    _make_dependency_folders(checkout, DEPENDENCY_FOLDERS)
+    # A later baseline call must not overwrite the record taken before setup ran.
+    DEMO.record_checkout_baseline(manifest_file, checkout)
+    assert DEMO.record_created_dependencies(manifest_file, checkout) == list(DEPENDENCY_FOLDERS)
+    _clear_logins(manifest_file)
+
+    preview = DEMO.cleanup_preview(MANIFEST.load_manifest(manifest_file), "uninstall", checkout)
+    for folder in DEPENDENCY_FOLDERS:
+        assert f"Move to Trash: {checkout / folder}" in preview
+    assert not [line for line in preview if line.startswith("kept:")]
+
+    assert DEMO.DemoCleanup(_cleanup_args(tmp_path), "uninstall", root=checkout).run() == 0
+    for folder in DEPENDENCY_FOLDERS:
+        assert not (checkout / folder).exists(), folder
+    assert "kept:" not in capsys.readouterr().out
+
+
+def test_dependencies_that_existed_before_garden_are_kept_and_reported(
+    installed_demo: dict[str, Any], tmp_path: Path, capsys
+) -> None:
+    checkout = _checkout(tmp_path)
+    manifest_file = installed_demo["manifest_file"]
+    _make_dependency_folders(checkout, ("backend/.venv",))
+    DEMO.record_checkout_baseline(manifest_file, checkout)
+    _make_dependency_folders(checkout, ("agent/.venv",))
+    assert DEMO.record_created_dependencies(manifest_file, checkout) == ["agent/.venv"]
+    _clear_logins(manifest_file)
+    kept = f"kept: existed before Garden: {checkout / 'backend/.venv'}"
+
+    preview = DEMO.cleanup_preview(MANIFEST.load_manifest(manifest_file), "uninstall", checkout)
+    assert kept in preview
+
+    assert DEMO.DemoCleanup(_cleanup_args(tmp_path), "uninstall", root=checkout).run() == 0
+    assert (checkout / "backend/.venv").exists()
+    assert not (checkout / "agent/.venv").exists()
+    assert kept in capsys.readouterr().out
+
+
+def test_dependencies_without_a_baseline_are_kept(
+    installed_demo: dict[str, Any], tmp_path: Path, capsys
+) -> None:
+    checkout = _checkout(tmp_path)
+    manifest_file = installed_demo["manifest_file"]
+    _make_dependency_folders(checkout, ("backend/.venv",))
+    # No baseline means Garden cannot show it created the folder, so nothing is recorded.
+    assert DEMO.record_created_dependencies(manifest_file, checkout) == []
+    _clear_logins(manifest_file)
+    kept = f"kept: not recorded as created by Garden: {checkout / 'backend/.venv'}"
+
+    preview = DEMO.cleanup_preview(MANIFEST.load_manifest(manifest_file), "uninstall", checkout)
+    assert kept in preview
+
+    assert DEMO.DemoCleanup(_cleanup_args(tmp_path), "uninstall", root=checkout).run() == 0
+    assert (checkout / "backend/.venv").exists()
+    assert kept in capsys.readouterr().out
+
+
+def test_record_checkout_baseline_flag_is_the_setup_entry_point(
+    installed_demo: dict[str, Any], monkeypatch
+) -> None:
+    manifest_file = installed_demo["manifest_file"]
+    monkeypatch.setattr(sys, "argv", ["demo.py", "--record-checkout-baseline"])
+
+    assert DEMO.main() == 0
+
+    saved = MANIFEST.load_manifest(manifest_file)
+    assert str(DEMO.ROOT.resolve()) in saved["checkouts"]

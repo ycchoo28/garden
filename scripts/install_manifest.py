@@ -29,6 +29,7 @@ def empty_manifest() -> dict:
         "demo_projects": [],
         "docker_images": [],
         "logins": [],
+        "checkouts": {},
     }
 
 
@@ -39,6 +40,9 @@ def load_manifest(path: Path | None = None) -> dict:
     data = json.loads(target.read_text(encoding="utf-8"))
     if not isinstance(data, dict) or data.get("version") != VERSION:
         raise ValueError(f"Unsupported or invalid Garden install manifest: {target}")
+    # Older manifests have no checkout baselines; installers that predate the key keep it intact.
+    if not isinstance(data.setdefault("checkouts", {}), dict):
+        raise ValueError(f"Invalid checkouts in Garden install manifest: {target}")
     for name in (
         "artifacts",
         "path_entries",

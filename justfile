@@ -14,6 +14,9 @@ default:
 setup:
     #!/usr/bin/env bash
     set -euo pipefail
+    root="$PWD"
+    uv run --no-project --python 3.12 python scripts/demo.py --record-checkout-baseline
+    trap 'uv run --no-project --python 3.12 python "$root/scripts/demo.py" --record-checkout-dependencies' EXIT
     [ -f .env ] || cp .env.example .env
     cd backend && uv sync
     cd ../agent && uv sync

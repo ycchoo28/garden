@@ -826,38 +826,26 @@ class Demo:
             self.compose_oidc_port,
         ):
             check_demo_port(port)
-        for folder in ("backend", "agent"):
-            venv_dir = ROOT / folder / ".venv"
-            venv_dir_existed = venv_dir.exists()
-            venv_python = venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-            if not venv_python.exists():
-                self.run(["uv", "sync", "--frozen"], ROOT / folder)
-                if not venv_dir_existed:
-                    manifest = load_manifest(self.manifest_file)
-                    record_artifact(
-                        manifest,
-                        venv_dir,
-                        owner="demo-dependencies",
-                        kind="tree",
-                        root=venv_dir.parent,
-                    )
-                    save_manifest(self.manifest_file, manifest)
-        frontend_modules = ROOT / "frontend/node_modules"
-        if not frontend_modules.exists():
-            command = ["bun", "install", "--frozen-lockfile"]
-            if os.name == "nt":
-                # Bun 1.4.3's default Windows link backend produced InvalidBinContent shims.
-                command.append("--backend=copyfile")
-            self.run(command, ROOT / "frontend")
-            manifest = load_manifest(self.manifest_file)
-            record_artifact(
-                manifest,
-                frontend_modules,
-                owner="demo-dependencies",
-                kind="tree",
-                root=frontend_modules.parent,
-            )
-            save_manifest(self.manifest_file, manifest)
+        try:
+            for folder in ("backend", "agent"):
+                venv_python = (
+                    ROOT
+                    / folder
+                    / ".venv"
+                    / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+                )
+                if not venv_python.exists():
+                    self.run(["uv", "sync", "--frozen"], ROOT / folder)
+            frontend_modules = ROOT / "frontend/node_modules"
+            if not frontend_modules.exists():
+                command = ["bun", "install", "--frozen-lockfile"]
+                if os.name == "nt":
+                    # Bun 1.4.3's default Windows link backend produced InvalidBinContent shims.
+                    command.append("--backend=copyfile")
+                self.run(command, ROOT / "frontend")
+        finally:
+            # Record what this run created even when an install failed part way.
+            record_created_dependencies(self.manifest_file)
 
     def fake_model(self):
         port = int(self.env.get("GARDEN_DEMO_MODEL_PORT", "55085"))
@@ -1373,6 +1361,61 @@ def path_entries_to_restore(entries: list[dict], keep_dirs: set[str]) -> list[di
     ]
 
 
+# Dependency folders that the setup, bootstrap and demo flows may create inside a checkout.
+DEPENDENCY_DIRS = ("backend/.venv", "agent/.venv", "frontend/node_modules")
+
+
+def record_checkout_baseline(manifest_file: Path, root: Path = ROOT) -> None:
+    """Note which dependency folders already exist before Garden first touches this checkout.
+
+    Run before any setup step creates them. A later call for the same checkout changes nothing.
+    """
+    manifest = load_manifest(manifest_file)
+    key = str(root.resolve())
+    if key in manifest["checkouts"]:
+        return
+    manifest["checkouts"][key] = {
+        "preexisting": [folder for folder in DEPENDENCY_DIRS if os.path.lexists(root / folder)]
+    }
+    save_manifest(manifest_file, manifest)
+
+
+def record_created_dependencies(manifest_file: Path, root: Path = ROOT) -> list[str]:
+    """Record the dependency folders that Garden created in this checkout, and return them."""
+    manifest = load_manifest(manifest_file)
+    baseline = manifest["checkouts"].get(str(root.resolve()))
+    if baseline is None:
+        # Without a baseline Garden cannot tell what it created, so it records nothing.
+        return []
+    recorded = []
+    for folder in DEPENDENCY_DIRS:
+        path = root / folder
+        if folder in baseline["preexisting"] or not path.is_dir() or path.is_symlink():
+            continue
+        record_artifact(manifest, path, owner="demo-dependencies", kind="tree", root=path.parent)
+        recorded.append(folder)
+    if recorded:
+        save_manifest(manifest_file, manifest)
+    return recorded
+
+
+def kept_dependency_lines(data: dict, root: Path = ROOT) -> list[str]:
+    """Name each dependency folder that uninstall keeps, and why."""
+    baseline = data["checkouts"].get(str(root.resolve()))
+    recorded = {os.path.normcase(os.path.abspath(entry["path"])) for entry in data["artifacts"]}
+    lines = []
+    for folder in DEPENDENCY_DIRS:
+        path = root / folder
+        if not path.exists() or os.path.normcase(os.path.abspath(path)) in recorded:
+            continue
+        if baseline is not None and folder in baseline["preexisting"]:
+            reason = "existed before Garden"
+        else:
+            reason = "not recorded as created by Garden"
+        lines.append(f"kept: {reason}: {path}")
+    return lines
+
+
 def cleanup_artifacts(
     data: dict, root: Path = ROOT, keep: tuple[Path, ...] = ()
 ) -> tuple[dict, list[dict]]:
@@ -1465,6 +1508,7 @@ def cleanup_preview(
             lines.append(f"Already absent: {item['path']}")
         else:
             lines.append(f"Preserve {item['path']}: {item['reason']}")
+    lines.extend(kept_dependency_lines(data, root))
     for entry in data["path_entries"]:
         lines.append(f"Remove Garden-added user PATH entry: {entry['value']}")
     if manifest_file:
@@ -1525,19 +1569,20 @@ def wait_until(condition, seconds: float) -> bool:
 
 
 class DemoCleanup:
-    def __init__(self, args, mode: str):
+    def __init__(self, args, mode: str, root: Path | None = None):
         self.args = args
         self.mode = mode
+        self.root = root or ROOT
         self.manifest_file = manifest_path()
         self.data = load_manifest(self.manifest_file)
-        self.projects = demo_projects_for(self.data)
+        self.projects = demo_projects_for(self.data, self.root)
         self.failed = False
 
     def confirm(self, preview: list[str]) -> bool:
         print("Garden demo cleanup preview:", flush=True)
         for line in preview:
             print(f"  {line}", flush=True)
-        if self.args.dry_run or not cleanup_has_work(self.data, self.mode):
+        if self.args.dry_run or not cleanup_has_work(self.data, self.mode, self.root):
             return True
         if self.args.yes:
             return True
@@ -1876,6 +1921,7 @@ class DemoCleanup:
         preview = cleanup_preview(
             self.data,
             self.mode,
+            self.root,
             remove_env=self.args.remove_env,
             force=force,
             env_file=Path(self.args.env_file).resolve(),
@@ -1921,7 +1967,7 @@ class DemoCleanup:
         needed = login_recovery_paths(self.data)
         self.restore_user_path(login_recovery_dirs(self.data))
         self.save()
-        scoped, plan = cleanup_artifacts(self.data, keep=tuple(needed))
+        scoped, plan = cleanup_artifacts(self.data, self.root, keep=tuple(needed))
         updated, warnings = apply_artifact_plan(scoped, plan)
         for warning in warnings:
             print(f"Warning: {warning}", file=sys.stderr)
@@ -1945,6 +1991,8 @@ class DemoCleanup:
             project for project in self.data["demo_projects"] if project not in stopped_projects
         ]
         self.save()
+        for line in kept_dependency_lines(self.data, self.root):
+            print(line, flush=True)
         self.ask_about_env_file()
 
     def ask_about_env_file(self):
@@ -2024,7 +2072,23 @@ def main():
         action="store_true",
         help="Alias for --force",
     )
+    parser.add_argument(
+        "--record-checkout-baseline",
+        action="store_true",
+        help="Note which dependency folders already exist in this checkout, then exit",
+    )
+    parser.add_argument(
+        "--record-checkout-dependencies",
+        action="store_true",
+        help="Record the dependency folders that setup created in this checkout, then exit",
+    )
     args = parser.parse_args()
+    if args.record_checkout_baseline:
+        record_checkout_baseline(manifest_path())
+        return 0
+    if args.record_checkout_dependencies:
+        record_created_dependencies(manifest_path())
+        return 0
     if args.clean or args.uninstall:
         if (
             args.web_only
@@ -2039,6 +2103,8 @@ def main():
         return DemoCleanup(args, "uninstall" if args.uninstall else "clean").run()
     if args.yes or args.dry_run or args.remove_env or args.force:
         parser.error("--yes, --dry-run, --remove-env and --force require --clean or --uninstall")
+    # The first `just demo` step runs this before any dependency install, so the baseline is exact.
+    record_checkout_baseline(manifest_path())
     if args.check_docker:
         if not args.check_model:
             check_docker()
