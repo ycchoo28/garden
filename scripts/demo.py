@@ -936,6 +936,11 @@ class Demo:
                 or not marker.exists()
                 or marker.read_text() != target
             ):
+                print(
+                    f"Installing dsh dependencies for {target} (npm ci). This can take 10-15 "
+                    "minutes on first run; npm prints nothing until it finishes. Please wait.",
+                    flush=True,
+                )
                 self.run(
                     [
                         "uv",

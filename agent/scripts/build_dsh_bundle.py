@@ -43,6 +43,11 @@ def build(output: Path, target: str) -> Path:
     for name in ("package.json", "package-lock.json"):
         shutil.copy2(MANIFEST_DIR / name, staging / name)
     # Lifecycle scripts stay off: the bundle must not run code when the laptop unpacks it.
+    print(
+        f"Installing dsh dependencies for {target} (npm ci). This can take 10-15 minutes on "
+        "first run; npm prints nothing until it finishes. Please wait.",
+        flush=True,
+    )
     subprocess.run(
         [
             shutil.which("npm") or "npm",
