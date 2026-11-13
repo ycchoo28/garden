@@ -6,17 +6,18 @@ set positional-arguments := true
 api_url := "http://127.0.0.1:55000"
 demo_just_dotenv_path := env_var_or_default("GARDEN_DEMO_JUST_DOTENV_PATH", ".env")
 web_url := "http://127.0.0.1:55173"
-# Recipe lines and [script] recipes run through scripts/just_shell.py, which picks Git for
-# Windows bash on Windows and never the WSL launcher on PATH. It runs on every platform.
+# Windows runs recipe lines through scripts/just_shell.py, which uses Git for Windows bash and never
+# the WSL bash.exe on PATH. Linux and macOS keep the default shell and the bash shebangs.
+[windows]
 set shell := ["uv", "run", "--no-project", "--python", "3.12", "python", "scripts/just_shell.py", "-cu"]
-set script-interpreter := ["uv", "run", "--no-project", "--python", "3.12", "python", "scripts/just_shell.py", "-euo", "pipefail"]
 
 default:
     @just --list
 
 # Create .env from the example if it is missing, then install backend, agent and frontend dependencies.
-[script]
+[unix]
 setup:
+    #!/usr/bin/env bash
     set -euo pipefail
     root="$PWD"
     uv run --no-project --python 3.12 python scripts/demo.py --record-checkout-baseline
@@ -27,8 +28,9 @@ setup:
     cd ../frontend && bun install --frozen-lockfile
 
 # Start Postgres and the fake sign-in provider in Docker Compose and wait until they are healthy.
-[script]
+[unix]
 up:
+    #!/usr/bin/env bash
     set -euo pipefail
     source infra/postgres/versions.env
     docker build -f infra/postgres/Dockerfile \
@@ -38,8 +40,9 @@ up:
     GARDEN_DEV_POSTGRES_IMAGE=garden-postgres:local docker compose -f dev/compose.yaml up -d --wait
 
 # Download the pinned bge-m3 model into var/models and check its SHA-256. A file that does not match is moved aside, never used.
-[script]
+[unix]
 models:
+    #!/usr/bin/env bash
     set -euo pipefail
     source infra/embedding/model.env
     mkdir -p var/models
@@ -63,8 +66,9 @@ embedding-up: models
     docker compose -f dev/compose.yaml --profile embedding up -d --wait embedding
 
 # Apply Alembic migrations, and create the job queue tables if they are missing.
-[script]
+[unix]
 migrate: up
+    #!/usr/bin/env bash
     set -euo pipefail
     cd backend
     # Migrates the database in GARDEN_DATABASE_URL and adds the job queue tables when missing.
@@ -75,8 +79,9 @@ seed: migrate
     cd backend && uv run python -m app.seed
 
 # Run the API with reload, the background worker and the Vite dev server until Ctrl+C. Seeds first.
-[script]
+[unix]
 dev: seed
+    #!/usr/bin/env bash
     set -euo pipefail
     trap 'kill 0' EXIT
     (cd backend && uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 55000) &
@@ -85,28 +90,32 @@ dev: seed
     wait
 
 # Full agent demo: configure the model, publish/install garden and dsh, sign in, and run the portal.
-[script]
+[unix]
 demo *args:
+    #!/usr/bin/env bash
     set -euo pipefail
     GARDEN_DEMO_JUST_DOTENV_PATH="{{demo_just_dotenv_path}}" uv run --no-project --python 3.12 python scripts/demo.py --check-docker "$@"
     GARDEN_DEMO_JUST_DOTENV_PATH="{{demo_just_dotenv_path}}" uv run --project backend python scripts/demo.py "$@"
 
 # Web-only demo: initialize .env/dependencies, migrate, seed and run the portal without an agent install.
-[script]
+[unix]
 demo-web *args:
+    #!/usr/bin/env bash
     set -euo pipefail
     GARDEN_DEMO_JUST_DOTENV_PATH="{{demo_just_dotenv_path}}" uv run --no-project --python 3.12 python scripts/demo.py --check-docker --web-only "$@"
     GARDEN_DEMO_JUST_DOTENV_PATH="{{demo_just_dotenv_path}}" uv run --project backend python scripts/demo.py --web-only "$@"
 
 # Stop this clone's demo processes and remove only its Compose containers, networks and volumes.
-[script]
+[unix]
 demo-clean *args:
+    #!/usr/bin/env bash
     set -euo pipefail
     uv run --no-project --python 3.12 python scripts/demo.py --clean "$@"
 
 # Revoke the Garden CLI login, then remove this clone's recorded Garden installation and demo artifacts.
-[script]
+[unix]
 demo-uninstall *args:
+    #!/usr/bin/env bash
     set -euo pipefail
     uv run --no-project --python 3.12 python scripts/demo.py --uninstall "$@"
 
@@ -115,8 +124,9 @@ demo-e2e: up
     GARDEN_DEMO_E2E=1 uv run --project backend pytest scripts/tests/test_demo_e2e.py -q
 
 # Drop and recreate the dev database named in .env, then migrate and load the demo data again. Asks for confirmation first.
-[script]
+[unix]
 reset: up
+    #!/usr/bin/env bash
     set -euo pipefail
     trap 'kill "${GARDEN_FAKE_EMBEDDER_PID:-}" 2>/dev/null || true' EXIT
     read -r -p "This drops the dev database in .env and loads the demo data again. Type 'reset' to continue: " answer
@@ -141,8 +151,9 @@ quick: backend-check agent-check frontend-check architecture-check api-check sec
 check: quick test e2e backend-audit frontend-audit
 
 # Install the pinned lefthook and register the commit hooks in .git/hooks. Run once after cloning.
-[script]
+[unix]
 hooks:
+    #!/usr/bin/env bash
     set -euo pipefail
     version=2.2.1
     case "$(uname -s)-$(uname -m)" in
@@ -196,8 +207,9 @@ agent-dsh-bundle:
 
 # Copy the installer's files into the folder the portal serves: garden.pyz, the dsh bundles, the dsh config template and the installers.
 # The dsh bundles take minutes to build, so existing ones are reused; run agent-dsh-bundle to rebuild them.
-[script]
+[unix]
 agent-publish: agent-build
+    #!/usr/bin/env bash
     set -euo pipefail
     [ -f agent/dist/dsh-bundle.tar.gz ] || (cd agent && uv run python scripts/build_dsh_bundle.py)
     [ -f agent/dist/dsh-bundle-windows-x64.tar.gz ] || (cd agent && uv run python scripts/build_dsh_bundle.py --target windows-x64)
@@ -224,8 +236,9 @@ agent-e2e-serve: up
 # Backend tests against the real Postgres in Compose, in a separate *_test database.
 # CI runs this against the Postgres that `just up` starts in the same job.
 # Set GARDEN_TEST_DB to use another test database (its name must end in _test), for example when worktrees run tests in parallel.
-[script]
+[unix]
 test:
+    #!/usr/bin/env bash
     set -euo pipefail
     just up
     psql_dev() { docker compose -f dev/compose.yaml exec -T postgres psql -U garden -d garden -v ON_ERROR_STOP=1 "$@"; }
@@ -246,8 +259,9 @@ frontend-check:
 
 # Browser tests: a person signs in through the fake provider and sees the shell. Needs Postgres and the fake provider (see `just up`).
 # Playwright starts the API and Vite itself. Chromium must be installed (`bunx playwright install chromium`).
-[script]
+[unix]
 e2e: up
+    #!/usr/bin/env bash
     set -euo pipefail
     curl --fail --silent --show-error --retry 30 --retry-all-errors --retry-delay 1 "$GARDEN_OIDC_ISSUER/.well-known/openid-configuration" >/dev/null
     # The first sign-in page a fresh provider serves is slow, so warm the page the browser opens too.
@@ -305,8 +319,9 @@ deny-check:
     uv run --no-project python scripts/deny_list_check.py
 
 # Audit the locked Python dependencies with pip-audit. Accepted advisories come from security/allowlist.txt.
-[script]
+[unix]
 backend-audit:
+    #!/usr/bin/env bash
     set -euo pipefail
     cd backend
     mkdir -p var
@@ -320,8 +335,9 @@ backend-audit:
     uv run pip-audit --requirement "$requirements" --progress-spinner off ${ignores[@]+"${ignores[@]}"}
 
 # Audit the locked Bun dependencies and fail on high and critical advisories. Accepted advisories come from security/allowlist.txt.
-[script]
+[unix]
 frontend-audit:
+    #!/usr/bin/env bash
     set -euo pipefail
     ignores=()
     ids="$(scripts/allowed-advisories.sh)"
@@ -333,3 +349,25 @@ frontend-audit:
 # Scaffold a new business module: backend package, schema migration, starter tests and frontend folder.
 new-module name:
     uv run --project backend python scripts/new_module.py "{{name}}"
+
+# Windows versions of the demo recipes. Recipes marked [unix] above are not on Windows, so only
+# these run there. Lines run one at a time through the shell set above.
+[windows]
+setup:
+    uv run --no-project --python 3.12 python scripts/demo.py --record-checkout-baseline && { [ -f .env ] || cp .env.example .env; } && (cd backend && uv sync) && (cd agent && uv sync) && (cd frontend && bun install --frozen-lockfile); status=$?; uv run --no-project --python 3.12 python scripts/demo.py --record-checkout-dependencies; exit $status
+
+[windows]
+demo *args:
+    GARDEN_DEMO_JUST_DOTENV_PATH="{{demo_just_dotenv_path}}" uv run --no-project --python 3.12 python scripts/demo.py --check-docker "$@" && GARDEN_DEMO_JUST_DOTENV_PATH="{{demo_just_dotenv_path}}" uv run --project backend python scripts/demo.py "$@"
+
+[windows]
+demo-web *args:
+    GARDEN_DEMO_JUST_DOTENV_PATH="{{demo_just_dotenv_path}}" uv run --no-project --python 3.12 python scripts/demo.py --check-docker --web-only "$@" && GARDEN_DEMO_JUST_DOTENV_PATH="{{demo_just_dotenv_path}}" uv run --project backend python scripts/demo.py --web-only "$@"
+
+[windows]
+demo-clean *args:
+    uv run --no-project --python 3.12 python scripts/demo.py --clean "$@"
+
+[windows]
+demo-uninstall *args:
+    uv run --no-project --python 3.12 python scripts/demo.py --uninstall "$@"

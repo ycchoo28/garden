@@ -90,14 +90,48 @@ def test_posix_uses_bash_from_path(monkeypatch, tmp_path: Path) -> None:
     assert JUST_SHELL.resolve_bash({}, windows=False) == str(fake)
 
 
-def test_justfile_routes_every_recipe_through_the_runner() -> None:
+def test_justfile_sets_the_runner_only_for_windows() -> None:
     text = (ROOT / "justfile").read_text(encoding="utf-8")
 
+    assert (
+        '[windows]\nset shell := ["uv", "run", "--no-project", "--python", "3.12", "python", '
+        in text
+    )
     assert '"scripts/just_shell.py", "-cu"]' in text
-    assert '"scripts/just_shell.py", "-euo", "pipefail"]' in text
-    # A shebang would name a bare bash, which Windows resolves through PATH.
-    assert "#!/usr/bin/env bash" not in text
-    assert "windows-shell" not in text
+    # Linux and macOS keep the default shell and the bash shebangs. Only Windows gets the runner.
+    assert "\nset shell" not in text.replace("[windows]\nset shell", "")
+    assert "script-interpreter" not in text
+
+
+def test_every_bash_shebang_recipe_is_tagged_unix() -> None:
+    lines = (ROOT / "justfile").read_text(encoding="utf-8").split("\n")
+    shebangs = [i for i, line in enumerate(lines) if line == "    #!/usr/bin/env bash"]
+    assert shebangs, "expected bash recipes"
+    for index in shebangs:
+        header = index - 1
+        while lines[header].startswith(("#", " ")) or lines[header] == "":
+            header -= 1
+        assert lines[header - 1] == "[unix]", lines[header]
+
+
+def test_windows_has_a_recipe_for_each_demo_command() -> None:
+    lines = (ROOT / "justfile").read_text(encoding="utf-8").split("\n")
+    windows_recipes = {
+        lines[i + 1].split(":")[0].split()[0]
+        for i, line in enumerate(lines)
+        if line == "[windows]" and i + 1 < len(lines)
+    }
+    assert {"setup", "demo", "demo-web", "demo-clean", "demo-uninstall"} <= windows_recipes
+
+
+def test_runner_runs_a_recipe_line_with_bash() -> None:
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "just_shell.py"), "-cu", "x=ok; echo $x"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert result.stdout.strip() == "ok"
 
 
 @pytest.mark.skipif(shutil.which("just") is None, reason="just is not installed")
@@ -105,6 +139,6 @@ def test_installed_just_accepts_the_justfile() -> None:
     version = subprocess.run(
         ["just", "--version"], capture_output=True, text=True, check=True
     ).stdout.split()[-1]
-    if tuple(int(part) for part in version.split(".")) < (1, 33, 0):
-        pytest.skip("script-interpreter needs just 1.33 or later")
+    if tuple(int(part) for part in version.split(".")) < (1, 58, 0):
+        pytest.skip("the justfile is written for the pinned just 1.58.0")
     subprocess.run(["just", "--summary"], cwd=ROOT, capture_output=True, check=True)
