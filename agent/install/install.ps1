@@ -206,6 +206,9 @@ function Start-Step([string]$message) {
 function Complete-Step {
     Write-Host "[$($script:StepNumber)/$($script:TotalSteps)] Done: $($script:CurrentStep)"
     $script:CurrentStep = $null
+    # Record after every stage: a forced stop skips the finally below, and uninstall removes only
+    # what the manifest lists.
+    try { Write-InstallManifest } catch { Write-Warning "Could not update the Garden install manifest: $($_.Exception.Message)" }
 }
 
 function Format-Size([long]$bytes) {

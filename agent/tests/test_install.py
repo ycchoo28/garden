@@ -469,3 +469,16 @@ def test_node_pins_and_windows_runtime_handling_match_the_bootstrap() -> None:
     assert '$env:Path = "$folder;$env:Path"' in windows
     assert "PATH=$nodeRuntime;%PATH%" in windows
     assert "if ($env:GARDEN_INSTALL_TEST) { return }" in windows
+
+
+def test_the_windows_installer_records_its_files_after_every_stage() -> None:
+    """A text check, because CI has no PowerShell.
+
+    A demo that stops sends the installer Ctrl+Break, which PowerShell answers by entering its
+    debugger, and then ends it by force, so its `finally` never runs. Recording after each stage
+    keeps everything it installed so far in the manifest, and uninstall can remove it.
+    """
+    script = INSTALLER_WINDOWS.read_text(encoding="utf-8")
+    complete_step = script[script.index("function Complete-Step") :]
+    complete_step = complete_step[: complete_step.index("\n}\n")]
+    assert "Write-InstallManifest" in complete_step
