@@ -53,7 +53,7 @@ const roles = computed(() => me.value?.roles ?? []);
             class="font-medium text-primary underline-offset-4 hover:underline"
             to="/agent/logins"
           >
-            Command line sign-ins
+            Agent logins
           </RouterLink>
         </li>
         <li>

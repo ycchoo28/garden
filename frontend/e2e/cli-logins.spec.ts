@@ -10,15 +10,15 @@ test('a person creates a hosted agent login, sees its token once, and finds it i
 }) => {
   await signIn(page, PERSON, 'Dev Admin');
   await page.goto(`${WEB_URL}/agent/logins`);
-  await expect(page.getByRole('heading', { name: 'Command line sign-ins' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Agent logins' })).toBeVisible();
 
   const device = `e2e research agent ${Date.now()}`;
   await page.getByLabel('Name').fill(device);
   await page.getByLabel('Expires').selectOption({ label: 'In 30 days' });
-  await page.getByRole('button', { name: 'Create CLI login' }).click();
+  await page.getByRole('button', { name: 'Create Agent login' }).click();
 
   // The token is shown once, in a read-only field, with a warning that it will not be shown again.
-  const token = page.getByRole('textbox', { name: 'New CLI login token' });
+  const token = page.getByRole('textbox', { name: 'New Agent login token' });
   await expect(token).toBeVisible();
   await expect(page.getByText('Copy this token now. It will not be shown again.')).toBeVisible();
   await expect(token).toHaveValue(/^ag_[A-Za-z0-9_-]+$/);

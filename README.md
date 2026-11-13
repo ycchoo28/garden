@@ -29,7 +29,7 @@ flowchart LR
   person["Person in a browser"] --> spa["Vue 3 web app :55173"]
   agent["Coding agent"] --> cli["garden command and MCP server"]
   spa -->|"/api and /auth"| api["FastAPI API :55000"]
-  cli -->|"bearer CLI login"| api
+  cli -->|"bearer Agent login"| api
   api --> db[("Postgres 17 with pgvector :55432")]
   api --> oidc["Fake OIDC provider :55081"]
   api --> gateway["Model gateway /api/agent/model/v1"]
@@ -229,9 +229,9 @@ To install the skill file that tells an agent how to use the command, run `garde
 
 Garden can also serve the same tools to hosted clients at `POST https://<portal>/api/agent/mcp` using MCP Streamable HTTP.
 The endpoint is disabled by default; set `GARDEN_AGENT_MCP_ENABLED=true` to enable it.
-Create a CLI login on the CLI logins page (`/agent/logins`), choose an expiry, and store the one-time `ag_` token as a secret in the agent platform.
+Create an Agent login on the Agent logins page (`/agent/logins`), choose an expiry, and store the one-time `ag_` token as a secret in the agent platform.
 Send it as `Authorization: Bearer ag_...` on every request.
-The browser-made login has the same agent permissions and confirmation gate as a `garden` command login, and can be revoked from that page.
+The browser-made Agent login has the same agent permissions and confirmation gate as a `garden` command login, and can be revoked from that page.
 
 The handler calls the backend on the loopback address of the port the request arrived on, so a port moved by `just demo` needs no setting.
 Set `GARDEN_AGENT_MCP_API_BASE_URL` only when the backend cannot be reached at its own port on loopback, and list browser origins in the comma-separated `GARDEN_AGENT_MCP_ALLOWED_ORIGINS` setting when a browser client needs them.

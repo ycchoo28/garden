@@ -5,7 +5,7 @@ Status: Accepted, 2026-11-12.
 ## Context
 
 The `garden` command serves MCP over stdio for local agents, as recorded in [ADR 0023](0023-cli-discovery-and-mcp.md).
-Hosted agents cannot start that local process, and a person needs a browser path to create a CLI login for them.
+Hosted agents cannot start that local process, and a person needs a browser path to create an Agent login for them.
 
 ## Decision
 
@@ -13,7 +13,7 @@ The agent package serves the same tools over stateless MCP Streamable HTTP at `P
 The backend mounts that ASGI app and supplies settings; it does not reimplement MCP.
 The MCP handler reuses `handle`, the contract compiler and the Engine.
 The Engine calls the API over loopback with the request's `ag_` bearer token through an injectable HTTP transport.
-The hosted handler keeps no privileged token, ignores cookies, checks any `Origin` against the configured allowlist, and returns 401 with `WWW-Authenticate: Bearer` when the CLI login is invalid.
+The hosted handler keeps no privileged token, ignores cookies, checks any `Origin` against the configured allowlist, and returns 401 with `WWW-Authenticate: Bearer` when the Agent login is invalid.
 The contract is cached in the process by contract version.
 A request fetches the contract only when the portal reports a version the process has not cached, and that fetch runs outside the shared lock so a slow portal does not block other requests.
 Permissions are read once per request, not once per tool lookup.
@@ -23,14 +23,14 @@ Notifications receive 202, and GET and DELETE receive 405.
 The endpoint accepts one JSON-RPC message per POST.
 
 Errors are split by where they happen.
-A refusal before a JSON-RPC message is accepted is an RFC 9457 problem document (`application/problem+json`): 404, 400 for a bad header or framing, 403 for an origin or a CLI login that may not use MCP, 405 with `Allow`, 406, 413, 415, 401 with `WWW-Authenticate`, and 503 when no API address is known.
+A refusal before a JSON-RPC message is accepted is an RFC 9457 problem document (`application/problem+json`): 404, 400 for a bad header or framing, 403 for an origin or an Agent login that may not use MCP, 405 with `Allow`, 406, 413, 415, 401 with `WWW-Authenticate`, and 503 when no API address is known.
 Once a message is accepted, its failure is a JSON-RPC error that carries the request's id, as MCP requires.
 A body that is not JSON is a `-32700` parse error with HTTP 400, and a portal that cannot be reached is a `-32000` error with HTTP 502.
 A portal that rejects the login with 401 or 403 still answers as a problem document with that status, whether the permission check or a tool call hits the refusal.
 
 Critical calls stream the existing confirmation notification and then the result over SSE.
 The engine waits in a worker thread and stops when the caller disconnects, before retrying the action.
-Concurrent confirmation waits are capped per CLI login and in total, with the total below `THREAD_POOL_SIZE`, the 40-thread worker pool defined in `garden.limits`, a leaf module that the backend settings import.
+Concurrent confirmation waits are capped per Agent login and in total, with the total below `THREAD_POOL_SIZE`, the 40-thread worker pool defined in `garden.limits`, a leaf module that the backend settings import.
 
 Hosted file fields use `{filename, content_type, data_base64}` objects.
 The engine decodes only in-memory bytes in hosted mode and refuses strings and path-like filenames.
@@ -56,6 +56,6 @@ The audit schema stays unchanged; the source is included in the event summary al
 - Operators control whether the endpoint is enabled, its API base URL, allowed origins, file-size limit and confirmation-wait caps through settings.
   An empty API base URL means the loopback address of the port the request arrived on, so a port moved by `just demo` needs no change.
   Set the base URL only when the backend cannot be reached at its own port on loopback.
-- The CLI logins page creates browser logins, shows their source and expiry, displays each raw token once and keeps revocation unchanged.
-- Hosted clients use a CLI login bearer token; OAuth 2.1 and a standalone service remain separate work.
+- The Agent logins page creates browser logins, shows their source and expiry, displays each raw token once and keeps revocation unchanged.
+- Hosted clients use an Agent login bearer token; OAuth 2.1 and a standalone service remain separate work.
 - Changing the API base URL is sufficient to point the hosted handler at a separately deployed portal later.

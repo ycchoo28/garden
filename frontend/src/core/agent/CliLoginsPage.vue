@@ -66,11 +66,11 @@ function dismissToken(): void {
 
 <template>
   <PageHeader
-    title="Command line sign-ins"
-    description="Manage CLI logins for the garden command and hosted agents. Revoke a row to stop that token."
+    title="Agent logins"
+    description="Manage Agent logins for hosted agents and the garden command. Revoke a row to stop that token."
   />
   <SectionCard
-    title="New CLI login"
+    title="New Agent login"
     class="mb-6"
   >
     <form
@@ -106,7 +106,7 @@ function dismissToken(): void {
         class="w-fit rounded-lg bg-primary px-4 py-2 font-medium text-primary-contrast disabled:opacity-60"
         :disabled="create.isPending.value || !device.trim()"
       >
-        {{ create.isPending.value ? 'Creating…' : 'Create CLI login' }}
+        {{ create.isPending.value ? 'Creating…' : 'Create Agent login' }}
       </button>
       <p
         v-if="create.error.value"
@@ -126,7 +126,7 @@ function dismissToken(): void {
       <input
         :value="createdLogin.token"
         readonly
-        aria-label="New CLI login token"
+        aria-label="New Agent login token"
         class="w-full rounded-lg border border-line bg-surface-muted px-3 py-2 font-mono text-sm"
       >
       <p class="text-sm text-muted">
@@ -199,7 +199,7 @@ function dismissToken(): void {
       v-else-if="!logins?.length"
       class="p-5 text-muted"
     >
-      No CLI logins yet. Create one here for a hosted agent or run garden login in a terminal.
+      No Agent logins yet. Create one here for a hosted agent or run garden login in a terminal.
     </p>
     <div
       v-else
