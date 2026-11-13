@@ -137,6 +137,24 @@ The terms are grouped by area, and the last section lists the words to avoid.
   Only a person may read it.
 - **Hybrid search**: a search that fuses the nearest vectors, keyword matches and identifier matches with reciprocal rank fusion.
 
+## Agent evals and telemetry
+
+- **Eval**: a test of whether a real agent, with a real model, finishes a task with garden's tools.
+- **Task**: one thing an eval asks the agent to do, kept as data in git, with its prompt, its person, its expected confirmation and its graders.
+- **Suite**: whether a task is a `capability` task, which the agent may still fail, or a `regression` task, which it should always pass.
+- **Trial**: one attempt at one task by one model, in its own cloned database and sealed workspace.
+- **Eval run**: one execution of `just agent-eval`, made of many trials.
+- **Grader**: a check that decides whether a trial passed.
+  A state grader reads the result through the API, a trajectory grader checks what the agent did, and a judge grader asks a model to grade a knowledge answer.
+- **Reference solution**: a script that drives the tools without a model to prove a task's graders.
+  A perfect script must pass and a wrong script must fail.
+- **pass^k**: a task passes for a model only when all of its k repeats pass.
+- **Budget**: the most tool calls, time and tokens a trial may use before the runner stops it.
+- **Finding**: something worth seeing that does not fail a trial on its own, such as a loop or the use of a tool that is not garden's.
+- **Trace contract**: the span names and attributes that every producer of agent telemetry follows (ADR 0029).
+- **Agent conversation**: one conversation in an agent harness, which is not a browser session.
+- **Content capture**: the development and eval setting that lets the model gateway record prompts and replies in its spans.
+
 ## Terms to avoid
 
 | Avoid | Say instead | Why |
@@ -148,5 +166,6 @@ The terms are grouped by area, and the last section lists the words to avoid.
 | expense report, reimbursement | claim | The code and the API use claim throughout. |
 | edit (for a budget line or claim) | replace (budget line) or void (claim line) | Business records are replaced or voided, never edited in place (ADR 0005). |
 | delete (for a claim or budget line) | void (or replace) | Only stored files can be deleted, and voiding keeps the history. |
+| session (for an agent's conversation) | agent conversation | A session is a person's browser sign-in. |
 | file (for a knowledge document) | document | A document is the knowledge item, and its batch file holds the uploaded bytes. |
 | endpoint (for an operation) | operation | An operation is a route's named contract entry, and the command and MCP server show it as a tool. |
