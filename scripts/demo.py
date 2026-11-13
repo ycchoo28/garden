@@ -153,6 +153,16 @@ def check_demo_port(port: int) -> None:
             raise RuntimeError(f"Demo loopback port {port} is unavailable: {error}") from error
 
 
+def with_user_path(env: dict) -> None:
+    """On Windows, put the saved user PATH in front, so tools an installer just added are found."""
+    if os.name != "nt":
+        return
+    import winreg
+
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as key:
+        env["PATH"] = winreg.QueryValueEx(key, "Path")[0] + ";" + env["PATH"]
+
+
 def windows_batch_command(command: list[str]) -> list[str]:
     return ["cmd.exe", "/d", "/c", "call " + subprocess.list2cmdline(command)]
 
@@ -829,12 +839,7 @@ class Demo:
             raise RuntimeError("A demo service stopped. See its output above.")
 
     def setup(self):
-        for port in (
-            self.api_port,
-            self.web_port,
-            self.compose_postgres_port,
-            self.compose_oidc_port,
-        ):
+        for port in self.ports_to_check():
             check_demo_port(port)
         try:
             for folder in ("backend", "agent"):
@@ -856,6 +861,35 @@ class Demo:
         finally:
             # Record what this run created even when an install failed part way.
             record_created_dependencies(self.manifest_file)
+
+    def ports_to_check(self) -> list[int]:
+        """The loopback ports that must be free before the demo starts.
+
+        A failed run or a Ctrl+C leaves this project's own Postgres and identity provider up, and
+        Compose reuses them, so their ports are not checked while those containers exist.
+        """
+        ports = [self.api_port, self.web_port]
+        try:
+            found = run_bounded(
+                command_for(
+                    [
+                        "docker",
+                        "ps",
+                        "-q",
+                        "--filter",
+                        f"label=com.docker.compose.project={self.project}",
+                    ],
+                    path=self.env.get("PATH"),
+                ),
+                timeout=DOCKER_TIMEOUT,
+                env=self.env,
+            )
+            own = not found.returncode and bool(found.stdout.split())
+        except (OSError, subprocess.SubprocessError):
+            own = False
+        if not own:
+            ports += [self.compose_postgres_port, self.compose_oidc_port]
+        return ports
 
     def fake_model(self):
         port = int(self.env.get("GARDEN_DEMO_MODEL_PORT", "55085"))
@@ -1197,6 +1231,9 @@ class Demo:
             if time.monotonic() > deadline:
                 raise RuntimeError("Installer timed out before sign-in")
             time.sleep(0.2)
+        # The Windows installer puts its Node on the user PATH before sign-in; the approval below
+        # and the checks after it need that Node, also when an uninstall removed the earlier one.
+        with_user_path(env)
         if self.args.persona:
             names = {
                 "Dev Admin": "dev.admin",
@@ -1245,12 +1282,6 @@ class Demo:
         save_manifest(self.manifest_file, manifest)
         garden = bin_dir / ("garden.cmd" if os.name == "nt" else "garden")
         dsh = bin_dir / ("dsh.cmd" if os.name == "nt" else "dsh")
-        # The Windows installer persists its Node path for subsequent processes.
-        if os.name == "nt":
-            import winreg
-
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as key:
-                env["PATH"] = winreg.QueryValueEx(key, "Path")[0] + ";" + env["PATH"]
         for args in (
             [garden, "whoami"],
             [garden, "dsh-config"],
