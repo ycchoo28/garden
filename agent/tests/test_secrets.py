@@ -307,3 +307,71 @@ def test_a_keychain_that_cannot_be_loaded_is_explained_not_raised_bare(
         store_token("token", settings=settings)
     assert raised.value.title == "Windows Credential Manager is not available in this session"
     assert not (settings.home / "credentials.json").exists()
+
+
+def _no_keychain_write(*_args: str) -> None:
+    pytest.fail("the OS keychain must not be used for a bad GARDEN_SECRET_STORE value")
+
+
+@pytest.mark.parametrize("value", ["file", "file:", "file:   "])
+def test_secret_store_file_without_a_path_is_refused_with_the_accepted_forms(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings, value: str
+) -> None:
+    monkeypatch.setenv("GARDEN_SECRET_STORE", value)
+    monkeypatch.setattr(keyring, "set_password", _no_keychain_write)
+
+    with pytest.raises(GardenError) as raised:
+        store_token("token", settings=settings)
+
+    error = raised.value
+    assert error.title == "GARDEN_SECRET_STORE needs a file path"
+    assert error.fix is not None
+    assert "file:<path>" in error.fix
+    assert "unset" in error.fix
+    assert not (settings.home / "credentials.json").exists()
+
+
+def test_unknown_secret_store_value_is_refused_not_ignored(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
+    monkeypatch.setenv("GARDEN_SECRET_STORE", "keychain")
+    monkeypatch.setattr(keyring, "set_password", _no_keychain_write)
+
+    with pytest.raises(GardenError) as raised:
+        store_token("token", settings=settings)
+
+    error = raised.value
+    assert error.title == "GARDEN_SECRET_STORE has an unknown value"
+    assert error.detail is not None and "keychain" in error.detail
+    assert error.fix is not None
+    assert "file:<path>" in error.fix
+    assert "unset" in error.fix
+
+
+def test_empty_secret_store_value_means_the_keychain(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
+    monkeypatch.setenv("GARDEN_SECRET_STORE", "")
+    saved: list[str] = []
+
+    def remember(_service: str, _account: str, value: str) -> None:
+        saved.append(value)
+
+    monkeypatch.setattr(keyring, "set_password", remember)
+
+    store_token("token", settings=settings)
+
+    assert saved, "an empty value must use the keychain"
+    assert not (settings.home / "credentials.json").exists()
+
+
+def test_secret_store_file_with_a_path_still_uses_that_file(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings, tmp_path: Path
+) -> None:
+    target = tmp_path / "test-creds.json"
+    monkeypatch.setenv("GARDEN_SECRET_STORE", f"file:{target}")
+    monkeypatch.setattr(keyring, "set_password", _no_keychain_write)
+
+    store_token("token", settings=settings)
+
+    assert target.exists()

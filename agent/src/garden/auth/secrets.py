@@ -146,16 +146,41 @@ def _keychain_missing() -> bool:
         raise _no_keychain(error) from error
 
 
+SECRET_STORE_FIX = (
+    "Leave GARDEN_SECRET_STORE unset to use the OS keychain. The accepted file form is "
+    "GARDEN_SECRET_STORE=file:<path>, for example file:/tmp/garden-test/credentials.json, "
+    "and it is for tests only."
+)
+
+
+def _explicit_store(spec: str) -> SecretStore:
+    """The store GARDEN_SECRET_STORE asks for. Any other value is an error, never ignored."""
+    kind, _, path = spec.partition(":")
+    if kind != "file":
+        raise GardenError(
+            title="GARDEN_SECRET_STORE has an unknown value",
+            detail=f"GARDEN_SECRET_STORE={spec} is not a form this CLI accepts.",
+            fix=SECRET_STORE_FIX,
+        )
+    if not path.strip():
+        raise GardenError(
+            title="GARDEN_SECRET_STORE needs a file path",
+            detail="GARDEN_SECRET_STORE=file has no path, so it cannot pick a file for the login.",
+            fix=SECRET_STORE_FIX,
+        )
+    print(
+        "warning: GARDEN_SECRET_STORE=file: keeps the CLI login in plain text. Tests only.",
+        file=sys.stderr,
+    )
+    return FileStore(Path(path))
+
+
 def default_store(home: Path | None = None) -> SecretStore:
     # Before keyring is asked for its backend: the choice itself imports pywin32-ctypes.
     _hide_cffi_from_windows_keyring()
-    spec = os.environ.get("GARDEN_SECRET_STORE", "")
-    if spec.startswith("file:"):
-        print(
-            "warning: GARDEN_SECRET_STORE=file: keeps the CLI login in plain text. Tests only.",
-            file=sys.stderr,
-        )
-        return FileStore(Path(spec.removeprefix("file:")))
+    spec = os.environ.get("GARDEN_SECRET_STORE", "").strip()
+    if spec:
+        return _explicit_store(spec)
     if _keychain_missing():
         print(
             "warning: no keychain on this system, so the CLI login is kept in a private file "
