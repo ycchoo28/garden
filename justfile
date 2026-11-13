@@ -7,9 +7,8 @@ api_url := "http://127.0.0.1:55000"
 demo_just_dotenv_path := env_var_or_default("GARDEN_DEMO_JUST_DOTENV_PATH", ".env")
 web_url := "http://127.0.0.1:55173"
 # Windows runs recipe lines through scripts/just_shell.py, which uses Git for Windows bash and never
-# the WSL bash.exe on PATH. Linux and macOS keep the default shell and the bash shebangs.
-[windows]
-set shell := ["uv", "run", "--no-project", "--python", "3.12", "python", "scripts/just_shell.py", "-cu"]
+# the WSL bash.exe on PATH. Linux and macOS ignore this setting. Older just versions read it too.
+set windows-shell := ["uv", "run", "--no-project", "--python", "3.12", "python", "scripts/just_shell.py", "-cu"]
 
 default:
     @just --list

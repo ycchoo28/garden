@@ -93,14 +93,15 @@ def test_posix_uses_bash_from_path(monkeypatch, tmp_path: Path) -> None:
 def test_justfile_sets_the_runner_only_for_windows() -> None:
     text = (ROOT / "justfile").read_text(encoding="utf-8")
 
+    # windows-shell is read only on Windows, and older just versions parse it too.
     assert (
-        '[windows]\nset shell := ["uv", "run", "--no-project", "--python", "3.12", "python", '
-        in text
+        'set windows-shell := ["uv", "run", "--no-project", "--python", "3.12", "python", ' in text
     )
     assert '"scripts/just_shell.py", "-cu"]' in text
-    # Linux and macOS keep the default shell and the bash shebangs. Only Windows gets the runner.
-    assert "\nset shell" not in text.replace("[windows]\nset shell", "")
+    # Linux and macOS keep the default shell, and nothing newer than just 1.21 is used.
+    assert "\nset shell" not in text
     assert "script-interpreter" not in text
+    assert "[windows]\nset " not in text
 
 
 def test_every_bash_shebang_recipe_is_tagged_unix() -> None:
@@ -135,10 +136,6 @@ def test_runner_runs_a_recipe_line_with_bash() -> None:
 
 
 @pytest.mark.skipif(shutil.which("just") is None, reason="just is not installed")
-def test_installed_just_accepts_the_justfile() -> None:
-    version = subprocess.run(
-        ["just", "--version"], capture_output=True, text=True, check=True
-    ).stdout.split()[-1]
-    if tuple(int(part) for part in version.split(".")) < (1, 58, 0):
-        pytest.skip("the justfile is written for the pinned just 1.58.0")
+def test_installed_just_parses_the_justfile() -> None:
+    # Bootstrap reuses any just already on PATH, so the justfile must parse with older versions too.
     subprocess.run(["just", "--summary"], cwd=ROOT, capture_output=True, check=True)
