@@ -153,7 +153,7 @@ The terms are grouped by area, and the last section lists the words to avoid.
 - **pass^k**: a task passes for a model only when all of its k repeats pass.
 - **Budget**: the most tool calls, time and tokens a trial may use before the runner stops it.
 - **Finding**: something worth seeing that does not fail a trial on its own, such as a loop or the use of a tool that is not garden's.
-- **Trace contract**: the span names and attributes that every producer of agent telemetry follows (ADR 0029).
+- **Trace contract**: the span names and attributes that every producer of agent telemetry follows (ADR 0030).
 - **Agent conversation**: one conversation in an agent harness, which is not a browser session.
 - **Content capture**: the development and eval setting that lets the model gateway record prompts and replies in its spans.
 

@@ -1,4 +1,4 @@
-# 0028. Our own agent eval system
+# 0029. Our own agent eval system
 
 Status: Accepted, 2026-11-13.
 
@@ -21,11 +21,11 @@ Garden has its own eval runner, written in Python inside the agent package's tes
 - **Tasks are data in git.** A task is typed Python data: a prompt, the person who asks, the expected confirmation behaviour (`approve`, `deny` or `none`), its graders, a `suite` (`capability` or `regression`), an `area` tag and optional budget overrides.
   A task moves from capability to regression by hand.
 - **One trial, one world.** Each trial gets a database cloned from a seeded template with `CREATE DATABASE ... TEMPLATE`, its own API process, and a sealed workspace and home folder for dsh.
-  The CLI logins are made once in the template, so a trial starts signed in.
+  The Agent logins are made once in the template, so a trial starts signed in.
   A failed trial's database is kept only with `--keep-failed`.
 - **Real models through the gateway.** dsh talks to the model gateway, which forwards to the upstream named by `GARDEN_EVAL_UPSTREAM_URL` and `GARDEN_EVAL_UPSTREAM_KEY`, for each model in `GARDEN_EVAL_MODELS`.
 - **Graders.** A trial passes only when every grader passes.
-  - State graders read the result through the API with a finance or admin CLI login.
+  - State graders read the result through the API with a finance or admin Agent login.
   - Trajectory graders check outcomes and hard rules, such as "no new submission" or "the final answer sends the person to the portal", never the exact order of tool calls.
   - An LLM judge grades knowledge answers only, and may answer `unknown`, which fails the trial.
 - **Confirmations.** A task names the confirmation it expects, and the runner approves or denies it in a scripted browser.
@@ -46,7 +46,7 @@ Garden has its own eval runner, written in Python inside the agent package's tes
 - **Layout.** Test code lives under `agent/tests/`: shared test code in `agent/tests/shared/`, the end-to-end run in `agent/tests/e2e/` and the evals in `agent/tests/evals/`.
   Nothing outside the tests imports test code, in the agent package and in the backend, and architecture tests enforce it.
 
-Traces follow [ADR 0029](0029-agent-trace-contract.md), and results are stored and viewed as in [ADR 0030](0030-openobserve-for-evals-and-agent-telemetry.md).
+Traces follow [ADR 0030](0030-agent-trace-contract.md), and results are stored and viewed as in [ADR 0031](0031-openobserve-for-evals-and-agent-telemetry.md).
 
 ## Consequences
 

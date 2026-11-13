@@ -1,6 +1,6 @@
 # 0024. Model gateway
 
-Status: Accepted, 2026-11-04. Amended by [ADR 0029](0029-agent-trace-contract.md), which adds trace spans with content off by default.
+Status: Accepted, 2026-11-04. Amended by [ADR 0030](0030-agent-trace-contract.md), which adds trace spans with content off by default.
 
 ## Context
 
