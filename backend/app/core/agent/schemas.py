@@ -91,6 +91,8 @@ class CliLoginCreated(BaseModel):
     id: UUID
     device: str
     created_at: datetime
+    expires_at: datetime | None = None
+    source: Literal["cli", "web"] = "cli"
     token: str
 
 
@@ -100,6 +102,8 @@ class CliLoginOut(BaseModel):
     created_at: datetime
     last_used_at: datetime | None
     revoked_at: datetime | None
+    expires_at: datetime | None
+    source: Literal["cli", "web"]
 
     @classmethod
     def of(cls, row: CliLogin) -> "CliLoginOut":
@@ -109,4 +113,11 @@ class CliLoginOut(BaseModel):
             created_at=row.created_at,
             last_used_at=row.last_used_at,
             revoked_at=row.revoked_at,
+            expires_at=row.expires_at,
+            source=row.source,
         )
+
+
+class WebCliLoginIn(BaseModel):
+    device: str = Field(min_length=1, max_length=120)
+    expires_in_days: Literal[30, 90, 365] | None = 90

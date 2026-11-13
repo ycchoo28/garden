@@ -98,6 +98,9 @@ class UserRepository:
     def add_cli_login(self, row: CliLogin) -> None:
         self._session.add(row)
 
+    async def flush(self) -> None:
+        await self._session.flush()
+
     async def cli_login_with_person(self, token_hash: str) -> tuple[CliLogin, Person] | None:
         row = (
             await self._session.execute(

@@ -56,5 +56,5 @@ A 429 means you have made too many requests for now, so wait a minute.
 ## Model access
 
 The model gateway is an OpenAI-compatible endpoint on the portal, at `/api/agent/model/v1`.
-It takes the same CLI login as a bearer token, and it limits requests per minute and tokens per day.
+It takes the same Agent login as a bearer token, and it limits requests per minute and tokens per day.
 To see today's usage, run `garden agent my_model_usage read`.

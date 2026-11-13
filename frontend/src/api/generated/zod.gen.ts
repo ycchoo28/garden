@@ -122,7 +122,9 @@ export const zClaimSummaryOut = z.object({
 export const zCliLoginCreated = z.object({
     created_at: z.iso.datetime(),
     device: z.string(),
+    expires_at: z.iso.datetime().nullish(),
     id: z.uuid(),
+    source: z.enum(['cli', 'web']).optional().default('cli'),
     token: z.string()
 });
 
@@ -145,9 +147,11 @@ export const zCliLoginIn = z.object({
 export const zCliLoginOut = z.object({
     created_at: z.iso.datetime(),
     device: z.string(),
+    expires_at: z.iso.datetime().nullable(),
     id: z.uuid(),
     last_used_at: z.iso.datetime().nullable(),
-    revoked_at: z.iso.datetime().nullable()
+    revoked_at: z.iso.datetime().nullable(),
+    source: z.enum(['cli', 'web'])
 });
 
 /**
@@ -595,6 +599,18 @@ export const zVoidLineIn = z.object({
 });
 
 /**
+ * WebCliLoginIn
+ */
+export const zWebCliLoginIn = z.object({
+    device: z.string().min(1).max(120),
+    expires_in_days: z.union([
+        z.literal(30),
+        z.literal(90),
+        z.literal(365)
+    ]).nullish().default(90)
+});
+
+/**
  * Body_files.file.upload
  */
 export const zFastapiCompatV2BodyFilesFileUpload = z.object({
@@ -678,6 +694,13 @@ export const zAgentConfirmationDecideResponse = zConfirmationOut;
  * Successful Response
  */
 export const zAgentMyLoginListResponse = z.array(zCliLoginOut);
+
+export const zAgentMyLoginCreateBody = zWebCliLoginIn;
+
+/**
+ * Successful Response
+ */
+export const zAgentMyLoginCreateResponse = zCliLoginCreated;
 
 export const zAgentMyLoginSignOutPath = z.object({
     login_id: z.uuid()

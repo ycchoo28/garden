@@ -70,11 +70,26 @@ class Tool:
         """Every argument except the JSON body: path, query and form fields, in that order."""
         return (*self.path_params, *self.query_params, *(field.param for field in self.form_fields))
 
-    def input_schema(self) -> dict[str, Any]:
+    def input_schema(self, *, hosted_files: bool = False) -> dict[str, Any]:
         properties: dict[str, Any] = {}
         required: list[str] = []
         for param in self.params:
-            properties[param.name] = {**param.schema, "description": param.description}
+            schema = {**param.schema, "description": param.description}
+            if hosted_files and any(
+                field.binary and field.param.name == param.name for field in self.form_fields
+            ):
+                schema = {
+                    "type": "object",
+                    "properties": {
+                        "filename": {"type": "string"},
+                        "content_type": {"type": "string"},
+                        "data_base64": {"type": "string"},
+                    },
+                    "required": ["filename", "content_type", "data_base64"],
+                    "additionalProperties": False,
+                    "description": "File bytes held by the hosted agent.",
+                }
+            properties[param.name] = schema
             if param.required:
                 required.append(param.name)
         if self.body_schema is not None:

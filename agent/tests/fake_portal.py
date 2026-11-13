@@ -15,7 +15,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 CONFIRMATION_HEADER = "x-garden-confirmation"
-GOOD_TOKEN = "good-token"
+GOOD_TOKEN = "ag_good-token"
 BATCH_UPLOAD = re.compile(r"/api/knowledge/batches/([^/]+)/files")
 
 
@@ -70,11 +70,22 @@ class FakePortal:
     polls: dict[str, int] = field(default_factory=lambda: dict[str, int]())
     # How long a confirmation stays open, from the moment the portal asks for it.
     expires_in_seconds: float = 600.0
+    # Some database drivers return UTC timestamps without an offset.
+    naive_confirmation_expiry: bool = False
     # Routes a test adds to the contract. Each answers with the method, path and JSON body it got.
     extra_paths: dict[str, dict[str, Any]] = field(
         default_factory=lambda: dict[str, dict[str, Any]]()
     )
     logouts: list[str] = field(default_factory=lambda: list[str]())
+    # Counts for tests: how often the contract is fetched, and how often the person's permissions
+    # are read.
+    contract_fetches: int = 0
+    me_reads: int = 0
+    # Logins accepted besides GOOD_TOKEN, so one test can hold several CLI logins at once.
+    extra_tokens: frozenset[str] = frozenset()
+    # Leave the contract version header off every response, or fail the contract document.
+    omit_contract_header: bool = False
+    contract_down: bool = False
     url: str = ""
     _server: ThreadingHTTPServer | None = None
 
@@ -248,7 +259,8 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header(
             "Content-Type", "application/problem+json" if problem else "application/json"
         )
-        self.send_header("X-Garden-Contract-Version", self.fake.version)
+        if not self.fake.omit_contract_header:
+            self.send_header("X-Garden-Contract-Version", self.fake.version)
         self.send_header("X-Garden-Min-CLI-Version", self.fake.min_cli)
         for name, value in (headers or {}).items():
             self.send_header(name, value)
@@ -265,11 +277,16 @@ class _Handler(BaseHTTPRequestHandler):
         return json.loads(raw) if raw else {}
 
     def _bearer_ok(self) -> bool:
-        return self.headers.get("Authorization") == f"Bearer {GOOD_TOKEN}"
+        accepted = {f"Bearer {token}" for token in (GOOD_TOKEN, *self.fake.extra_tokens)}
+        return self.headers.get("Authorization") in accepted
 
     def do_GET(self) -> None:
         parts = urlsplit(self.path)
         if parts.path == "/api/openapi.json":
+            self.fake.contract_fetches += 1
+            if self.fake.contract_down:
+                self._problem(503, "Service Unavailable")
+                return
             self._send(200, self.fake.contract())
             return
         if parts.path == "/api/agent/manifest":
@@ -297,6 +314,7 @@ class _Handler(BaseHTTPRequestHandler):
             )
             return
         if parts.path == "/api/users/me":
+            self.fake.me_reads += 1
             self._send(
                 200,
                 {
@@ -450,15 +468,16 @@ class _Handler(BaseHTTPRequestHandler):
         if presented is None:
             confirmation_id = f"conf-{len(self.fake.confirmations) + 1}"
             self.fake.confirmations[confirmation_id] = "pending"
+            expires_at = datetime.now(UTC) + timedelta(seconds=self.fake.expires_in_seconds)
+            if self.fake.naive_confirmation_expiry:
+                expires_at = expires_at.replace(tzinfo=None)
             self._problem(
                 428,
                 "Confirmation Required",
                 detail="The person must approve this action in the browser first.",
                 confirmation_id=confirmation_id,
                 confirmation_url=f"{self.fake.url}/agent/confirmations/{confirmation_id}",
-                expires_at=(
-                    datetime.now(UTC) + timedelta(seconds=self.fake.expires_in_seconds)
-                ).isoformat(),
+                expires_at=expires_at.isoformat(),
             )
             return False
         self.fake.retries.append(presented)

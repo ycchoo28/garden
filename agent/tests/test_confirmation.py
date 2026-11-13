@@ -8,6 +8,7 @@ answered in the browser while the command waited.
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -131,6 +132,27 @@ def test_the_engine_polls_until_the_answer_and_then_runs_the_call(
     assert len(notices) == 1
     assert f"{portal.url}/agent/confirmations/conf-1" in notices[0]
     assert portal.deleted == [SHA]
+
+
+def test_naive_confirmation_expiry_is_treated_as_utc(portal: FakePortal, tmp_path: Path) -> None:
+    previous_timezone = os.environ.get("TZ")
+    os.environ["TZ"] = "Asia/Kuala_Lumpur"
+    time.tzset()
+    try:
+        portal.auto_decision = "approved"
+        portal.naive_confirmation_expiry = True
+        engine = Engine(PortalClient(portal.url, token=GOOD_TOKEN), tmp_path, sleep=lambda _: None)
+        tool = engine.tool("files_file_delete")
+        assert tool is not None
+
+        engine.call(tool, {"sha256": SHA})
+        assert portal.deleted == [SHA]
+    finally:
+        if previous_timezone is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = previous_timezone
+        time.tzset()
 
 
 def test_the_default_poll_sees_an_approval_within_a_second(

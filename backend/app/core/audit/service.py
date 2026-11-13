@@ -36,6 +36,8 @@ class AuditService:
         """Add the row to the caller's transaction. The caller commits, so the change and its record
         are saved together or not at all."""
         login = current_request_login.get()
+        if login is not None and login.source is not None:
+            summary = f"{summary} (Agent login source: {login.source})"
         self._repo.add(
             AuditEvent(
                 occurred_at=self._clock.now(),

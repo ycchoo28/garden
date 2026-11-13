@@ -31,6 +31,7 @@ Records are numbered in the order they were made, and a later record may replace
 | [0025](0025-batch-approval-and-undo.md) | A batch goes live only after approval, and undo restores the spans |
 | [0026](0026-business-ownership-and-reporting-reads.md) | Business ownership, domain-neutral Shared code and governed reporting reads |
 | [0027](0027-architecture-enforcement.md) | Explicit enforcement tiers and required ownership review |
+| [0028](0028-hosted-mcp-endpoint.md) | Provider-hosted MCP over stateless Streamable HTTP |
 | [0028](0028-own-agent-eval-system.md) | Our own eval runner, with one cloned database per trial and graders that read real state |
 | [0029](0029-agent-trace-contract.md) | One trace contract for every agent, with gateway spans that hold content only when asked |
 | [0030](0030-openobserve-for-evals-and-agent-telemetry.md) | OpenObserve stores and shows eval results and agent telemetry |

@@ -17,7 +17,11 @@ dependencies = [
     "httpx==0.28.1",
     "pgvector==0.4.2",
     "pypdf==6.21.4",
+    "garden-cli",
 ]
+
+[tool.uv.sources]
+garden-cli = { path = "../agent", editable = true }
 
 [dependency-groups]
 dev = [
