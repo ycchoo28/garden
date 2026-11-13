@@ -196,7 +196,7 @@ async def create_browser_cli_login(
         actor_id=person.id,
         operation="agent.my_login.create",
         target=str(row.id),
-        summary=f"Created CLI login {row.device}",
+        summary=f"Created Agent login {row.device}",
     )
     await service.commit()
     return CliLoginCreated(
@@ -262,7 +262,7 @@ async def sign_out_cli_token(
 ) -> Response:
     login = current_request_login.get()
     if login is None or login.cli_login_id is None:
-        raise Forbidden("Only a CLI login ends with this call. Sign out in the browser instead.")
+        raise Forbidden("Only an Agent login ends with this call. Sign out in the browser instead.")
     await service.revoke_cli_login(person_id=person.id, login_id=login.cli_login_id)
     return Response(status_code=204)
 

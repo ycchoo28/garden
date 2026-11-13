@@ -203,7 +203,7 @@ class UserService:
     ) -> str:
         """Where the CLI's browser goes to approve its login. The CLI keeps the verifier itself."""
         if _LOOPBACK_CALLBACK.fullmatch(redirect_uri) is None:
-            raise Forbidden("A CLI login returns only to a listener on this machine.")
+            raise Forbidden("An Agent login returns only to a listener on this machine.")
         return await self._identity.authorization_url(
             redirect_uri=redirect_uri,
             state=state,
@@ -216,7 +216,7 @@ class UserService:
     ) -> tuple[str, CliLogin]:
         """Trade the approved code for a CLI login. The raw token is returned once."""
         if _LOOPBACK_CALLBACK.fullmatch(redirect_uri) is None:
-            raise Forbidden("A CLI login returns only to a listener on this machine.")
+            raise Forbidden("An Agent login returns only to a listener on this machine.")
         now = self._clock.now()
         try:
             tokens = await self._identity.exchange_code(
@@ -282,12 +282,12 @@ class UserService:
         now = self._clock.now()
         found = await self._repo.cli_login_with_person(token_hash(raw_token))
         if found is None:
-            raise Unauthorized("Run garden login again. This CLI login is not recognised.")
+            raise Unauthorized("Run garden login again. This Agent login is not recognised.")
         login, person = found
         if login.revoked_at is not None:
-            raise Unauthorized("This CLI login was revoked. Run garden login again.")
+            raise Unauthorized("This Agent login was revoked. Run garden login again.")
         if login.expires_at is not None and login.expires_at <= now:
-            raise Unauthorized("This CLI login expired. Create a new CLI login to continue.")
+            raise Unauthorized("This Agent login expired. Create a new Agent login to continue.")
         if not person.is_active:
             raise Forbidden("This account is not set up for Garden.")
         await self._repo.touch_cli_login(token_hash(raw_token), now)
@@ -303,7 +303,7 @@ class UserService:
         """Only the person may revoke. A login that is already revoked stays revoked."""
         login = await self._repo.cli_login_of(person_id, login_id)
         if login is None:
-            raise NotFound("No CLI login has that identifier.")
+            raise NotFound("No Agent login has that identifier.")
         if login.revoked_at is None:
             login.revoked_at = self._clock.now()
             await self._repo.commit()

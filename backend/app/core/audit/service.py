@@ -37,7 +37,7 @@ class AuditService:
         are saved together or not at all."""
         login = current_request_login.get()
         if login is not None and login.source is not None:
-            summary = f"{summary} (CLI login source: {login.source})"
+            summary = f"{summary} (Agent login source: {login.source})"
         self._repo.add(
             AuditEvent(
                 occurred_at=self._clock.now(),

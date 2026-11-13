@@ -478,7 +478,7 @@ async def _unauthorized(send: Any) -> None:
         send,
         401,
         "Unauthorized",
-        "Send Authorization: Bearer with a valid CLI login.",
+        "Send Authorization: Bearer with a valid Agent login.",
         [(b"www-authenticate", b"Bearer")],
     )
 
@@ -519,7 +519,7 @@ async def _portal_failure(send: Any, request_id: Any, error: GardenError | OSErr
         await _unauthorized(send)
         return
     if isinstance(error, GardenError) and error.status == 403:
-        await _problem(send, 403, "Forbidden", "This CLI login may not use MCP.")
+        await _problem(send, 403, "Forbidden", "This Agent login may not use MCP.")
         return
     message = error.title if isinstance(error, GardenError) else _UNREACHABLE
     await _json_response(send, 502, _rpc_error(request_id, -32000, message))

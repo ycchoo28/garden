@@ -264,7 +264,7 @@ async def test_mounted_mcp_endpoint_uses_real_cli_logins_and_audits_hosted_saves
         assert event.acting_as_agent is True
         assert event.device == "hosted-agent-web"
         assert event.login_created_at is not None
-        assert "CLI login source: web" in event.summary
+        assert "Agent login source: web" in event.summary
 
         refreshed = await mcp.post(
             ENDPOINT,

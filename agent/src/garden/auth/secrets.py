@@ -118,13 +118,13 @@ def default_store(home: Path | None = None) -> SecretStore:
     spec = os.environ.get("GARDEN_SECRET_STORE", "")
     if spec.startswith("file:"):
         print(
-            "warning: GARDEN_SECRET_STORE=file: keeps the CLI login in plain text. Tests only.",
+            "warning: GARDEN_SECRET_STORE=file: keeps the Agent login in plain text. Tests only.",
             file=sys.stderr,
         )
         return FileStore(Path(spec.removeprefix("file:")))
     if _keychain_missing():
         print(
-            "warning: no keychain on this system, so the CLI login is kept in a private file "
+            "warning: no keychain on this system, so the Agent login is kept in a private file "
             "in the garden home folder, in plain text.",
             file=sys.stderr,
         )

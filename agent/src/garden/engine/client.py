@@ -178,14 +178,14 @@ def _decode(raw: bytes) -> Any:
 
 
 _FIXES: dict[int, str] = {
-    401: "Run `garden login`. Your CLI login may have been revoked.",
+    401: "Run `garden login`. Your Agent login may have been revoked.",
     403: "Your access does not include this. Ask the person to give you the permission in Garden.",
     404: "Check the id. List the items first to find the right one.",
     409: "The item changed or the approval was already used. Read it again, then retry.",
     413: "Use a smaller file. The problem says how large a file may be.",
     428: "Ask the person to approve this action at the link, in the browser. The command waits.",
     422: "Fix the fields listed under errors, then retry.",
-    429: "Wait a minute and try again. The portal limits requests for each CLI login.",
+    429: "Wait a minute and try again. The portal limits requests for each Agent login.",
 }
 
 
