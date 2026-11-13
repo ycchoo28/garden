@@ -28,6 +28,7 @@ SPEC = importlib.util.spec_from_file_location(
 )
 assert SPEC and SPEC.loader
 DEMO = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = DEMO
 SPEC.loader.exec_module(DEMO)
 
 CONFIG_SPEC = importlib.util.spec_from_file_location(
@@ -458,6 +459,63 @@ def test_compose_teardown_runs_when_the_runner_is_already_gone(tmp_path: Path, m
 
     assert cleanup.run() == 1
     assert torn_down == ["garden-demo-test"]
+
+
+def _closed_loopback_url() -> str:
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    return f"http://127.0.0.1:{port}/stop/killed"
+
+
+def test_killed_demo_runner_counts_as_stopped(capsys) -> None:
+    project = {"name": "garden-demo-killed", "active": True, "control_url": _closed_loopback_url()}
+    cleanup = DEMO.DemoCleanup.__new__(DEMO.DemoCleanup)
+
+    assert DEMO.DemoCleanup.stop_runner(cleanup, project) is True
+    err = capsys.readouterr().err
+    assert "already stopped" in err
+    assert "did not respond" not in err
+
+
+def test_clean_exits_zero_after_hand_killed_demo(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    data = MANIFEST.empty_manifest()
+    MANIFEST.record_demo_project(
+        data,
+        DEMO.ROOT,
+        "garden-demo-killed",
+        active=True,
+        control_url=_closed_loopback_url(),
+    )
+    MANIFEST.save_manifest(MANIFEST.manifest_path(tmp_path), data)
+    args = argparse.Namespace(
+        dry_run=False,
+        yes=True,
+        remove_env=False,
+        env_file=str(tmp_path / ".env"),
+    )
+    cleanup = DEMO.DemoCleanup(args, "clean")
+    torn_down = []
+    monkeypatch.setattr(
+        cleanup, "compose_down", lambda project: torn_down.append(project["name"]) or True
+    )
+
+    assert cleanup.run() == 0
+    assert torn_down == ["garden-demo-killed"]
+
+
+def test_unresponsive_demo_runner_is_still_a_failure(capsys) -> None:
+    # A listener that accepts connections but never answers is not a dead demo.
+    with socket.socket() as silent:
+        silent.bind(("127.0.0.1", 0))
+        silent.listen(1)
+        url = f"http://127.0.0.1:{silent.getsockname()[1]}/stop/silent"
+        project = {"name": "garden-demo-silent", "active": True, "control_url": url}
+        cleanup = DEMO.DemoCleanup.__new__(DEMO.DemoCleanup)
+
+        assert DEMO.DemoCleanup.stop_runner(cleanup, project) is False
+    assert "did not respond" in capsys.readouterr().err
 
 
 def test_empty_cleanup_is_idempotent(tmp_path: Path, monkeypatch) -> None:

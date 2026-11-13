@@ -118,8 +118,12 @@ POSIX bootstrap must be sourced to update the current shell's PATH.
 Supported bootstrap hosts are Linux and macOS on x64 or ARM64, and Windows on x64.
 
 `just demo` initializes `.env` and missing dependencies, validates the saved model upstream, publishes the agent downloads, and starts the seeded portal.
-When model settings are missing or unusable, it asks for an OpenAI-compatible base URL, a hidden API token and allowed/default models.
-Enter `fake` at the URL prompt to use the built-in local fake model without an external key.
+When model settings are missing or unusable, it offers a provider menu (OpenRouter, OpenAI, another OpenAI-compatible URL, or the local fake model), then asks for a hidden API token.
+Models are picked from the upstream's list by filter text, number or exact id, and the default is chosen by number; the list is not dumped.
+A failed check prints the upstream's HTTP status, its message and a hint, then returns only to the step that failed (key, model or URL).
+Before saving, it shows a summary with the key masked.
+Choose the local fake model from the menu, or enter `fake` at the URL prompt, to use the built-in local fake model without an external key.
+Non-interactive runs (`--non-interactive` with the `GARDEN_AGENT_MODEL_*` variables) print the same reason and fail without prompting.
 The four `GARDEN_AGENT_MODEL_*` settings are saved only in the portal `.env`, with restricted file permissions, and reused after validation on later starts.
 Neither the installer nor the client configuration receives the upstream key ([ADR 0024](docs/adr/0024-model-gateway.md)).
 The fake model returns a fixed reply and does not reason or call tools.

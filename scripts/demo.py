@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import difflib
 import getpass
 import hashlib
 import json
@@ -20,6 +21,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -187,45 +189,382 @@ def save_env(path: Path, values: dict[str, str]) -> None:
     path.chmod(0o600)
 
 
-def request_json(url: str, key: str = "", body: dict | None = None):
+def request_json(url: str, key: str = "", body: dict | None = None, timeout: float = 15):
     headers = {"Content-Type": "application/json"}
     if key:
         headers["Authorization"] = "Bearer " + key
     request = urllib.request.Request(
         url, headers=headers, data=None if body is None else json.dumps(body).encode()
     )
-    with urllib.request.urlopen(request, timeout=15) as response:
+    with urllib.request.urlopen(request, timeout=timeout) as response:
         return json.load(response)
 
 
-def validate_model(env: dict[str, str]) -> bool:
-    url, key, models, default = (env.get(name, "").strip() for name in MODEL_KEYS)
-    allowed = [name.strip() for name in models.split(",") if name.strip()]
-    if (
-        not url.startswith(("http://", "https://"))
-        or not key
-        or not allowed
-        or default not in allowed
-    ):
-        return False
+PROVIDER_PRESETS = (
+    ("OpenRouter", "https://openrouter.ai/api/v1"),
+    ("OpenAI", "https://api.openai.com/v1"),
+    ("Other OpenAI-compatible URL", ""),
+    ("Local fake model (demo only)", "fake"),
+)
+OPENROUTER_PRIVACY_URL = "https://openrouter.ai/settings/privacy"
+# Small enough for every provider's minimum. A reasoning model may return no text at this size,
+# so the check only needs a reply with choices.
+CHECK_MAX_TOKENS = 16
+MODEL_PAGE = 20
+
+
+@dataclass(frozen=True)
+class UpstreamProblem:
+    """Why the upstream check failed. `step` names the setup step to return to."""
+
+    step: str  # "url", "key", "model", or "retry" (same settings, try again)
+    reason: str
+    hint: str = ""
+    suggestions: tuple[str, ...] = ()
+
+    def text(self) -> str:
+        lines = [f"Reason: {self.reason}"]
+        if self.suggestions:
+            lines.append("Closest model ids: " + ", ".join(self.suggestions))
+        if self.hint:
+            lines.append(f"Hint: {self.hint}")
+        return "\n".join(lines)
+
+
+def _redact(text: object, key: str) -> str:
+    cleaned = " ".join(str(text).split())
+    if key:
+        cleaned = cleaned.replace(key, "[key hidden]")
+    return cleaned[:300]
+
+
+def _upstream_message(error: urllib.error.HTTPError, key: str) -> str:
+    try:
+        raw = error.read().decode("utf-8", "replace")
+    except OSError:
+        raw = ""
+    try:
+        body = json.loads(raw)
+    except ValueError:
+        body = None
+    message: object = raw
+    if isinstance(body, dict):
+        found = body.get("error", body)
+        if isinstance(found, dict):
+            found = found.get("message") or found.get("code")
+        message = found or raw
+    return _redact(message, key)
+
+
+def hint_for(status: int | None, message: str = "", *, listing: bool = False) -> tuple[str, str]:
+    """Map an upstream HTTP status to the setup step to return to, and a plain hint."""
+    lowered = message.lower()
+    if status == 401:
+        return "key", "The key was rejected. Enter it again; it is not saved yet."
+    if status == 402:
+        return (
+            "model",
+            "No credits left for this model. Add credits, or pick a model that needs none.",
+        )
+    if status == 403 and "agentic" in lowered:
+        return (
+            "model",
+            "This model only works from agentic harnesses. Pick another model.",
+        )
+    if status == 403:
+        return (
+            "model",
+            "The key may not use this model. Check the key's permissions or pick another model.",
+        )
+    if status == 404 and listing:
+        return (
+            "url",
+            "This URL does not answer like an OpenAI-compatible base URL, such as https://openrouter.ai/api/v1.",
+        )
+    if status == 404 and "data policy" in lowered:
+        return "model", (
+            "OpenRouter's privacy settings block this model. Free models need data-policy "
+            "consent at "
+            f"{OPENROUTER_PRIVACY_URL}, or pick a model that is not free."
+        )
+    if status == 404:
+        return "model", "The model or its endpoint was not found. Check the model id."
+    if status == 429:
+        if listing:
+            return "retry", "Rate limited while listing models. Wait a moment and retry."
+        return (
+            "model",
+            "Rate limited. Free models are shared and limited. Wait, or pick a non-free model.",
+        )
+    if status == 400:
+        return "model", "The upstream rejected the request for this model. Pick another model."
+    if status is not None and status >= 500:
+        return "retry", "The upstream is failing. Wait a few minutes, then retry."
+    return (
+        "url" if listing else "retry"
+    ), "Unexpected answer from the upstream. Retry, or change the URL."
+
+
+def _http_problem(error: urllib.error.HTTPError, key: str, *, listing: bool) -> UpstreamProblem:
+    message = _upstream_message(error, key)
+    step, hint = hint_for(error.code, message, listing=listing)
+    return UpstreamProblem(step, f"HTTP {error.code}: {message or error.reason}", hint)
+
+
+def _network_problem(error: Exception, key: str, step: str) -> UpstreamProblem:
+    cause = getattr(error, "reason", error)
+    return UpstreamProblem(
+        step,
+        f"could not reach the upstream ({_redact(cause, key)})",
+        "Check the address and your network connection.",
+    )
+
+
+def list_upstream_models(url: str, key: str) -> tuple[list[str], UpstreamProblem | None]:
     try:
         listed = request_json(url.rstrip("/") + "/models", key)
-        available = {row["id"] for row in listed["data"]}
-        if not set(allowed).issubset(available):
-            return False
-        # Models can be visible while the token cannot invoke them. Check the selected default too.
-        reply = request_json(
-            url.rstrip("/") + "/chat/completions",
-            key,
-            {
-                "model": default,
-                "messages": [{"role": "user", "content": "Reply: ready"}],
-                "max_tokens": 8,
-            },
+    except urllib.error.HTTPError as error:
+        return [], _http_problem(error, key, listing=True)
+    except (OSError, ValueError) as error:
+        return [], _network_problem(error, key, "url")
+    rows = listed.get("data") if isinstance(listed, dict) else None
+    if not isinstance(rows, list):
+        return [], UpstreamProblem(
+            "url",
+            "the URL did not return a model list",
+            "Check that the URL is an OpenAI-compatible base URL, such as https://openrouter.ai/api/v1.",
         )
-        return bool(reply.get("choices"))
-    except (OSError, ValueError, KeyError, TypeError):
-        return False
+    ids = sorted(
+        {row["id"] for row in rows if isinstance(row, dict) and isinstance(row.get("id"), str)}
+    )
+    return ids, None
+
+
+def check_chat(url: str, key: str, model: str) -> UpstreamProblem | None:
+    """Ask the default model one question. Any reply with choices counts as callable."""
+    body = {
+        "model": model,
+        "messages": [{"role": "user", "content": "Reply: ready"}],
+        "max_tokens": CHECK_MAX_TOKENS,
+    }
+    try:
+        reply = request_json(url.rstrip("/") + "/chat/completions", key, body, timeout=60)
+    except urllib.error.HTTPError as error:
+        return _http_problem(error, key, listing=False)
+    except (OSError, ValueError) as error:
+        return _network_problem(error, key, "retry")
+    choices = reply.get("choices") if isinstance(reply, dict) else None
+    if not isinstance(choices, list) or not choices:
+        return UpstreamProblem(
+            "model",
+            "the model answered without any choices",
+            "Pick another model; this one did not produce a reply.",
+        )
+    return None
+
+
+def check_settings(env: dict[str, str]) -> UpstreamProblem | None:
+    """Return None when the saved upstream settings are usable, else why they are not."""
+    url, key, models, default = (env.get(name, "").strip() for name in MODEL_KEYS)
+    allowed = [name.strip() for name in models.split(",") if name.strip()]
+    if not url.startswith(("http://", "https://")):
+        return UpstreamProblem("url", "the base URL must start with http:// or https://")
+    if not key:
+        return UpstreamProblem("key", "no key is saved")
+    if not allowed:
+        return UpstreamProblem("model", "no allowed model is set")
+    if default not in allowed:
+        return UpstreamProblem("model", "the default model is not in the allowed list")
+    ids, problem = list_upstream_models(url, key)
+    if problem:
+        return problem
+    missing = [name for name in allowed if name not in ids]
+    if missing:
+        return UpstreamProblem(
+            "model",
+            f"not in this upstream's model list: {', '.join(missing)}",
+            "Pick a model from the list, or check the id.",
+            tuple(suggest_models(missing[0], ids)),
+        )
+    # Models can be listed while the token cannot invoke them. Check the selected default too.
+    return check_chat(url, key, default)
+
+
+def validate_model(env: dict[str, str]) -> bool:
+    return check_settings(env) is None
+
+
+def mask_key(key: str) -> str:
+    return "****" + key[-4:] if len(key) > 8 else "****"
+
+
+def suggest_models(token: str, ids: list[str]) -> list[str]:
+    return difflib.get_close_matches(token, ids, n=5, cutoff=0.5)
+
+
+def filter_models(ids: list[str], text: str) -> list[str]:
+    needle = text.strip().lower()
+    return [name for name in ids if needle in name.lower()]
+
+
+def read_selection(
+    tokens: list[str], ids: list[str], shown: list[str]
+) -> tuple[list[str], dict[str, list[str]]]:
+    """Resolve numbers (from the last list shown) and exact ids. Unknown tokens come back with
+    their closest ids, so they can be flagged instead of silently dropped."""
+    chosen: list[str] = []
+    unknown: dict[str, list[str]] = {}
+    for token in tokens:
+        if token.isdigit() and 1 <= int(token) <= len(shown):
+            name = shown[int(token) - 1]
+        elif token in ids:
+            name = token
+        else:
+            unknown[token] = suggest_models(token, ids)
+            continue
+        if name not in chosen:
+            chosen.append(name)
+    return chosen, unknown
+
+
+def choose_provider(ask, say) -> tuple[str, str] | None:
+    """Return (provider label, base URL), or None for the local fake model."""
+    say("Choose the model provider:")
+    for number, (label, url) in enumerate(PROVIDER_PRESETS, start=1):
+        say(f"  {number}. {label}" + (f"  {url}" if url and url != "fake" else ""))
+    while True:
+        answer = ask(f"Provider [1-{len(PROVIDER_PRESETS)}, default 1]: ").strip() or "1"
+        if answer == "fake":
+            return None
+        if not answer.isdigit() or not 1 <= int(answer) <= len(PROVIDER_PRESETS):
+            say(f"Enter a number from 1 to {len(PROVIDER_PRESETS)}.")
+            continue
+        label, url = PROVIDER_PRESETS[int(answer) - 1]
+        if url == "fake":
+            return None
+        if url:
+            return label, url
+        typed = ask("OpenAI-compatible base URL, or 'fake' for the local model: ").strip()
+        if typed == "fake":
+            return None
+        if typed.startswith(("http://", "https://")):
+            return label, typed.rstrip("/")
+        say("The URL must start with http:// or https://.")
+
+
+def choose_models(ids: list[str], ask, say) -> tuple[list[str], str]:
+    """Pick allowed models by filter, number or exact id, then the default by number."""
+    say(
+        f"The upstream lists {len(ids)} models. Type part of a name to filter, "
+        "or numbers and exact ids to pick."
+    )
+    shown: list[str] = []
+    while True:
+        text = ask("Filter, numbers or ids (blank lists the first 20): ").strip()
+        if not text:
+            shown = ids[:MODEL_PAGE]
+        else:
+            tokens = [token.strip() for token in text.split(",") if token.strip()]
+            selecting = "," in text or all(token.isdigit() or token in ids for token in tokens)
+            if selecting:
+                chosen, unknown = read_selection(tokens, ids, shown)
+                for token, close in unknown.items():
+                    detail = f" Closest: {', '.join(close)}" if close else " No close match."
+                    say(f"Not in the list: {token}.{detail}")
+                if not unknown and chosen:
+                    break
+                continue
+            matches = filter_models(ids, text)
+            if not matches:
+                close = suggest_models(text, ids)
+                say(
+                    f"No model id contains '{text}'."
+                    + (f" Closest: {', '.join(close)}" if close else "")
+                )
+                continue
+            shown = matches[:MODEL_PAGE]
+            if len(matches) > MODEL_PAGE:
+                say(
+                    f"{len(matches)} models match; showing the first {MODEL_PAGE}. "
+                    "Narrow the filter to see the rest."
+                )
+        for number, name in enumerate(shown, start=1):
+            say(f"  {number:>3}. {name}")
+    say("Allowed models:")
+    for number, name in enumerate(chosen, start=1):
+        say(f"  {number}. {name}")
+    while True:
+        answer = ask(f"Default model [1-{len(chosen)}, default 1]: ").strip() or "1"
+        if answer.isdigit() and 1 <= int(answer) <= len(chosen):
+            return chosen, chosen[int(answer) - 1]
+        if answer in chosen:
+            return chosen, answer
+        say(f"Enter a number from 1 to {len(chosen)}, or one of the ids above.")
+
+
+def interactive_model_setup(*, ask, secret, say) -> dict[str, str] | None:
+    """Ask for provider, key and models, and check them. A failure returns to the step it names.
+
+    Returns the four MODEL_KEYS values, or None for the local fake model.
+    """
+    step = "url"
+    provider = url = key = ""
+    ids: list[str] = []
+    models: list[str] = []
+    default = ""
+    while True:
+        if step == "url":
+            choice = choose_provider(ask, say)
+            if choice is None:
+                return None
+            provider, url = choice
+            step = "key"
+        elif step == "key":
+            key = secret("API key or token (blank to change the URL): ").strip()
+            if not key:
+                step = "url"
+                continue
+            ids, problem = list_upstream_models(url, key)
+            if problem:
+                say(problem.text())
+                step = problem.step if problem.step in {"url", "key"} else "key"
+                continue
+            say(f"Connected. The upstream lists {len(ids)} models.")
+            step = "model"
+        elif step == "model":
+            models, default = choose_models(ids, ask, say)
+            step = "check"
+        elif step == "check":
+            problem = check_chat(url, key, default)
+            if problem is not None:
+                say(problem.text())
+                if problem.step == "retry":
+                    again = ask("Press Enter to retry, or type m to pick another model: ")
+                    step = "model" if again.strip().lower() == "m" else "check"
+                else:
+                    step = problem.step
+                continue
+            say("Summary:")
+            say(f"  Provider: {provider}")
+            say(f"  URL: {url}")
+            say(f"  Models: {', '.join(models)}")
+            say(f"  Default: {default}")
+            say(f"  Key: {mask_key(key)}")
+            answer = ask(
+                "Save these settings to the portal .env? [Y/n, or url, key, model to change one]: "
+            )
+            answer = answer.strip().lower()
+            if answer in {"", "y", "yes"}:
+                return {
+                    MODEL_KEYS[0]: url,
+                    MODEL_KEYS[1]: key,
+                    MODEL_KEYS[2]: ",".join(models),
+                    MODEL_KEYS[3]: default,
+                }
+            if answer in {"url", "key", "model"}:
+                step = answer
+                continue
+            raise RuntimeError("Model setup cancelled. Nothing was saved.")
 
 
 def demo_project_name(root: Path, home: Path | None = None) -> str:
@@ -503,69 +842,39 @@ class Demo:
         self.env[MODEL_KEYS[0]] = f"http://127.0.0.1:{server.server_port}/v1"
         self.env[FAKE_FLAG] = "1"
 
+    def use_fake_model(self):
+        saved_keys = {
+            key: value
+            for key, value in load_env(self.env_file).items()
+            if key in (MODEL_KEYS[0], MODEL_KEYS[1]) and value.strip()
+        }
+        self.fake_model()
+        if not saved_keys:
+            save_env(self.env_file, {FAKE_FLAG: "1", MODEL_KEYS[3]: "garden-demo"})
+
     def configure_model(self):
-        valid = validate_model(self.env)
+        problem = check_settings(self.env)
+        valid = problem is None
         fake = self.args.fake_model or (self.env.get(FAKE_FLAG) == "1" and not valid)
         if fake:
-            saved_keys = {
-                key: value
-                for key, value in load_env(self.env_file).items()
-                if key in (MODEL_KEYS[0], MODEL_KEYS[1]) and value.strip()
-            }
-            self.fake_model()
-            if not saved_keys:
-                save_env(self.env_file, {FAKE_FLAG: "1", MODEL_KEYS[3]: "garden-demo"})
+            self.use_fake_model()
             return
         if valid:
             print("Reusing validated model upstream.", flush=True)
         else:
             if self.args.non_interactive or not sys.stdin.isatty():
                 raise RuntimeError(
-                    "Model upstream is missing or unusable. Supply the four GARDEN_AGENT_MODEL_* "
-                    "settings or use --fake-model --non-interactive."
+                    f"Model upstream is missing or unusable: {problem.reason}. Supply the four "
+                    "GARDEN_AGENT_MODEL_* settings or use --fake-model --non-interactive."
                 )
             print("Model upstream is missing or unusable. The key stays only in the portal .env.")
-            while True:
-                url = input("OpenAI-compatible base URL, or 'fake' for a local demo: ").strip()
-                if url == "fake":
-                    saved_keys = {
-                        key: value
-                        for key, value in load_env(self.env_file).items()
-                        if key in (MODEL_KEYS[0], MODEL_KEYS[1]) and value.strip()
-                    }
-                    self.fake_model()
-                    if not saved_keys:
-                        save_env(self.env_file, {FAKE_FLAG: "1", MODEL_KEYS[3]: "garden-demo"})
-                    return
-                key = getpass.getpass("API key/token: ")
-                try:
-                    names = [
-                        row["id"] for row in request_json(url.rstrip("/") + "/models", key)["data"]
-                    ]
-                    print("Available models: " + ", ".join(names))
-                except (OSError, ValueError, KeyError, TypeError):
-                    print("Could not list models. Check the URL and token.")
-                    continue
-                models = input("Allowed model name(s), comma separated: ").strip()
-                default = (
-                    input(f"Default model [{models.split(',')[0].strip()}]: ").strip()
-                    or models.split(",")[0].strip()
-                )
-                self.env.update(
-                    dict(
-                        zip(
-                            MODEL_KEYS,
-                            (url.rstrip("/"), key, models, default),
-                            strict=True,
-                        )
-                    )
-                )
-                self.env[FAKE_FLAG] = "0"
-                if validate_model(self.env):
-                    break
-                print("The upstream rejected the model check. Try again.")
-        if not validate_model(self.env):
-            raise RuntimeError("Model validation failed")
+            print(problem.text())
+            chosen = interactive_model_setup(ask=input, secret=getpass.getpass, say=print)
+            if chosen is None:
+                self.use_fake_model()
+                return
+            self.env.update(chosen)
+            self.env[FAKE_FLAG] = "0"
         save_env(
             self.env_file,
             {key: self.env.get(key, "0") for key in (*MODEL_KEYS, FAKE_FLAG)},
@@ -1168,7 +1477,16 @@ class DemoCleanup:
             with urllib.request.urlopen(request, timeout=3) as response:
                 if response.status != 202:
                     raise RuntimeError(f"demo runner returned HTTP {response.status}")
-        except (OSError, urllib.error.URLError, RuntimeError):
+        except (OSError, urllib.error.URLError, RuntimeError) as error:
+            # Nothing listens on the control port once the demo was killed by hand, so the
+            # runner is already gone and only Compose may still need tearing down.
+            reason = getattr(error, "reason", error)
+            if isinstance(reason, ConnectionRefusedError):
+                print(
+                    f"The demo runner for {project['name']} is already stopped.",
+                    file=sys.stderr,
+                )
+                return True
             print(
                 f"Warning: the demo runner for {project['name']} did not respond.",
                 file=sys.stderr,

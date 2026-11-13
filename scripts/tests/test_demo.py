@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("demo", ROOT / "scripts/demo.py")
 assert SPEC and SPEC.loader
 DEMO = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = DEMO
 SPEC.loader.exec_module(DEMO)
 
 
@@ -126,7 +127,7 @@ def test_interactive_fake_selection_does_not_clobber_saved_real_model(tmp_path, 
     monkeypatch.setenv("GARDEN_DEMO_MODEL_PORT", "0")
     demo = DEMO.Demo(args)
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
-    monkeypatch.setattr("builtins.input", lambda _prompt: "fake")
+    monkeypatch.setattr("builtins.input", lambda _prompt: "4")
 
     try:
         demo.configure_model()
@@ -285,7 +286,9 @@ def test_just_dotenv_does_not_override_selected_env_and_shell_overrides_win(tmp_
             check=False,
         )
         assert result.returncode == 0, result.stderr
-        assert selected_requests == ["Bearer explicit-shell-token"] * 2
+        # Every upstream request uses the shell token, never the .env one.
+        assert selected_requests
+        assert set(selected_requests) == {"Bearer explicit-shell-token"}
         selected_text = selected_env.read_text()
         assert (
             "GARDEN_DATABASE_URL=postgresql+psycopg://garden:garden-dev@127.0.0.1:55432/selected_test"
@@ -562,19 +565,25 @@ def test_interactive_repair_hides_the_key_and_reuses_saved_settings(tmp_path):
     )
     os.close(slave)
     transcript = ""
+    upstream_url = f"http://127.0.0.1:{server.server_port}/v1"
     prompts = [
-        ("local demo: ", f"http://127.0.0.1:{server.server_port}/v1\n"),
-        ("API key/token: ", secret + "\n"),
-        ("comma separated: ", "garden-demo\n"),
-        ("Default model [garden-demo]: ", "\n"),
+        ("Provider [", "3\n"),
+        ("OpenAI-compatible base URL", upstream_url + "\n"),
+        ("API key or token", secret + "\n"),
+        ("Filter, numbers or ids", "\n"),
+        ("Filter, numbers or ids", "1\n"),
+        ("Default model [", "\n"),
+        ("Save these settings", "y\n"),
     ]
+    offset = 0
     try:
         for marker, answer in prompts:
             deadline = time.monotonic() + 15
-            while marker not in transcript and time.monotonic() < deadline:
+            while marker not in transcript[offset:] and time.monotonic() < deadline:
                 if select.select([master], [], [], 0.1)[0]:
                     transcript += os.read(master, 65536).decode()
-            assert marker in transcript, transcript
+            assert marker in transcript[offset:], transcript
+            offset = transcript.index(marker, offset) + len(marker)
             os.write(master, answer.encode())
         assert process.wait(timeout=20) == 0
         while select.select([master], [], [], 0.1)[0]:
