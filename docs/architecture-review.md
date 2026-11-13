@@ -20,6 +20,7 @@ Static architecture commands run through `just architecture-check`, included in 
 | Reviewed Critical operations, public routes, permissions and no cross-schema foreign keys | Backend architecture tests |
 | Agent exhaustive layers and package interfaces | Agent Import Linter and agent architecture checks |
 | Agent skills reference published Operations | Agent architecture skill test |
+| Product code, installers and build scripts never import test code; shared test code imports neither e2e nor evals | `agent/tests/architecture/test_test_code_boundaries.py` |
 | Generated Contract and client match source | Non-mutating `just api-check` |
 | No em dash | `scripts/check_authoring.py` |
 | Valid documentation links and prohibited terminology | `just docs-check` and `just deny-check` |

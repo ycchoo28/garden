@@ -16,7 +16,7 @@
 #   GARDEN_DSH_HOME         dsh's home, where cordis.patch.yml goes (default: ~/.dsh)
 #   GARDEN_INSTALL_TEST     set to 1 for an unattended run. The login link goes to GARDEN_LOGIN_LINK_FILE
 #                          when that is set, so a browser can approve it; otherwise it is opened with
-#                          curl. Used by agent/tests/test_install.py.
+#                          curl. The installer's unattended test run sets it.
 #   GARDEN_LOGIN_LINK_FILE  with GARDEN_INSTALL_TEST=1: the file the login link is written to
 #
 # The model is the portal's: no model setting, endpoint or key is taken or written here.

@@ -1,35 +1,28 @@
-"""The end-to-end script's helpers for the model step (ADR 0057): the dsh patch it runs with,
+"""The end-to-end run's helpers for the model step (ADR 0057): the dsh patch it runs with,
 and the CLI login it reads for the calls. Nothing here needs the portal."""
 
 from __future__ import annotations
 
-import importlib.util
+import importlib
 import json
-import sys
 from collections.abc import Iterator
 from pathlib import Path
 from types import ModuleType
 
 import pytest
 import yaml
-from conftest import ROOT
 
 from garden.dsh import render_patch
+from tests.shared.paths import AGENT_ROOT
 
-SCRIPT = ROOT / "scripts" / "e2e.py"
-TEMPLATE = ROOT / "install" / "dsh" / "cordis.patch.yml"
+TEMPLATE = AGENT_ROOT / "install" / "dsh" / "cordis.patch.yml"
 GATEWAY = "http://portal.test/api/agent/model/v1"
 
 
 @pytest.fixture
 def e2e() -> Iterator[ModuleType]:
-    spec = importlib.util.spec_from_file_location("e2e_script", SCRIPT)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    # Registered first: the script's dataclasses look their module up while it loads.
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    yield module
+    # The run module re-exports the shared helpers the tests call (dsh_overlay, read_token, PORTAL).
+    yield importlib.import_module("tests.e2e.run")
 
 
 def _installed_patch(path: Path) -> Path:

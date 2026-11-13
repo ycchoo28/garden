@@ -23,14 +23,15 @@ import zipapp
 from pathlib import Path
 
 import yaml
-from conftest import ROOT, as_json, run_garden
-from fake_portal import GOOD_TOKEN, FakePortal
 
 from garden.dsh import render_patch
+from tests.shared.fake_portal import GOOD_TOKEN, FakePortal
+from tests.shared.garden_cli import as_json, run_garden
+from tests.shared.paths import AGENT_ROOT
 
-INSTALLER = ROOT / "install" / "install.sh"
-INSTALLER_WINDOWS = ROOT / "install" / "install.ps1"
-DSH_TEMPLATE = ROOT / "install" / "dsh" / "cordis.patch.yml"
+INSTALLER = AGENT_ROOT / "install" / "install.sh"
+INSTALLER_WINDOWS = AGENT_ROOT / "install" / "install.ps1"
+DSH_TEMPLATE = AGENT_ROOT / "install" / "dsh" / "cordis.patch.yml"
 # Names of the model settings the installers could take. None may come back (ADR 0024).
 RETIRED_MODEL_SETTINGS = ("GARDEN_MODEL_", "DEEPSEEK_API_KEY", "OPENROUTER_API_KEY", "{{MODEL_KEY")
 PORTAL_NAME = "Marcus Lee"
@@ -51,7 +52,9 @@ def _build_garden_pyz(target: Path) -> Path:
     """A zipapp of the garden package, with the same entry script as the real build."""
     staging = target.parent / "staging"
     shutil.copytree(
-        ROOT / "src" / "garden", staging / "garden", ignore=shutil.ignore_patterns("__pycache__")
+        AGENT_ROOT / "src" / "garden",
+        staging / "garden",
+        ignore=shutil.ignore_patterns("__pycache__"),
     )
     (staging / "__main__.py").write_text(
         "import sys\n\nfrom garden.cli import main\n\nsys.exit(main())\n", encoding="utf-8"

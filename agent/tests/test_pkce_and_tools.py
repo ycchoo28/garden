@@ -7,8 +7,8 @@ import urllib.request
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
-from conftest import as_json, finish_login, open_sign_in, run_garden, store_token
-from fake_portal import GOOD_TOKEN, FakePortal
+from tests.shared.fake_portal import GOOD_TOKEN, FakePortal
+from tests.shared.garden_cli import as_json, finish_login, open_sign_in, run_garden, store_token
 
 DEFAULT_TOOLS = {
     "files_file_read",

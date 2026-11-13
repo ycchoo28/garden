@@ -14,13 +14,13 @@ from typing import Any
 import httpx
 import pytest
 import pytest_asyncio
-from fake_portal import GOOD_TOKEN, FakePortal
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
 from garden.engine import Engine, PortalClient
 from garden.mcp import HostedMCPSettings, create_streamable_http_app, handle
 from garden.shared import GardenError
+from tests.shared.fake_portal import GOOD_TOKEN, FakePortal
 
 ENDPOINT = "/api/agent/mcp"
 HEADERS = {

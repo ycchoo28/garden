@@ -14,11 +14,11 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from conftest import run_garden, store_token
-from fake_portal import GOOD_TOKEN, FakePortal
 
 from garden.engine import Engine, PortalClient
 from garden.shared import GardenError
+from tests.shared.fake_portal import GOOD_TOKEN, FakePortal
+from tests.shared.garden_cli import run_garden, store_token
 
 SHA = "ab" * 32
 
