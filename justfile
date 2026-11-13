@@ -61,6 +61,7 @@ models:
     mv -f "$partial" "$target"
 
 # Start the local embedding service (llama.cpp serving bge-m3) in Compose. Not part of `just up`.
+[unix]
 embedding-up: models
     docker compose -f dev/compose.yaml --profile embedding up -d --wait embedding
 
@@ -74,6 +75,7 @@ migrate: up
     uv run python -m app.migrate
 
 # Load the fake organisation and the seeded personas. Idempotent. Migrates first.
+[unix]
 seed: migrate
     cd backend && uv run python -m app.seed
 
@@ -119,6 +121,7 @@ demo-uninstall *args:
     uv run --no-project --python 3.12 python scripts/demo.py --uninstall "$@"
 
 # Exercise both demo commands with fresh test databases, ports, environment files and homes.
+[unix]
 demo-e2e: up
     GARDEN_DEMO_E2E=1 uv run --project backend pytest scripts/tests/test_demo_e2e.py -q
 
@@ -147,6 +150,7 @@ reset: up
 quick: backend-check agent-check frontend-check architecture-check api-check secrets-check docs-check deny-check
 
 # Run every local check, quick ones first: then tests against Postgres, browser tests and dependency audits.
+[unix]
 check: quick test e2e backend-audit frontend-audit
 
 # Install the pinned lefthook and register the commit hooks in .git/hooks. Run once after cloning.
@@ -224,11 +228,13 @@ agent-publish: agent-build
 # the API on 56000 and the web app on 56173 (`just demo` uses 55000 and 55173), a fake model upstream, the installer
 # run as `curl ... | sh` with a fresh HOME, and every login and critical action approved in a headless browser.
 # The dev database is never used. Writes agent/dist/e2e (the transcript, logs and screenshots).
+[unix]
 agent-e2e: up
     cd agent && uv run python scripts/e2e.py
 
 # The same stack as agent-e2e, held up for a hand test from Windows. It prints the installer one-liner and the steps for
 # PowerShell, and it stays up until Ctrl+C, which stops its processes and drops its test database. Writes agent/dist/e2e-serve.
+[unix]
 agent-e2e-serve: up
     cd agent && uv run python scripts/e2e.py --serve
 
