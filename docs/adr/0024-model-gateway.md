@@ -22,3 +22,5 @@ The gateway is part of the agent core module, because every agent reaches it thr
 - Tests use a fake upstream, so CI needs no model key.
 - The per-minute limit counts accepted requests, so a burst of concurrent requests can pass the limit slightly.
 - Usage is recorded for failed upstream calls too, with zero tokens, so retries cannot hide spend.
+- A call the client drops, such as a killed agent, still writes its row. A dropped stream is read to its end (for up to 30 seconds) so the row carries the tokens the upstream reports, and a dropped non-streaming call is recorded with status `cancelled` and zero tokens.
+- Usage split over several stream events is merged, taking the largest count for each field.
