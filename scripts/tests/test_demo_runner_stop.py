@@ -188,3 +188,105 @@ def test_close_shares_one_deadline_across_children(tmp_path, monkeypatch):
     # Three children that ignore SIGTERM cost one shared second, not three.
     assert elapsed < 2.5
     assert all(child.poll() is not None for child in children)
+
+
+def test_control_check_counts_a_connect_timeout_as_gone(monkeypatch):
+    # Windows does not refuse a closed loopback port at once: it retries the connect for about
+    # two seconds, so a short check sees a timeout. That must not read as a live runner.
+    def slow_refusal(*_args, **_kwargs):
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr(DEMO.socket, "create_connection", slow_refusal)
+    monkeypatch.setattr(DEMO.urllib.request, "urlopen", slow_refusal)
+
+    assert DEMO.control_answers(_closed_url()) is False
+
+
+def test_control_check_sees_a_live_listener():
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        url = f"http://127.0.0.1:{listener.getsockname()[1]}/stop/token"
+
+        assert DEMO.control_answers(url) is True
+    assert DEMO.control_answers(url) is False
+
+
+def test_runner_gone_after_a_windows_style_slow_refusal(monkeypatch):
+    def slow_refusal(*_args, **_kwargs):
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr(DEMO.socket, "create_connection", slow_refusal)
+    monkeypatch.setattr(DEMO.urllib.request, "urlopen", slow_refusal)
+    monkeypatch.setattr(DEMO, "process_alive", lambda _pid: False)
+    monkeypatch.setattr(DEMO, "port_listening", lambda _port: False)
+
+    assert DEMO.runner_gone(_closed_url(), [4321], [55000]) is True
+
+
+def _docker_fake(leftovers: dict[str, list[str]], compose_code: int = 0):
+    """A docker CLI fake: compose down exits with compose_code and removes nothing."""
+    calls: list[list[str]] = []
+
+    def fake_run(command, **_kwargs):
+        command = [str(part) for part in command]
+        calls.append(command)
+        args = command[1:]
+        if args[:1] == ["compose"]:
+            return subprocess.CompletedProcess(command, compose_code, "", "compose failed")
+        kind = "container" if args[0] in {"ps", "rm"} else args[0]
+        if "ls" in args or args[:1] == ["ps"]:
+            return subprocess.CompletedProcess(
+                command, 0, "".join(f"{i}\n" for i in leftovers[kind]), ""
+            )
+        if "rm" in args:
+            for ident in args[args.index("rm") + 1 :]:
+                if ident in leftovers[kind]:
+                    leftovers[kind].remove(ident)
+            return subprocess.CompletedProcess(command, 0, "", "")
+        raise AssertionError(command)
+
+    return calls, fake_run
+
+
+def test_compose_teardown_removes_containers_left_after_a_forced_stop(monkeypatch):
+    leftovers = {"container": ["c1", "c2"], "volume": ["garden-demo-x_pgdata"], "network": ["n1"]}
+    calls, fake_run = _docker_fake(leftovers)
+    monkeypatch.setattr(DEMO, "run_bounded", fake_run)
+    monkeypatch.setattr(DEMO, "command_for", lambda args, path=None: list(args))
+    project = {"name": "garden-demo-x", "root": str(DEMO.ROOT)}
+
+    assert _cleanup().compose_down(project) is True
+
+    assert leftovers == {"container": [], "volume": [], "network": []}
+    label = "label=com.docker.compose.project=garden-demo-x"
+    assert any(label in call for call in calls)
+
+
+def test_compose_teardown_sweeps_even_when_compose_down_fails(monkeypatch, capsys):
+    leftovers = {"container": ["c1"], "volume": [], "network": []}
+    _calls, fake_run = _docker_fake(leftovers, compose_code=1)
+    monkeypatch.setattr(DEMO, "run_bounded", fake_run)
+    monkeypatch.setattr(DEMO, "command_for", lambda args, path=None: list(args))
+    project = {"name": "garden-demo-x", "root": str(DEMO.ROOT)}
+
+    # Nothing of the project is left, so the teardown counts as done despite the warning.
+    assert _cleanup().compose_down(project) is True
+    assert leftovers["container"] == []
+    assert "compose failed" in capsys.readouterr().err
+
+
+def test_compose_teardown_fails_when_a_container_cannot_be_removed(monkeypatch):
+    leftovers = {"container": ["stuck"], "volume": [], "network": []}
+    _calls, fake_run = _docker_fake(leftovers)
+
+    def stubborn(command, **kwargs):
+        if "rm" in [str(part) for part in command]:
+            return subprocess.CompletedProcess(command, 1, "", "cannot remove")
+        return fake_run(command, **kwargs)
+
+    monkeypatch.setattr(DEMO, "run_bounded", stubborn)
+    monkeypatch.setattr(DEMO, "command_for", lambda args, path=None: list(args))
+    project = {"name": "garden-demo-x", "root": str(DEMO.ROOT)}
+
+    assert _cleanup().compose_down(project) is False

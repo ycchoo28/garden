@@ -20,6 +20,7 @@ import tempfile
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -177,6 +178,8 @@ RUNNER_KILL_TIMEOUT = 20
 CHILD_STOP_TIMEOUT = 15
 # After a kill, how long to poll until the runner, its children and its ports are gone.
 RUNNER_GONE_TIMEOUT = 30
+# A listening loopback socket accepts at once; this only bounds a refusal Windows retries.
+CONTROL_CONNECT_TIMEOUT = 3
 
 
 def run_bounded(command, *, timeout: float, env=None, cwd=None) -> subprocess.CompletedProcess:
@@ -1550,16 +1553,21 @@ def control_refused(error: Exception) -> bool:
 
 
 def control_answers(url: str) -> bool:
-    """True while something still serves the runner's control URL. Refused means it is gone."""
+    """True while something still listens on the runner's control port.
+
+    This is a TCP connect, not an HTTP call. Windows does not refuse a closed loopback port at
+    once but retries the connect for about two seconds, so a short HTTP timeout used to read a
+    stopped runner as a live one. A listening socket accepts at once even when its process is
+    busy, so a connect that times out or is refused both mean nothing listens.
+    """
+    parsed = urllib.parse.urlsplit(url)
     try:
-        with urllib.request.urlopen(
-            urllib.request.Request(url, data=b"", method="POST"), timeout=0.5
+        with socket.create_connection(
+            (parsed.hostname or "127.0.0.1", parsed.port or 80), timeout=CONTROL_CONNECT_TIMEOUT
         ):
             return True
-    except urllib.error.HTTPError:
-        return True
-    except OSError as error:
-        return not control_refused(error)
+    except OSError:
+        return False
 
 
 def process_alive(pid: int) -> bool:
@@ -1792,8 +1800,52 @@ class DemoCleanup:
                 f"{result.stderr.strip() or result.stdout.strip()}",
                 file=sys.stderr,
             )
-            return False
-        return True
+        # A forced stop can leave containers Compose no longer tracks, so remove whatever still
+        # carries the project's label. The teardown is done only once nothing of it is left.
+        return self.sweep_project(project["name"], env)
+
+    def sweep_project(self, name: str, env: dict) -> bool:
+        label = f"label=com.docker.compose.project={name}"
+        listings = (
+            ("container", ["ps", "-aq", "--filter", label], ["rm", "-f", "-v"]),
+            ("network", ["network", "ls", "-q", "--filter", label], ["network", "rm"]),
+            ("volume", ["volume", "ls", "-q", "--filter", label], ["volume", "rm", "-f"]),
+        )
+        clean = True
+        for kind, listing, removal in listings:
+            try:
+                found = run_bounded(
+                    command_for(["docker", *listing], path=env.get("PATH")),
+                    timeout=DOCKER_TIMEOUT,
+                    env=env,
+                )
+                ids = found.stdout.split() if not found.returncode else []
+                if found.returncode:
+                    clean = False
+                if ids:
+                    run_bounded(
+                        command_for(["docker", *removal, *ids], path=env.get("PATH")),
+                        timeout=DOCKER_TIMEOUT,
+                        env=env,
+                    )
+                    left = run_bounded(
+                        command_for(["docker", *listing], path=env.get("PATH")),
+                        timeout=DOCKER_TIMEOUT,
+                        env=env,
+                    )
+                    if left.returncode or left.stdout.split():
+                        print(
+                            f"Warning: a Docker {kind} of project {name} could not be removed.",
+                            file=sys.stderr,
+                        )
+                        clean = False
+            except (OSError, subprocess.SubprocessError) as error:
+                print(
+                    f"Warning: Docker {kind} cleanup for {name} did not finish: {error}",
+                    file=sys.stderr,
+                )
+                clean = False
+        return clean
 
     def logout(self):
         for login in list(self.data["logins"]):
