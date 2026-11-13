@@ -126,6 +126,24 @@ def test_the_patch_follows_the_default_model_the_portal_names_now(
     )
 
 
+def test_the_installed_patch_turns_off_dshs_vendor_session_telemetry(
+    portal: FakePortal, env: dict[str, str], tmp_path: Path
+) -> None:
+    store_token(env, portal.url, GOOD_TOKEN)
+    run_env = _env(env, tmp_path)
+    _dsh_home(run_env, tmp_path)
+
+    assert run_garden(run_env, "dsh-config").returncode == 0
+
+    documents = yaml.safe_load((tmp_path / "dsh" / "cordis.patch.yml").read_text(encoding="utf-8"))
+    # dsh's base patch already inserts this plugin under this id, in FEEDBACK_ONLY mode. The
+    # garden patch changes that row's mode; inserting the plugin again fails to activate.
+    inserted = [row for row in documents[0]["insert"] if row.get("id") == "session-telemetry-otel"]
+    assert inserted == []
+    changes = [row for row in documents[1:] if row.get("id") == "session-telemetry-otel"]
+    assert changes == [{"id": "session-telemetry-otel", "config": {"mode": "DISABLED"}}]
+
+
 @pytest.mark.parametrize("command", [("dsh", "hello"), ("dsh-config",)])
 def test_when_the_portal_cannot_be_reached_dsh_keeps_its_last_patch_and_says_so(
     portal: FakePortal, env: dict[str, str], tmp_path: Path, command: tuple[str, ...]
