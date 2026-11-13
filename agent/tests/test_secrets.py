@@ -6,9 +6,11 @@ from pathlib import Path
 
 import keyring
 import pytest
+from keyring.errors import KeyringError
 
 from garden.auth import load_session, logout, store_token
-from garden.shared import Settings
+from garden.auth.secrets import KeyringStore
+from garden.shared import GardenError, Settings
 
 
 @pytest.fixture
@@ -205,3 +207,103 @@ def test_logout_with_force_deletes_token_when_revoke_resets_connection(
     assert forced is not None and forced.token == "reset-token"
     assert force_warning == "The portal cannot be reached"
     assert load_session(settings) is None
+
+
+class FakeWinError(Exception):
+    """Shaped like pywintypes.error, which is what the Windows keyring backend raises."""
+
+    def __init__(self, winerror: int, funcname: str, strerror: str) -> None:
+        super().__init__(winerror, funcname, strerror)
+        self.winerror = winerror
+        self.funcname = funcname
+        self.strerror = strerror
+
+
+NO_LOGON_SESSION = FakeWinError(
+    1312,
+    "CredRead",
+    "A specified logon session does not exist. It may already have been terminated.",
+)
+
+
+def _no_logon_session(*_args: str) -> None:
+    raise NO_LOGON_SESSION
+
+
+def test_windows_keychain_failure_is_explained_and_never_falls_back_to_a_file(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.delitem(sys.modules, "cffi", raising=False)
+    monkeypatch.setattr(keyring, "set_password", _no_logon_session)
+
+    with pytest.raises(GardenError) as raised:
+        store_token("token", settings=settings)
+
+    error = raised.value
+    assert error.title == "Windows Credential Manager is not available in this session"
+    assert error.detail is not None
+    assert "CredRead failed with Windows error 1312" in error.detail
+    assert "remote or background session" in error.detail
+    assert error.fix is not None
+    assert "normal desktop session" in error.fix
+    # The login is never kept in plain text instead.
+    assert not (settings.home / "credentials.json").exists()
+
+
+def test_windows_keychain_failure_on_read_is_explained(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.delitem(sys.modules, "cffi", raising=False)
+    monkeypatch.setattr(keyring, "get_password", _no_logon_session)
+
+    with pytest.raises(GardenError) as raised:
+        load_session(settings)
+    assert raised.value.title == "Windows Credential Manager is not available in this session"
+
+
+def test_keychain_error_is_explained_for_the_linux_secret_service(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
+    monkeypatch.setattr(sys, "platform", "linux")
+
+    def refused(*_args: str) -> None:
+        raise KeyringError("no Secret Service answered on the session bus")
+
+    monkeypatch.setattr(keyring, "set_password", refused)
+
+    with pytest.raises(GardenError) as raised:
+        store_token("token", settings=settings)
+
+    assert raised.value.title == "The Secret Service keyring is not available in this session"
+    assert raised.value.detail is not None
+    assert "no Secret Service answered" in raised.value.detail
+    assert raised.value.fix is not None
+    assert "GNOME Keyring" in raised.value.fix
+
+
+def test_keychain_delete_failure_is_explained(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(keyring, "delete_password", _no_logon_session)
+
+    with pytest.raises(GardenError) as raised:
+        KeyringStore().delete(settings.portal_url)
+    assert raised.value.title == "Windows Credential Manager is not available in this session"
+
+
+def test_a_keychain_that_cannot_be_loaded_is_explained_not_raised_bare(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
+    def broken_backend() -> object:
+        raise FakeWinError(1312, "CredRead", "A specified logon session does not exist.")
+
+    monkeypatch.setattr(keyring, "get_keyring", broken_backend)
+    monkeypatch.setattr(sys, "platform", "win32")
+
+    with pytest.raises(GardenError) as raised:
+        store_token("token", settings=settings)
+    assert raised.value.title == "Windows Credential Manager is not available in this session"
+    assert not (settings.home / "credentials.json").exists()

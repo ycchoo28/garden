@@ -385,9 +385,16 @@ open_link() {
     fi
 }
 
+# The last lines garden login printed, without the sign-in link, so the reason reaches the person.
+show_login_output() {
+    [ -s "$1" ] || return 0
+    echo "garden login said:" >&2
+    grep -v '^  https\?://' "$1" | tail -n 8 | sed 's/^/  /' >&2 || true
+}
+
 # Signs the person in with the CLI. Its output is the sign-in link with one line on what to do, not
 # the CLI's own messages. The test mode writes the link to a file for a browser to approve, or opens
-# it with curl. Returns non-zero when the sign-in does not finish.
+# it with curl. Returns non-zero when the sign-in does not finish, after showing why.
 sign_in() {
     local log link login_pid
     log="$tmp/login.log"
@@ -401,6 +408,7 @@ sign_in() {
     done
     if [ -z "$link" ]; then
         kill "$login_pid" 2>/dev/null || true
+        show_login_output "$log"
         return 1
     fi
     if [ -n "${GARDEN_LOGIN_LINK_FILE:-}" ]; then
@@ -414,7 +422,10 @@ sign_in() {
             open_link "$link"
         fi
     fi
-    wait "$login_pid"
+    if ! wait "$login_pid"; then
+        show_login_output "$log"
+        return 1
+    fi
 }
 
 begin_step "Installing garden skills..."

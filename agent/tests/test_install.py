@@ -287,6 +287,40 @@ def test_sign_in_is_the_last_step_so_a_failed_sign_in_leaves_everything_installe
     assert script.index("'skills', 'install'") < script.index("Invoke-SignIn $python $pyz")
 
 
+def test_a_failed_sign_in_shows_what_garden_login_printed() -> None:
+    """The error that stops the install carries garden login's own last lines, never the link."""
+    shell = INSTALLER.read_text(encoding="utf-8")
+    assert "show_login_output" in shell
+    # Both ways a sign-in can fail: no link ever printed, and garden login exiting non-zero.
+    assert shell.count('show_login_output "$log"') == 2
+    script = INSTALLER_WINDOWS.read_text(encoding="utf-8")
+    assert "function Get-LoginOutputTail" in script
+    assert "throw ('garden login exited with an error.' + (Get-LoginOutputTail))" in script
+    assert "throw ('the login link did not appear.' + (Get-LoginOutputTail))" in script
+
+
+def test_the_shell_installer_prints_the_login_tail_without_the_link(tmp_path: Path) -> None:
+    """Runs show_login_output itself: the last eight lines, the approval link left out."""
+    shell = INSTALLER.read_text(encoding="utf-8")
+    start = shell.index("show_login_output() {")
+    function = shell[start : shell.index("\n}\n", start) + 3]
+    log = tmp_path / "login.log"
+    lines = ["  https://portal.example/approve/1"] + [f"line {n}" for n in range(12)]
+    log.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    result = subprocess.run(
+        ["bash", "-c", function + '\nshow_login_output "$1"', "bash", str(log)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "garden login said:" in result.stderr
+    assert "approve" not in result.stderr
+    assert "line 11" in result.stderr
+    assert "line 3" not in result.stderr
+
+
 def test_the_windows_installer_fetches_its_bundle_and_the_patch_has_no_placeholder_left() -> None:
     """A text check, because CI has no PowerShell. It keeps install.ps1 in step with install.sh.
 

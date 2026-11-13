@@ -502,9 +502,22 @@ CreateObject("WScript.Shell").Run """__PS__"" -NoProfile -ExecutionPolicy Bypass
     }
 }
 
+# The last lines garden login printed, without the sign-in link, for the error that stops the install.
+function Get-LoginOutputTail {
+    # stderr comes last, so the last lines kept are the error itself.
+    $lines = foreach ($name in 'login.log', 'login.err') {
+        $file = Join-Path $tmp $name
+        if (Test-Path $file) { Get-Content -Path $file -ErrorAction SilentlyContinue }
+    }
+    $shown = @($lines | Where-Object { $_ -and $_ -notmatch '^\s*https?://' } | Select-Object -Last 8)
+    if ($shown.Count -eq 0) { return '' }
+    return ' garden login said: ' + (($shown | ForEach-Object { $_.Trim() }) -join ' | ')
+}
+
 # Signs the person in with the CLI. Its output is the sign-in link with one line on what to do, not the
 # CLI's own messages. The browser opens quietly. The test mode writes the link to GARDEN_LOGIN_LINK_FILE
-# for a browser to approve, or opens it here when no file is given.
+# for a browser to approve, or opens it here when no file is given. When the sign-in fails, the error
+# carries the last lines garden login printed, so the person sees the real reason.
 function Invoke-SignIn([string]$python, [string]$pyz) {
     $log = Join-Path $tmp 'login.log'
     $login = Start-Process -FilePath $python -ArgumentList ('"{0}" login --no-open' -f $pyz) `
@@ -520,7 +533,7 @@ function Invoke-SignIn([string]$python, [string]$pyz) {
             if ($line) { $link = $line.Trim() }
         }
     }
-    if (-not $link) { $login.Kill(); throw 'the login link did not appear' }
+    if (-not $link) { $login.Kill(); throw ('the login link did not appear.' + (Get-LoginOutputTail)) }
     if ($env:GARDEN_LOGIN_LINK_FILE) {
         [System.IO.File]::WriteAllText($env:GARDEN_LOGIN_LINK_FILE, "$link`r`n", $utf8)
         Write-Output "The login link is in $($env:GARDEN_LOGIN_LINK_FILE). Open it to approve the login."
@@ -537,7 +550,7 @@ function Invoke-SignIn([string]$python, [string]$pyz) {
         $login.Kill()
         throw 'the sign-in was not approved within ten minutes'
     }
-    if ($login.ExitCode -ne 0) { throw 'garden login exited with an error' }
+    if ($login.ExitCode -ne 0) { throw ('garden login exited with an error.' + (Get-LoginOutputTail)) }
 }
 
 $tar = Join-Path $env:SystemRoot 'System32\tar.exe'
