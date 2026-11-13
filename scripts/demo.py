@@ -173,6 +173,10 @@ IMAGE_TIMEOUT = 120
 COMPOSE_TIMEOUT = 300
 RUNNER_STOP_TIMEOUT = 60
 RUNNER_KILL_TIMEOUT = 20
+# How long the runner waits for its services to stop before it ends them, shared by all of them.
+CHILD_STOP_TIMEOUT = 15
+# After a kill, how long to poll until the runner, its children and its ports are gone.
+RUNNER_GONE_TIMEOUT = 30
 
 
 def run_bounded(command, *, timeout: float, env=None, cwd=None) -> subprocess.CompletedProcess:
@@ -766,6 +770,9 @@ class Demo:
             # The control port answers only while this process lives, so the PID is safe to use
             # as an escalation target while that port still answers.
             pid=os.getpid(),
+            # Cleanup checks these after a stop, so it can tell when the services have gone.
+            api_port=self.api_port,
+            web_port=self.web_port,
             env_file=str(self.env_file),
         )
         save_manifest(self.manifest_file, data)
@@ -1271,21 +1278,13 @@ class Demo:
                 else:
                     with contextlib.suppress(ProcessLookupError):
                         os.killpg(proc.pid, signal.SIGTERM)
+        # One deadline for all children: waiting 15 s for each in turn can outlast the stop limit.
+        deadline = time.monotonic() + CHILD_STOP_TIMEOUT
         for proc in self.procs:
             try:
-                proc.wait(timeout=15)
+                proc.wait(timeout=max(0.0, deadline - time.monotonic()))
             except subprocess.TimeoutExpired:
-                if os.name == "nt":
-                    subprocess.run(
-                        ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
-                        capture_output=True,
-                        check=False,
-                    )
-                    if proc.poll() is None:
-                        proc.kill()
-                else:
-                    os.killpg(proc.pid, signal.SIGKILL)
-                proc.wait(timeout=10)
+                end_process_tree(proc)
         for server in self.servers:
             server.shutdown()
             server.server_close()
@@ -1563,6 +1562,90 @@ def control_answers(url: str) -> bool:
         return not control_refused(error)
 
 
+def process_alive(pid: int) -> bool:
+    """True while the process exists. When the check itself fails, it counts as alive."""
+    if os.name == "nt":
+        try:
+            listing = run_bounded(
+                ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+                timeout=DOCKER_TIMEOUT,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return True
+        if listing.returncode:
+            return True
+        return f'"{pid}"' in listing.stdout
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    # A zombie has ended but still answers signal 0 until its parent reaps it.
+    with contextlib.suppress(OSError, IndexError):
+        state = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
+        return state != "Z"
+    return True
+
+
+def port_listening(port: int) -> bool:
+    with socket.socket() as probe:
+        probe.settimeout(0.5)
+        return probe.connect_ex(("127.0.0.1", port)) == 0
+
+
+def descendant_pids(pid: int) -> list[int]:
+    """Every process below pid, from ps. Windows does not need this: taskkill /T ends the tree."""
+    if os.name == "nt":
+        return []
+    try:
+        listing = run_bounded(["ps", "-A", "-o", "pid=,ppid="], timeout=DOCKER_TIMEOUT)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    children: dict[int, list[int]] = {}
+    for line in listing.stdout.splitlines():
+        fields = line.split()
+        if len(fields) == 2 and all(field.isdigit() for field in fields):
+            child, parent = int(fields[0]), int(fields[1])
+            children.setdefault(parent, []).append(child)
+    found: list[int] = []
+    pending = [pid]
+    while pending:
+        for child in children.get(pending.pop(), []):
+            found.append(child)
+            pending.append(child)
+    return found
+
+
+def runner_gone(url: str, pids: list[int], ports: list[int]) -> bool:
+    """True once the control URL is silent, no listed pid lives, and no demo port listens."""
+    return (
+        not control_answers(url)
+        and not any(process_alive(pid) for pid in pids)
+        and not any(port_listening(port) for port in ports)
+    )
+
+
+def runner_ports(project: dict) -> list[int]:
+    """The API and web ports the runner's services listen on, recorded when it started."""
+    return [project[key] for key in ("api_port", "web_port") if isinstance(project.get(key), int)]
+
+
+def end_process_tree(proc: subprocess.Popen) -> None:
+    """End a child and what it started, then poll until it has exited (bounded)."""
+    if os.name == "nt":
+        with contextlib.suppress(OSError, subprocess.SubprocessError):
+            run_bounded(["taskkill", "/PID", str(proc.pid), "/T", "/F"], timeout=DOCKER_TIMEOUT)
+        if proc.poll() is None:
+            with contextlib.suppress(OSError):
+                proc.kill()
+    else:
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(proc.pid, signal.SIGKILL)
+    with contextlib.suppress(subprocess.TimeoutExpired):
+        proc.wait(timeout=RUNNER_GONE_TIMEOUT)
+
+
 def wait_until(condition, seconds: float) -> bool:
     deadline = time.monotonic() + seconds
     while True:
@@ -1618,9 +1701,13 @@ class DemoCleanup:
                 return True
             print(f"Warning: the demo runner for {name} did not respond.", file=sys.stderr)
             return False
-        if wait_until(lambda: not control_answers(url), RUNNER_STOP_TIMEOUT):
-            return True
         pid = project.get("pid")
+        ports = runner_ports(project)
+        if wait_until(
+            lambda: runner_gone(url, [int(pid)] if pid else [], ports),
+            RUNNER_STOP_TIMEOUT,
+        ):
+            return True
         if not pid:
             print(
                 f"Warning: the demo runner for {name} did not stop in {RUNNER_STOP_TIMEOUT}s, "
@@ -1633,23 +1720,32 @@ class DemoCleanup:
             "ending its process.",
             file=sys.stderr,
         )
-        if self.kill_runner(int(pid), url):
+        if self.kill_runner(int(pid), url, ports):
             return True
         print(f"Warning: the demo runner for {name} is still running.", file=sys.stderr)
         return False
 
-    def kill_runner(self, pid: int, url: str) -> bool:
-        """End a runner that ignored the graceful stop. Windows kills its whole process tree."""
+    def kill_runner(self, pid: int, url: str, ports: list[int]) -> bool:
+        """End a runner that ignored the graceful stop, then poll until it and its tree are gone.
+
+        Windows ends the whole tree with taskkill /T. POSIX signals the runner and the processes
+        it started, taken from ps before the signal so none is orphaned and missed.
+        """
         if os.name == "nt":
             with contextlib.suppress(OSError, subprocess.SubprocessError):
                 run_bounded(["taskkill", "/PID", str(pid), "/T", "/F"], timeout=DOCKER_TIMEOUT)
-        else:
-            for sig in (signal.SIGTERM, signal.SIGKILL):
+            return wait_until(lambda: runner_gone(url, [pid], ports), RUNNER_GONE_TIMEOUT)
+        tree = [pid, *descendant_pids(pid)]
+        for sig, grace in (
+            (signal.SIGTERM, RUNNER_KILL_TIMEOUT / 2),
+            (signal.SIGKILL, RUNNER_GONE_TIMEOUT),
+        ):
+            for target in tree:
                 with contextlib.suppress(ProcessLookupError, PermissionError):
-                    os.kill(pid, sig)
-                if wait_until(lambda: not control_answers(url), RUNNER_KILL_TIMEOUT / 2):
-                    return True
-        return wait_until(lambda: not control_answers(url), RUNNER_KILL_TIMEOUT / 2)
+                    os.kill(target, sig)
+            if wait_until(lambda: runner_gone(url, tree, ports), grace):
+                return True
+        return False
 
     def compose_down(self, project: dict) -> bool:
         compose = Path(project.get("root", ROOT)) / "dev" / "compose.yaml"
