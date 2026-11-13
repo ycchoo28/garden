@@ -139,7 +139,7 @@ The terms are grouped by area, and the last section lists the words to avoid.
   Only a person may read it.
 - **Hybrid search**: a search that fuses the nearest vectors, keyword matches and identifier matches with reciprocal rank fusion.
 
-## Agent evals and telemetry
+## Evals
 
 - **Eval**: a test of whether a real agent, with a real model, finishes a task with garden's tools.
 - **Task**: one thing an eval asks the agent to do, kept as data in git, with its prompt, its person, its expected confirmation and its graders.
