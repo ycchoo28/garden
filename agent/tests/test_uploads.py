@@ -10,12 +10,12 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-from conftest import run_garden, store_token
-from fake_portal import GOOD_TOKEN, FakePortal
 
 from garden.engine import Engine
 from garden.mcp import handle
 from garden.shared import GardenError
+from tests.shared.fake_portal import GOOD_TOKEN, FakePortal
+from tests.shared.garden_cli import run_garden, store_token
 
 RECEIPT = b"%PDF-1.4 receipt"
 

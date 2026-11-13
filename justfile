@@ -202,12 +202,12 @@ agent-publish: agent-build
 # run as `curl ... | sh` with a fresh HOME, and every login and critical action approved in a headless browser.
 # The dev database is never used. Writes agent/dist/e2e (the transcript, logs and screenshots).
 agent-e2e: up
-    cd agent && uv run python scripts/e2e.py
+    cd agent && uv run python -m tests.e2e.run
 
 # The same stack as agent-e2e, held up for a hand test from Windows. It prints the installer one-liner and the steps for
 # PowerShell, and it stays up until Ctrl+C, which stops its processes and drops its test database. Writes agent/dist/e2e-serve.
 agent-e2e-serve: up
-    cd agent && uv run python scripts/e2e.py --serve
+    cd agent && uv run python -m tests.e2e.run --serve
 
 # Backend tests against the real Postgres in Compose, in a separate *_test database.
 # CI runs this against the Postgres that `just up` starts in the same job.

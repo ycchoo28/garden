@@ -14,12 +14,13 @@ from pathlib import Path
 
 import pytest
 import yaml
-from conftest import ROOT, run_garden, store_token
-from fake_portal import GOOD_TOKEN, FakePortal
 
 import garden.dsh as dsh
+from tests.shared.fake_portal import GOOD_TOKEN, FakePortal
+from tests.shared.garden_cli import run_garden, store_token
+from tests.shared.paths import AGENT_ROOT
 
-DSH_TEMPLATE = ROOT / "install" / "dsh" / "cordis.patch.yml"
+DSH_TEMPLATE = AGENT_ROOT / "install" / "dsh" / "cordis.patch.yml"
 
 
 def _dsh_home(env: dict[str, str], tmp_path: Path) -> Path:

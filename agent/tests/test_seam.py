@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from fake_portal import GOOD_TOKEN, FakePortal
 from pytest import CaptureFixture
 
 from garden.auth import (
@@ -27,6 +26,7 @@ from garden.dsh import configure, run
 from garden.engine import Engine, PortalClient, connect
 from garden.mcp import handle
 from garden.shared import CliTooOld, GardenError, NotSignedIn, Settings
+from tests.shared.fake_portal import GOOD_TOKEN, FakePortal
 
 SHA = "ab" * 32
 
