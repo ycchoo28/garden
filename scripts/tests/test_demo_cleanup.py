@@ -523,3 +523,179 @@ def test_restore_user_path_prunes_manifest_when_path_already_cleared(monkeypatch
     }
     cleanup.restore_user_path()
     assert cleanup.data["path_entries"] == []
+
+
+PORTAL = "http://127.0.0.1:55000"
+UNCONFIRMED_LOGOUT = (
+    "warning: the portal did not confirm the sign-out (The portal cannot be reached). "
+    "The login was kept locally so sign-out can be retried.\n"
+)
+FORCED_LOGOUT = (
+    "warning: the portal did not confirm the sign-out (The portal cannot be reached). "
+    "The local login was dropped (--force).\n"
+)
+
+
+def _test_trash(trash: Path):
+    """Move "trashed" files into a test folder so nothing reaches the real Trash."""
+    trash.mkdir(parents=True, exist_ok=True)
+
+    def move(path, trash_root=None):
+        source = Path(path)
+        source.rename(trash / f"{len(list(trash.iterdir()))}-{source.name}")
+
+    return move
+
+
+def _fake_logout(monkeypatch, returncode: int, stderr: str, seen: list) -> None:
+    def run(cmd, **_kwargs):
+        seen.append(list(cmd))
+        return subprocess.CompletedProcess(
+            args=cmd, returncode=returncode, stdout='{"signed_out": true}\n', stderr=stderr
+        )
+
+    monkeypatch.setattr(DEMO.subprocess, "run", run)
+
+
+def _cleanup_args(env_root: Path, *, force: bool = False) -> argparse.Namespace:
+    return argparse.Namespace(
+        dry_run=False,
+        yes=True,
+        remove_env=False,
+        env_file=str(env_root / ".env"),
+        force=force,
+    )
+
+
+@pytest.fixture
+def installed_demo(tmp_path: Path, monkeypatch) -> dict[str, Any]:
+    """A bootstrap plus agent install with one CLI login, as `just demo` records it."""
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    bin_dir = home / ".local" / "bin"
+    garden_home = home / ".garden"
+    dsh_home = home / ".dsh"
+    tools = home / ".local" / "share" / "garden-tools" / "just-1.58.0"
+    paths: dict[str, Any] = {
+        "home": home,
+        "trash": tmp_path / "trash",
+        "bin": bin_dir,
+        "launcher": bin_dir / "garden",
+        "dsh_launcher": bin_dir / "dsh",
+        "just": bin_dir / "just",
+        "uv": bin_dir / "uv",
+        "garden_home": garden_home,
+        "pyz": garden_home / "garden.pyz",
+        "config": garden_home / "config.json",
+        "dsh_home": dsh_home,
+        "tools": tools,
+    }
+    for name in ("launcher", "dsh_launcher", "just", "uv", "pyz", "config"):
+        paths[name].parent.mkdir(parents=True, exist_ok=True)
+        paths[name].write_text(name)
+    (dsh_home / "bundle.txt").parent.mkdir(parents=True, exist_ok=True)
+    (dsh_home / "bundle.txt").write_text("dsh")
+    (tools / "just").parent.mkdir(parents=True, exist_ok=True)
+    (tools / "just").write_text("just tool")
+
+    manifest = MANIFEST.empty_manifest()
+    MANIFEST.record_artifact(manifest, bin_dir, owner="bootstrap", kind="directory", root=home)
+    MANIFEST.record_artifact(manifest, paths["just"], owner="bootstrap", kind="file", root=bin_dir)
+    MANIFEST.record_artifact(manifest, paths["uv"], owner="bootstrap", kind="file", root=bin_dir)
+    MANIFEST.record_artifact(manifest, tools, owner="bootstrap", kind="tree", root=tools.parent)
+    MANIFEST.record_artifact(
+        manifest, paths["launcher"], owner="agent-installer", kind="file", root=bin_dir
+    )
+    MANIFEST.record_artifact(
+        manifest, paths["dsh_launcher"], owner="agent-installer", kind="file", root=bin_dir
+    )
+    MANIFEST.record_artifact(manifest, garden_home, owner="agent-installer", kind="tree", root=home)
+    MANIFEST.record_artifact(manifest, dsh_home, owner="agent-installer", kind="tree", root=home)
+    MANIFEST.record_login(manifest, PORTAL, str(paths["launcher"]), str(garden_home))
+    manifest_file = MANIFEST.manifest_path(home)
+    MANIFEST.save_manifest(manifest_file, manifest)
+    monkeypatch.setattr(MANIFEST, "_trash_path", _test_trash(paths["trash"]))
+    paths["manifest_file"] = manifest_file
+    return paths
+
+
+def test_unconfirmed_uninstall_keeps_launcher_and_recovery_files(
+    installed_demo: dict[str, Any], tmp_path: Path, monkeypatch, capsys
+) -> None:
+    seen: list[list[str]] = []
+    _fake_logout(monkeypatch, 1, UNCONFIRMED_LOGOUT, seen)
+
+    assert DEMO.DemoCleanup(_cleanup_args(tmp_path), "uninstall").run() == 1
+
+    for kept in ("launcher", "pyz", "config", "garden_home", "bin", "just", "uv"):
+        assert installed_demo[kept].exists(), kept
+    for removed in ("dsh_launcher", "dsh_home", "tools"):
+        assert not installed_demo[removed].exists(), removed
+    saved = MANIFEST.load_manifest(installed_demo["manifest_file"])
+    assert [login["portal"] for login in saved["logins"]] == [PORTAL]
+    kept_records = {entry["path"] for entry in saved["artifacts"]}
+    assert str(installed_demo["launcher"]) in kept_records
+    assert str(installed_demo["garden_home"]) in kept_records
+    assert str(installed_demo["dsh_launcher"]) not in kept_records
+    out = capsys.readouterr().out
+    assert f"Kept garden at {installed_demo['launcher']}" in out
+    assert "just demo-uninstall --drop-login" in out
+
+
+def test_drop_login_finishes_after_unconfirmed_uninstall(
+    installed_demo: dict[str, Any], tmp_path: Path, monkeypatch
+) -> None:
+    _fake_logout(monkeypatch, 1, UNCONFIRMED_LOGOUT, [])
+    assert DEMO.DemoCleanup(_cleanup_args(tmp_path), "uninstall").run() == 1
+
+    seen: list[list[str]] = []
+    _fake_logout(monkeypatch, 0, FORCED_LOGOUT, seen)
+    assert DEMO.DemoCleanup(_cleanup_args(tmp_path, force=True), "uninstall").run() == 0
+
+    # The launcher the recovery run needs was still on disk when it ran.
+    assert seen == [[str(installed_demo["launcher"]), "logout", "--json", "--force"]]
+    for name in ("launcher", "pyz", "config", "garden_home", "bin", "just", "uv"):
+        assert not installed_demo[name].exists(), name
+    assert not installed_demo["manifest_file"].exists()
+
+
+def test_drop_login_drops_record_when_launcher_is_missing(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    trash = tmp_path / "trash"
+    monkeypatch.setattr(MANIFEST, "_trash_path", _test_trash(trash))
+    leftover = home / ".garden" / "garden.pyz"
+    leftover.parent.mkdir(parents=True)
+    leftover.write_text("pyz")
+    manifest = MANIFEST.empty_manifest()
+    MANIFEST.record_artifact(
+        manifest, leftover, owner="agent-installer", kind="file", root=leftover.parent
+    )
+    missing = home / ".local" / "bin" / "garden"
+    MANIFEST.record_login(manifest, PORTAL, str(missing), str(leftover.parent))
+    manifest_file = MANIFEST.manifest_path(home)
+    MANIFEST.save_manifest(manifest_file, manifest)
+    seen: list[list[str]] = []
+    _fake_logout(monkeypatch, 0, FORCED_LOGOUT, seen)
+
+    assert DEMO.DemoCleanup(_cleanup_args(tmp_path, force=True), "uninstall").run() == 0
+
+    assert seen == []
+    assert not leftover.exists()
+    assert not manifest_file.exists()
+    err = capsys.readouterr().err
+    assert f"garden is missing at {missing}" in err
+    assert "The login record was dropped (--drop-login)" in err
+    assert "could not be removed" in err
+
+
+def test_path_restore_keeps_entries_for_kept_recovery_folders() -> None:
+    entries = [
+        {"value": r"C:\Users\Person\.local\bin", "scope": "windows-user", "owner": "bootstrap"},
+        {"value": r"C:\Users\Person\Tools", "scope": "windows-user", "owner": "agent-installer"},
+    ]
+    keep = {DEMO._path_text(r"C:\Users\Person\.local\bin")}
+
+    assert DEMO.path_entries_to_restore(entries, keep) == [entries[1]]

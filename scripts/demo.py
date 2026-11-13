@@ -78,6 +78,8 @@ MODEL_KEYS = tuple(
     "GARDEN_AGENT_MODEL_" + name for name in ("UPSTREAM_URL", "API_KEY", "MODELS", "DEFAULT")
 )
 FAKE_FLAG = "GARDEN_DEMO_FAKE_MODEL"
+# Bootstrap copies that `just demo-uninstall` runs through; kept while a login awaits --drop-login.
+RECOVERY_TOOLS = ("just", "just.exe", "uv", "uv.exe")
 JUST_DOTENV_PATH = "GARDEN_DEMO_JUST_DOTENV_PATH"
 # Compose reads these from the process environment. A docker.cmd bridge that starts Docker in
 # WSL does not inherit Windows variables, so WSLENV has to name them for the bridge.
@@ -967,12 +969,73 @@ def demo_projects_for(data: dict, root: Path = ROOT) -> list[dict]:
     return [project for project in data["demo_projects"] if project.get("root") == resolved]
 
 
-def cleanup_artifacts(data: dict, root: Path = ROOT) -> tuple[dict, list[dict]]:
+def _path_text(value: str | Path) -> str:
+    return os.path.normcase(os.path.normpath(str(value).strip().strip('"')))
+
+
+def login_recovery_paths(data: dict) -> list[Path]:
+    """Files a later `--drop-login` run needs after a login the portal did not confirm.
+
+    That is each login's launcher and Garden home, plus the bootstrap `just` and `uv` that run
+    `just demo-uninstall`. Nothing is kept when no login remains.
+    """
+    if not data["logins"]:
+        return []
+    paths = []
+    for login in data["logins"]:
+        paths.append(Path(login["launcher"]))
+        if login.get("garden_home"):
+            paths.append(Path(login["garden_home"]))
+    paths.extend(
+        Path(entry["path"])
+        for entry in data["artifacts"]
+        if entry.get("owner") == "bootstrap" and Path(entry["path"]).name in RECOVERY_TOOLS
+    )
+    return paths
+
+
+def login_recovery_dirs(data: dict) -> set[str]:
+    """Folders whose PATH entries stay, so the kept launcher and recovery tools still resolve."""
+    if not data["logins"]:
+        return set()
+    folders = {Path(login["launcher"]).parent for login in data["logins"]}
+    folders.update(
+        Path(entry["path"]).parent
+        for entry in data["artifacts"]
+        if entry.get("owner") == "bootstrap" and Path(entry["path"]).name in RECOVERY_TOOLS
+    )
+    return {_path_text(folder) for folder in folders}
+
+
+def is_needed_for_recovery(path: Path, needed: list[Path]) -> bool:
+    """True for a needed path, anything inside one, or a folder that holds one."""
+    target = Path(os.path.abspath(path))
+    for item in needed:
+        kept = Path(os.path.abspath(item))
+        if target == kept or kept in target.parents or target in kept.parents:
+            return True
+    return False
+
+
+def path_entries_to_restore(entries: list[dict], keep_dirs: set[str]) -> list[dict]:
+    return [
+        entry
+        for entry in entries
+        if entry.get("scope") == "windows-user" and _path_text(entry["value"]) not in keep_dirs
+    ]
+
+
+def cleanup_artifacts(
+    data: dict, root: Path = ROOT, keep: tuple[Path, ...] = ()
+) -> tuple[dict, list[dict]]:
     selected = []
     retained = []
     for entry in data["artifacts"]:
         owner = entry.get("owner")
         path = Path(entry["path"])
+        if keep and is_needed_for_recovery(path, list(keep)):
+            retained.append(entry)
+            continue
         if owner in {"bootstrap", "agent-installer"}:
             selected.append(entry)
             continue
@@ -1025,6 +1088,11 @@ def cleanup_preview(
             lines.append(
                 f"garden logout at {login['portal']} (remote revoke, then local keyring removal)"
             )
+    if data["logins"] and not force:
+        lines.append(
+            "If the portal does not confirm sign-out, keep the launcher, Garden home and "
+            "just/uv for a later --drop-login"
+        )
     if not data["logins"]:
         lines.append("No Garden CLI login is recorded")
     project_images = {project.get("image") for project in projects if project.get("image")}
@@ -1168,7 +1236,23 @@ class DemoCleanup:
     def logout(self):
         for login in list(self.data["logins"]):
             launcher = Path(login["launcher"])
+            force = bool(
+                getattr(getattr(self, "args", None), "force", False)
+                or getattr(getattr(self, "args", None), "drop_login", False)
+            )
             if not launcher.exists():
+                if force:
+                    # Without the launcher the portal cannot be asked, so only the record goes.
+                    print(
+                        f"Warning: garden is missing at {launcher}, so sign-out for "
+                        f"{login['portal']} was not sent to the portal. The login record was "
+                        "dropped (--drop-login). The portal login remains valid until it expires "
+                        "or is revoked in the portal. The local keyring entry, if any, could not "
+                        "be removed.",
+                        file=sys.stderr,
+                    )
+                    self.data["logins"].remove(login)
+                    continue
                 print(
                     f"Warning: cannot revoke {login['portal']} because {launcher} is missing; "
                     "the local keyring entry may remain.",
@@ -1188,10 +1272,6 @@ class DemoCleanup:
                     env["GARDEN_CLIENT_TIMEOUT"] = "10"
             except ValueError:
                 env["GARDEN_CLIENT_TIMEOUT"] = "10"
-            force = bool(
-                getattr(getattr(self, "args", None), "force", False)
-                or getattr(getattr(self, "args", None), "drop_login", False)
-            )
             cmd = [str(launcher), "logout", "--json"]
             if force:
                 cmd.append("--force")
@@ -1349,12 +1429,10 @@ class DemoCleanup:
                 )
         self.data["docker_images"] = retained
 
-    def restore_user_path(self):
+    def restore_user_path(self, keep_dirs: set[str] = frozenset()):
         if os.name != "nt":
             return
-        entries = [
-            item for item in self.data["path_entries"] if item.get("scope") == "windows-user"
-        ]
+        entries = path_entries_to_restore(self.data["path_entries"], set(keep_dirs))
         if not entries:
             return
         import winreg
@@ -1367,7 +1445,7 @@ class DemoCleanup:
             except FileNotFoundError:
                 current, value_type = "", winreg.REG_EXPAND_SZ
             updated, removed = without_owned_path_entries(
-                self.data, current, scope="windows-user", separator=";"
+                {**self.data, "path_entries": entries}, current, scope="windows-user", separator=";"
             )
             self.data["path_entries"] = [
                 entry for entry in self.data["path_entries"] if entry not in entries
@@ -1415,8 +1493,11 @@ class DemoCleanup:
                 project.get("image") for project in stopped_projects if project.get("image")
             }
             self.remove_images(project_images)
-            self.restore_user_path()
-            scoped, plan = cleanup_artifacts(self.data)
+            # An unconfirmed login still needs its launcher, Garden home and the just/uv that
+            # run this command, so those files and their PATH folders stay until --drop-login.
+            needed = login_recovery_paths(self.data)
+            self.restore_user_path(login_recovery_dirs(self.data))
+            scoped, plan = cleanup_artifacts(self.data, keep=tuple(needed))
             updated, warnings = apply_artifact_plan(scoped, plan)
             for warning in warnings:
                 print(f"Warning: {warning}", file=sys.stderr)
@@ -1425,6 +1506,16 @@ class DemoCleanup:
             self.data["artifacts"] = updated["artifacts"] + [
                 entry for entry in self.data["artifacts"] if entry not in scoped["artifacts"]
             ]
+            if self.data["logins"]:
+                for login in self.data["logins"]:
+                    launcher = Path(login["launcher"])
+                    if launcher.exists():
+                        print(
+                            f"Kept garden at {launcher}, its Garden home and the login record "
+                            f"for {login['portal']}, because the portal did not confirm sign-out.",
+                            flush=True,
+                        )
+                print("To finish, run: just demo-uninstall --drop-login", flush=True)
             self.data["demo_projects"] = [
                 project for project in self.data["demo_projects"] if project not in stopped_projects
             ]
