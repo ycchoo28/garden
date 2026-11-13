@@ -4,6 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Self
 
+from garden.limits import THREAD_POOL_SIZE
 from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -34,6 +35,15 @@ class Settings(BaseSettings):
     embedding_url: str = "http://127.0.0.1:55083"
     # The model gateway forwards to this OpenAI-compatible base URL. Empty means it answers 503.
     agent_model_upstream_url: str = ""
+    # The hosted MCP endpoint is mounted but answers 404 until an operator enables it.
+    agent_mcp_enabled: bool = False
+    # The hosted Engine calls the backend through this address with the caller's bearer token.
+    # Empty means the loopback address of the port this backend listens on.
+    agent_mcp_api_base_url: str = ""
+    # Comma-separated browser origins allowed to call the hosted MCP endpoint.
+    agent_mcp_allowed_origins: str = ""
+    agent_mcp_pending_per_login: int = 3
+    agent_mcp_pending_total: int = 20
     # Sent to the upstream as a bearer token when set. Not needed by a local or fake upstream.
     agent_model_api_key: SecretStr = SecretStr("")
     # The only models the gateway forwards, as a comma-separated list. Empty allows none.
@@ -62,6 +72,12 @@ class Settings(BaseSettings):
         return frozenset(self.allowed_model_names)
 
     @property
+    def agent_mcp_origins(self) -> frozenset[str]:
+        return frozenset(
+            origin.strip() for origin in self.agent_mcp_allowed_origins.split(",") if origin.strip()
+        )
+
+    @property
     def default_model(self) -> str | None:
         """The model the gateway names as `default`: the configured one, else the first allowed."""
         if self.agent_model_default:
@@ -78,6 +94,19 @@ class Settings(BaseSettings):
     def model_default_is_allowed(self) -> Self:
         if self.agent_model_default and self.agent_model_default not in self.allowed_models:
             raise ValueError("GARDEN_AGENT_MODEL_DEFAULT must be one of GARDEN_AGENT_MODEL_MODELS")
+        return self
+
+    @model_validator(mode="after")
+    def mcp_wait_limits_fit_the_worker_pool(self) -> Self:
+        if self.agent_mcp_pending_per_login < 1 or self.agent_mcp_pending_total < 1:
+            raise ValueError("GARDEN_AGENT_MCP_PENDING limits must be positive")
+        if self.agent_mcp_pending_per_login > self.agent_mcp_pending_total:
+            raise ValueError("GARDEN_AGENT_MCP_PENDING_PER_LOGIN cannot exceed PENDING_TOTAL")
+        if self.agent_mcp_pending_total >= THREAD_POOL_SIZE:
+            raise ValueError(
+                "GARDEN_AGENT_MCP_PENDING_TOTAL must be below the "
+                f"{THREAD_POOL_SIZE}-thread MCP pool"
+            )
         return self
 
     @model_validator(mode="after")

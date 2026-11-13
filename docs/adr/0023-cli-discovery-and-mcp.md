@@ -15,6 +15,7 @@ The portal sends a contract version in the `X-Garden-Contract-Version` header, a
 The portal sends a minimum command version in `X-Garden-Min-CLI-Version`, and the command refuses to run below it and says how to upgrade.
 The same tools are served over stdio as an MCP server, with `readOnlyHint` for reads and `destructiveHint` for operations that need confirmation.
 The skill file that tells an agent how to use the command ships inside the package.
+ADR 0028 extends this decision to provider-hosted MCP Streamable HTTP while keeping the published contract as the source of the tool list.
 
 ## Consequences
 

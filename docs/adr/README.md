@@ -31,3 +31,4 @@ Records are numbered in the order they were made, and a later record may replace
 | [0025](0025-batch-approval-and-undo.md) | A batch goes live only after approval, and undo restores the spans |
 | [0026](0026-business-ownership-and-reporting-reads.md) | Business ownership, domain-neutral Shared code and governed reporting reads |
 | [0027](0027-architecture-enforcement.md) | Explicit enforcement tiers and required ownership review |
+| [0028](0028-hosted-mcp-endpoint.md) | Provider-hosted MCP over stateless Streamable HTTP |

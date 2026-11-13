@@ -401,9 +401,17 @@ export type CliLoginCreated = {
      */
     device: string;
     /**
+     * Expires At
+     */
+    expires_at?: string | null;
+    /**
      * Id
      */
     id: string;
+    /**
+     * Source
+     */
+    source?: 'cli' | 'web';
     /**
      * Token
      */
@@ -451,6 +459,10 @@ export type CliLoginOut = {
      */
     device: string;
     /**
+     * Expires At
+     */
+    expires_at: string | null;
+    /**
      * Id
      */
     id: string;
@@ -462,6 +474,10 @@ export type CliLoginOut = {
      * Revoked At
      */
     revoked_at: string | null;
+    /**
+     * Source
+     */
+    source: 'cli' | 'web';
 };
 
 /**
@@ -1336,6 +1352,20 @@ export type VoidLineIn = {
 };
 
 /**
+ * WebCliLoginIn
+ */
+export type WebCliLoginIn = {
+    /**
+     * Device
+     */
+    device: string;
+    /**
+     * Expires In Days
+     */
+    expires_in_days?: 30 | 90 | 365 | null;
+};
+
+/**
  * Body_files.file.upload
  */
 export type FastapiCompatV2BodyFilesFileUpload = {
@@ -1710,6 +1740,35 @@ export type AgentMyLoginListResponses = {
 };
 
 export type AgentMyLoginListResponse = AgentMyLoginListResponses[keyof AgentMyLoginListResponses];
+
+export type AgentMyLoginCreateData = {
+    body: WebCliLoginIn;
+    path?: never;
+    query?: never;
+    url: '/api/agent/my-logins';
+};
+
+export type AgentMyLoginCreateErrors = {
+    /**
+     * Validation failed
+     */
+    422: Problem;
+    /**
+     * An error, as a problem document
+     */
+    default: Problem;
+};
+
+export type AgentMyLoginCreateError = AgentMyLoginCreateErrors[keyof AgentMyLoginCreateErrors];
+
+export type AgentMyLoginCreateResponses = {
+    /**
+     * Successful Response
+     */
+    201: CliLoginCreated;
+};
+
+export type AgentMyLoginCreateResponse = AgentMyLoginCreateResponses[keyof AgentMyLoginCreateResponses];
 
 export type AgentMyLoginSignOutData = {
     body?: never;

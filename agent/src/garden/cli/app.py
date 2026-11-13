@@ -107,7 +107,7 @@ def _static_parser(
     whoami_cmd.set_defaults(handler=partial(_whoami, get_settings=get_settings))
 
     logout_cmd = tree.add(
-        ("logout",), "End this device's CLI login on the portal. Other devices keep working."
+        ("logout",), "End this device's Agent login on the portal. Other devices keep working."
     )
     logout_cmd.add_argument("--json", action="store_true")
     logout_cmd.set_defaults(handler=partial(_logout, get_settings=get_settings))

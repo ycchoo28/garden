@@ -29,7 +29,7 @@ flowchart LR
   person["Person in a browser"] --> spa["Vue 3 web app :55173"]
   agent["Coding agent"] --> cli["garden command and MCP server"]
   spa -->|"/api and /auth"| api["FastAPI API :55000"]
-  cli -->|"bearer CLI login"| api
+  cli -->|"bearer Agent login"| api
   api --> db[("Postgres 17 with pgvector :55432")]
   api --> oidc["Fake OIDC provider :55081"]
   api --> gateway["Model gateway /api/agent/model/v1"]
@@ -224,6 +224,23 @@ claude mcp add garden -e GARDEN_API_URL=http://127.0.0.1:55000 -- garden mcp
 The `GARDEN_API_URL` variable is required, because the command has no default portal address.
 The tools are named after the operation ids with underscores, such as `claims_claim_create`.
 To install the skill file that tells an agent how to use the command, run `garden skills install`, which copies it to `~/.garden/skills`.
+
+## Hosted MCP endpoint
+
+Garden can also serve the same tools to hosted clients at `POST https://<portal>/api/agent/mcp` using MCP Streamable HTTP.
+The endpoint is disabled by default; set `GARDEN_AGENT_MCP_ENABLED=true` to enable it.
+Create an Agent login on the Agent logins page (`/agent/logins`), choose an expiry, and store the one-time `ag_` token as a secret in the agent platform.
+Send it as `Authorization: Bearer ag_...` on every request.
+The browser-made Agent login has the same agent permissions and confirmation gate as a `garden` command login, and can be revoked from that page.
+
+The handler calls the backend on the loopback address of the port the request arrived on, so a port moved by `just demo` needs no setting.
+Set `GARDEN_AGENT_MCP_API_BASE_URL` only when the backend cannot be reached at its own port on loopback, and list browser origins in the comma-separated `GARDEN_AGENT_MCP_ALLOWED_ORIGINS` setting when a browser client needs them.
+Confirmation waits default to three per login and twenty in total; `GARDEN_AGENT_MCP_PENDING_PER_LOGIN` and `GARDEN_AGENT_MCP_PENDING_TOTAL` can lower these limits.
+The total must stay below the 40-thread MCP worker pool.
+
+Hosted file tools accept `{ "filename": "receipt.pdf", "content_type": "application/pdf", "data_base64": "..." }` instead of a local path.
+The hosted handler never reads a path from its own filesystem, while stdio file arguments keep their local-path behavior.
+See [ADR 0028](docs/adr/0028-hosted-mcp-endpoint.md) for the transport, security and confirmation details.
 
 ## Commands
 

@@ -44,6 +44,7 @@ async def current_person(
         _ = current_request_login.set(
             RequestLogin(
                 via=VIA_AGENT,
+                source=login.source,
                 device=login.device,
                 created_at=login.created_at,
                 cli_login_id=login.id,
