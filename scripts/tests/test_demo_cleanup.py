@@ -3,6 +3,7 @@
 import argparse
 import importlib.util
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -10,6 +11,7 @@ import threading
 import time
 from collections.abc import Generator
 from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
@@ -148,8 +150,8 @@ def test_unreachable_portal_warns_where_to_revoke_login(
     }
     cleanup.failed = False
     monkeypatch.setattr(
-        DEMO.subprocess,
-        "run",
+        DEMO,
+        "run_bounded",
         lambda *_args, **_kwargs: subprocess.CompletedProcess(
             args=[str(launcher), "logout"],
             returncode=0,
@@ -188,8 +190,8 @@ def test_force_removes_record_when_portal_unreachable(
     }
     cleanup.failed = False
     monkeypatch.setattr(
-        DEMO.subprocess,
-        "run",
+        DEMO,
+        "run_bounded",
         lambda *_args, **_kwargs: subprocess.CompletedProcess(
             args=[str(launcher), "logout", "--force"],
             returncode=0,
@@ -230,8 +232,8 @@ def test_force_keeps_record_on_nonzero_cli_exit(tmp_path: Path, monkeypatch, cap
     }
     cleanup.failed = False
     monkeypatch.setattr(
-        DEMO.subprocess,
-        "run",
+        DEMO,
+        "run_bounded",
         lambda *_args, **_kwargs: subprocess.CompletedProcess(
             args=[str(launcher), "logout", "--force"],
             returncode=2,
@@ -757,3 +759,249 @@ def test_path_restore_keeps_entries_for_kept_recovery_folders() -> None:
     keep = {DEMO._path_text(r"C:\Users\Person\.local\bin")}
 
     assert DEMO.path_entries_to_restore(entries, keep) == [entries[1]]
+
+
+def _sign_out_succeeds(monkeypatch) -> None:
+    def logout(self):
+        self.data["logins"].clear()
+
+    monkeypatch.setattr(DEMO.DemoCleanup, "logout", logout)
+
+
+def _uninstall_args(env_file: Path, **flags) -> argparse.Namespace:
+    values = {
+        "dry_run": False,
+        "yes": True,
+        "remove_env": False,
+        "force": False,
+        "drop_login": False,
+        "env_file": str(env_file),
+    }
+    values.update(flags)
+    return argparse.Namespace(**values)
+
+
+def test_uninstall_dry_run_lists_exactly_what_it_removes(
+    installed_demo: dict[str, Any], tmp_path: Path, monkeypatch
+) -> None:
+    _sign_out_succeeds(monkeypatch)
+    moved: list[str] = []
+    trash = installed_demo["trash"]
+    real_trash = MANIFEST._trash_path
+
+    def record(path, trash_root=None):
+        moved.append(str(Path(path)))
+        real_trash(path, trash_root)
+
+    monkeypatch.setattr(MANIFEST, "_trash_path", record)
+    args = _uninstall_args(tmp_path / ".env")
+    preview = DEMO.cleanup_preview(
+        MANIFEST.load_manifest(installed_demo["manifest_file"]),
+        "uninstall",
+        env_file=tmp_path / ".env",
+        manifest_file=installed_demo["manifest_file"],
+    )
+    planned = {line.split(": ", 1)[1] for line in preview if line.startswith("Move to Trash: ")}
+    planned_dirs = {
+        line.split(": ", 1)[1] for line in preview if line.startswith("Remove if empty: ")
+    }
+
+    assert DEMO.DemoCleanup(args, "uninstall").run() == 0
+
+    assert trash.exists()
+    assert planned, "the recorded install must appear in the dry run"
+    record = str(installed_demo["manifest_file"])
+    assert set(moved) == planned | {record}
+    assert any(
+        line.endswith(f"install record {record} to Trash once nothing remains") for line in preview
+    )
+    assert str(installed_demo["bin"]) in planned_dirs
+    for path in planned | planned_dirs:
+        assert not Path(path).exists(), path
+
+
+@pytest.mark.skipif(os.name == "nt", reason="uses a POSIX shell script as the launcher")
+@pytest.mark.parametrize("flag", ["force", "drop_login"])
+def test_hanging_portal_logout_finishes_within_bound(
+    installed_demo: dict[str, Any], tmp_path: Path, monkeypatch, capsys, flag: str
+) -> None:
+    monkeypatch.setattr(DEMO, "LOGOUT_TIMEOUT", 2)
+    launcher = installed_demo["launcher"]
+    # The launcher hangs and leaves a grandchild that would hold any inherited pipe open.
+    launcher.write_text("#!/bin/sh\n(sleep 20) &\nsleep 20\n")
+    launcher.chmod(0o755)
+    env_file = tmp_path / ".env"
+    env_file.write_text("GARDEN_X=1\n")
+    started = time.monotonic()
+
+    code = DEMO.DemoCleanup(_uninstall_args(env_file, **{flag: True}), "uninstall").run()
+
+    assert time.monotonic() - started < 30
+    assert code == 1
+    err = capsys.readouterr().err
+    assert "could not be revoked" in err or "garden logout failed" in err
+    saved = MANIFEST.load_manifest(installed_demo["manifest_file"])
+    assert saved["logins"], "the login record must survive a failed sign-out"
+    assert installed_demo["launcher"].exists()
+
+
+def test_unreachable_portal_uninstall_exits_and_keeps_recovery_files(
+    installed_demo: dict[str, Any], tmp_path: Path, monkeypatch, capsys
+) -> None:
+    monkeypatch.setattr(
+        DEMO,
+        "run_bounded",
+        lambda *_a, **_k: subprocess.CompletedProcess([], 1, "", "portal unreachable"),
+    )
+    env_file = tmp_path / ".env"
+    env_file.write_text("GARDEN_X=1\n")
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr(
+        "builtins.input",
+        lambda *_a: pytest.fail("--yes must not wait for a prompt"),
+    )
+
+    code = DEMO.DemoCleanup(_uninstall_args(env_file), "uninstall").run()
+
+    assert code == 1
+    out = capsys.readouterr()
+    assert "To finish, run: just demo-uninstall --drop-login" in out.out
+    assert f"Kept {env_file}" in out.out
+    assert installed_demo["launcher"].exists()
+    saved = MANIFEST.load_manifest(installed_demo["manifest_file"])
+    assert saved["logins"] and saved["artifacts"]
+
+
+def test_interrupted_uninstall_saves_progress_and_rerun_completes(
+    installed_demo: dict[str, Any], tmp_path: Path, monkeypatch
+) -> None:
+    _sign_out_succeeds(monkeypatch)
+    env_file = tmp_path / ".env"
+
+    interrupt_once = [True]
+    real_restore = DEMO.DemoCleanup.restore_user_path
+
+    def interrupted(self, keep_dirs=frozenset()):
+        if interrupt_once[0]:
+            interrupt_once[0] = False
+            raise KeyboardInterrupt
+        return real_restore(self, keep_dirs)
+
+    monkeypatch.setattr(DEMO.DemoCleanup, "restore_user_path", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        DEMO.DemoCleanup(_uninstall_args(env_file), "uninstall").run()
+
+    saved = MANIFEST.load_manifest(installed_demo["manifest_file"])
+    assert saved["logins"] == [], "sign-out finished before the interruption, so it is saved"
+    assert saved["artifacts"], "removals had not started, so they stay recorded"
+
+    assert DEMO.DemoCleanup(_uninstall_args(env_file), "uninstall").run() == 0
+    assert not installed_demo["manifest_file"].exists()
+    assert not installed_demo["launcher"].exists()
+
+
+def test_env_file_is_never_prompted_under_yes(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    env_file = tmp_path / ".env"
+    env_file.write_text("GARDEN_X=1\n")
+    cleanup = object.__new__(DEMO.DemoCleanup)
+    cleanup.args = _uninstall_args(env_file)
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr("builtins.input", lambda *_a: pytest.fail("--yes must not prompt for .env"))
+
+    cleanup.ask_about_env_file()
+
+    assert env_file.exists()
+
+
+def test_stuck_runner_is_ended_and_its_control_port_goes_quiet(monkeypatch) -> None:
+    if os.name == "nt":
+        pytest.skip("uses a POSIX process")
+    monkeypatch.setattr(DEMO, "RUNNER_STOP_TIMEOUT", 1)
+    monkeypatch.setattr(DEMO, "RUNNER_KILL_TIMEOUT", 10)
+    child = subprocess.Popen(["sleep", "60"], start_new_session=True)
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.send_response(202)
+            self.end_headers()
+
+        def log_message(self, *_args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+
+    def close_when_runner_exits():
+        child.wait()
+        server.shutdown()
+        server.server_close()
+
+    threading.Thread(target=close_when_runner_exits, daemon=True).start()
+    project = {
+        "name": "garden-demo-stuck",
+        "active": True,
+        "pid": child.pid,
+        "control_url": f"http://127.0.0.1:{server.server_port}/stop/token",
+    }
+    cleanup = object.__new__(DEMO.DemoCleanup)
+
+    assert cleanup.stop_runner(project) is True
+    assert child.poll() is not None
+
+
+def test_stuck_runner_without_recorded_pid_is_reported(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(DEMO, "RUNNER_STOP_TIMEOUT", 1)
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.send_response(202)
+            self.end_headers()
+
+        def log_message(self, *_args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        project = {
+            "name": "garden-demo-old",
+            "active": True,
+            "control_url": f"http://127.0.0.1:{server.server_port}/stop/token",
+        }
+        cleanup = object.__new__(DEMO.DemoCleanup)
+
+        assert cleanup.stop_runner(project) is False
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert "not recorded" in capsys.readouterr().err
+
+
+def test_compose_teardown_timeout_is_reported_not_raised(monkeypatch, capsys) -> None:
+    def timed_out(*_args, **_kwargs):
+        raise subprocess.TimeoutExpired(cmd="docker compose", timeout=1)
+
+    monkeypatch.setattr(DEMO, "run_bounded", timed_out)
+    cleanup = object.__new__(DEMO.DemoCleanup)
+    project = {"name": "garden-demo-slow", "root": str(DEMO.ROOT)}
+
+    assert cleanup.compose_down(project) is False
+    assert "did not finish" in capsys.readouterr().err
+
+
+@pytest.mark.skipif(os.name == "nt", reason="uses POSIX shell")
+def test_bounded_run_returns_even_when_a_grandchild_holds_output(monkeypatch) -> None:
+    started = time.monotonic()
+    with pytest.raises(subprocess.TimeoutExpired):
+        DEMO.run_bounded(["sh", "-c", "(sleep 20) & sleep 20"], timeout=1)
+    assert time.monotonic() - started < 10
+
+
+def test_bounded_run_captures_output_and_status() -> None:
+    result = DEMO.run_bounded(
+        [sys.executable, "-c", "import sys; print('out'); sys.stderr.write('err'); sys.exit(3)"],
+        timeout=30,
+    )
+
+    assert (result.returncode, result.stdout, result.stderr) == (3, "out\n", "err")

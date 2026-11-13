@@ -166,6 +166,42 @@ def command_for(args, path=None):
     return command
 
 
+# Every wait in cleanup is bounded. Seconds.
+LOGOUT_TIMEOUT = 30
+DOCKER_TIMEOUT = 60
+IMAGE_TIMEOUT = 120
+COMPOSE_TIMEOUT = 300
+RUNNER_STOP_TIMEOUT = 60
+RUNNER_KILL_TIMEOUT = 20
+
+
+def run_bounded(command, *, timeout: float, env=None, cwd=None) -> subprocess.CompletedProcess:
+    """Run a command with a hard time limit and output captured in temporary files.
+
+    Output goes to files rather than pipes, so a grandchild that inherits a pipe cannot keep
+    the wait open after the limit. subprocess.TimeoutExpired propagates to the caller.
+    """
+    with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+        result = subprocess.run(
+            command,
+            stdin=subprocess.DEVNULL,
+            stdout=out,
+            stderr=err,
+            timeout=timeout,
+            check=False,
+            env=env,
+            cwd=cwd,
+        )
+        out.seek(0)
+        err.seek(0)
+        return subprocess.CompletedProcess(
+            command,
+            result.returncode,
+            out.read().decode("utf-8", errors="replace"),
+            err.read().decode("utf-8", errors="replace"),
+        )
+
+
 def load_env(path: Path) -> dict[str, str]:
     # Use the same dotenv parser as Just, including quoted tokens and comments.
     from dotenv import dotenv_values
@@ -727,6 +763,9 @@ class Demo:
             image=self.postgres_image,
             active=True,
             control_url=f"http://127.0.0.1:{self.control_server.server_port}/stop/{token}",
+            # The control port answers only while this process lives, so the PID is safe to use
+            # as an escalation target while that port still answers.
+            pid=os.getpid(),
             env_file=str(self.env_file),
         )
         save_manifest(self.manifest_file, data)
@@ -1370,6 +1409,7 @@ def cleanup_preview(
     force: bool = False,
     drop_login: bool = False,
     env_file: Path | None = None,
+    manifest_file: Path | None = None,
 ) -> list[str]:
     lines = []
     force = force or drop_login
@@ -1397,18 +1437,24 @@ def cleanup_preview(
             lines.append(
                 f"garden logout at {login['portal']} (remote revoke, then local keyring removal)"
             )
-    if data["logins"] and not force:
-        lines.append(
-            "If the portal does not confirm sign-out, keep the launcher, Garden home and "
-            "just/uv for a later --drop-login"
-        )
     if not data["logins"]:
         lines.append("No Garden CLI login is recorded")
     project_images = {project.get("image") for project in projects if project.get("image")}
     for image in data["docker_images"]:
         if image.get("reference") in project_images:
             lines.append(f"Remove Garden image {image['reference']} ({image['id']}) if unchanged")
+    # The plan assumes sign-out succeeds, which removes the login and so every recovery keep.
+    # Only an unconfirmed sign-out keeps the recovery files, and those are listed separately.
     _scoped, plan = cleanup_artifacts(data, root)
+    if data["logins"] and not force:
+        _kept, fallback = cleanup_artifacts(data, root, keep=tuple(login_recovery_paths(data)))
+        kept_paths = {_path_text(item["path"]) for item in fallback if item["action"] == "remove"}
+        for item in plan:
+            if item["action"] == "remove" and _path_text(item["path"]) not in kept_paths:
+                lines.append(
+                    f"If the portal does not confirm sign-out, keep for a later "
+                    f"--drop-login: {item['path']}"
+                )
     for item in plan:
         if item["action"] == "remove":
             if item["kind"] == "directory":
@@ -1421,6 +1467,10 @@ def cleanup_preview(
             lines.append(f"Preserve {item['path']}: {item['reason']}")
     for entry in data["path_entries"]:
         lines.append(f"Remove Garden-added user PATH entry: {entry['value']}")
+    if manifest_file:
+        lines.append(
+            f"Move the Garden install record {manifest_file} to Trash once nothing remains"
+        )
     if env_file and env_file.exists():
         lines.append(
             f"Move {env_file} to Trash after separate confirmation"
@@ -1447,6 +1497,33 @@ def cleanup_has_work(data: dict, mode: str, root: Path = ROOT) -> bool:
     )
 
 
+def control_refused(error: Exception) -> bool:
+    return isinstance(getattr(error, "reason", error), ConnectionRefusedError)
+
+
+def control_answers(url: str) -> bool:
+    """True while something still serves the runner's control URL. Refused means it is gone."""
+    try:
+        with urllib.request.urlopen(
+            urllib.request.Request(url, data=b"", method="POST"), timeout=0.5
+        ):
+            return True
+    except urllib.error.HTTPError:
+        return True
+    except OSError as error:
+        return not control_refused(error)
+
+
+def wait_until(condition, seconds: float) -> bool:
+    deadline = time.monotonic() + seconds
+    while True:
+        if condition():
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.5)
+
+
 class DemoCleanup:
     def __init__(self, args, mode: str):
         self.args = args
@@ -1469,7 +1546,13 @@ class DemoCleanup:
         return input("Proceed with cleanup? [y/N] ").strip().lower() in {"y", "yes"}
 
     def stop_runner(self, project: dict):
+        """Stop a recorded demo runner, escalating to its process when it stays up too long.
+
+        Returns True when the runner is gone or was never running, and False when it still answers
+        after the process was terminated. Its Compose project is torn down either way.
+        """
         url = project.get("control_url")
+        name = project["name"]
         if not project.get("active") or not url:
             return True
         try:
@@ -1480,33 +1563,43 @@ class DemoCleanup:
         except (OSError, urllib.error.URLError, RuntimeError) as error:
             # Nothing listens on the control port once the demo was killed by hand, so the
             # runner is already gone and only Compose may still need tearing down.
-            reason = getattr(error, "reason", error)
-            if isinstance(reason, ConnectionRefusedError):
-                print(
-                    f"The demo runner for {project['name']} is already stopped.",
-                    file=sys.stderr,
-                )
+            if control_refused(error):
+                print(f"The demo runner for {name} is already stopped.", file=sys.stderr)
                 return True
+            print(f"Warning: the demo runner for {name} did not respond.", file=sys.stderr)
+            return False
+        if wait_until(lambda: not control_answers(url), RUNNER_STOP_TIMEOUT):
+            return True
+        pid = project.get("pid")
+        if not pid:
             print(
-                f"Warning: the demo runner for {project['name']} did not respond.",
+                f"Warning: the demo runner for {name} did not stop in {RUNNER_STOP_TIMEOUT}s, "
+                "and its process is not recorded, so it was left running.",
                 file=sys.stderr,
             )
             return False
-        for _ in range(100):
-            try:
-                request = urllib.request.Request(url, data=b"", method="POST")
-                with urllib.request.urlopen(request, timeout=0.5):
-                    pass
-            except OSError:
-                return True
-            time.sleep(0.2)
+        print(
+            f"The demo runner for {name} did not stop in {RUNNER_STOP_TIMEOUT}s; "
+            "ending its process.",
+            file=sys.stderr,
+        )
+        if self.kill_runner(int(pid), url):
+            return True
+        print(f"Warning: the demo runner for {name} is still running.", file=sys.stderr)
+        return False
+
+    def kill_runner(self, pid: int, url: str) -> bool:
+        """End a runner that ignored the graceful stop. Windows kills its whole process tree."""
+        if os.name == "nt":
+            with contextlib.suppress(OSError, subprocess.SubprocessError):
+                run_bounded(["taskkill", "/PID", str(pid), "/T", "/F"], timeout=DOCKER_TIMEOUT)
         else:
-            print(
-                f"Warning: the demo runner for {project['name']} did not stop in time.",
-                file=sys.stderr,
-            )
-            return False
-        return True
+            for sig in (signal.SIGTERM, signal.SIGKILL):
+                with contextlib.suppress(ProcessLookupError, PermissionError):
+                    os.kill(pid, sig)
+                if wait_until(lambda: not control_answers(url), RUNNER_KILL_TIMEOUT / 2):
+                    return True
+        return wait_until(lambda: not control_answers(url), RUNNER_KILL_TIMEOUT / 2)
 
     def compose_down(self, project: dict) -> bool:
         compose = Path(project.get("root", ROOT)) / "dev" / "compose.yaml"
@@ -1521,27 +1614,32 @@ class DemoCleanup:
         env["COMPOSE_PROJECT_NAME"] = project["name"]
         if os.name == "nt":
             env["WSLENV"] = wsl_env(env.get("WSLENV", ""), COMPOSE_ENV_KEYS)
-        result = subprocess.run(
-            command_for(
-                [
-                    "docker",
-                    "compose",
-                    "--project-name",
-                    project["name"],
-                    "-f",
-                    "dev/compose.yaml",
-                    "down",
-                    "--volumes",
-                    "--remove-orphans",
-                ],
-                path=env.get("PATH"),
-            ),
-            cwd=compose.parent.parent,
-            env=env,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        try:
+            result = run_bounded(
+                command_for(
+                    [
+                        "docker",
+                        "compose",
+                        "--project-name",
+                        project["name"],
+                        "-f",
+                        "dev/compose.yaml",
+                        "down",
+                        "--volumes",
+                        "--remove-orphans",
+                    ],
+                    path=env.get("PATH"),
+                ),
+                timeout=COMPOSE_TIMEOUT,
+                cwd=compose.parent.parent,
+                env=env,
+            )
+        except (OSError, subprocess.SubprocessError) as error:
+            print(
+                f"Warning: Compose cleanup for {project['name']} did not finish: {error}",
+                file=sys.stderr,
+            )
+            return False
         if result.returncode:
             print(
                 f"Warning: Compose cleanup for {project['name']} failed: "
@@ -1594,13 +1692,10 @@ class DemoCleanup:
             if force:
                 cmd.append("--force")
             try:
-                result = subprocess.run(
+                result = run_bounded(
                     command_for(cmd, path=env.get("PATH")),
                     env=env,
-                    capture_output=True,
-                    text=True,
-                    timeout=30,
-                    check=False,
+                    timeout=LOGOUT_TIMEOUT,
                 )
             except (OSError, subprocess.SubprocessError) as error:
                 print(
@@ -1658,9 +1753,15 @@ class DemoCleanup:
         ]
         if not selected:
             return
-        available = subprocess.run(
-            command_for(["docker", "info"]), capture_output=True, text=True, check=False
-        )
+
+        def docker(args, timeout=IMAGE_TIMEOUT):
+            # A hung or missing Docker reports a failed command rather than blocking cleanup.
+            try:
+                return run_bounded(command_for(args), timeout=timeout)
+            except (OSError, subprocess.SubprocessError) as error:
+                return subprocess.CompletedProcess(args, 1, "", str(error))
+
+        available = docker(["docker", "info"], timeout=DOCKER_TIMEOUT)
         if available.returncode:
             print(
                 f"Warning: Docker is unavailable; recorded demo images were kept: "
@@ -1676,20 +1777,10 @@ class DemoCleanup:
             if reference not in references:
                 retained.append(image)
                 continue
-            inspect = subprocess.run(
-                command_for(["docker", "image", "inspect", "--format", "{{.Id}}", reference]),
-                capture_output=True,
-                text=True,
-                check=False,
-            )
+            inspect = docker(["docker", "image", "inspect", "--format", "{{.Id}}", reference])
             current_id = inspect.stdout.strip() if inspect.returncode == 0 else ""
             if current_id == image_id:
-                result = subprocess.run(
-                    command_for(["docker", "image", "rm", reference]),
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
+                result = docker(["docker", "image", "rm", reference])
                 if result.returncode:
                     print(
                         f"Warning: could not remove {reference}: {result.stderr.strip()}",
@@ -1698,20 +1789,8 @@ class DemoCleanup:
                     retained.append(image)
                     self.failed = True
                 continue
-            inspect_id = subprocess.run(
-                command_for(
-                    [
-                        "docker",
-                        "image",
-                        "inspect",
-                        "--format",
-                        "{{json .RepoTags}}",
-                        image_id,
-                    ]
-                ),
-                capture_output=True,
-                text=True,
-                check=False,
+            inspect_id = docker(
+                ["docker", "image", "inspect", "--format", "{{json .RepoTags}}", image_id]
             )
             if inspect_id.returncode:
                 continue
@@ -1720,12 +1799,7 @@ class DemoCleanup:
             except ValueError:
                 tags = ["unknown"]
             if not tags:
-                result = subprocess.run(
-                    command_for(["docker", "image", "rm", image_id]),
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
+                result = docker(["docker", "image", "rm", image_id])
                 if result.returncode:
                     print(
                         f"Warning: could not remove Garden image {image_id}: "
@@ -1778,6 +1852,25 @@ class DemoCleanup:
             else:
                 winreg.SetValueEx(key, "Path", 0, value_type, "")
 
+    def save(self):
+        """Persist progress after each step, so an interrupted run can be finished by rerunning.
+
+        When nothing remains, the manifest itself is moved to Trash.
+        """
+        nothing_left = not (
+            self.data["artifacts"]
+            or self.data["path_entries"]
+            or self.data["logins"]
+            or self.data["demo_projects"]
+            or self.data["docker_images"]
+        )
+        if nothing_left:
+            with contextlib.suppress(OSError):
+                trash_path(self.manifest_file)
+                self.manifest_file.parent.rmdir()
+            return
+        save_manifest(self.manifest_file, self.data)
+
     def run(self):
         force = bool(getattr(self.args, "force", False) or getattr(self.args, "drop_login", False))
         preview = cleanup_preview(
@@ -1786,81 +1879,87 @@ class DemoCleanup:
             remove_env=self.args.remove_env,
             force=force,
             env_file=Path(self.args.env_file).resolve(),
+            manifest_file=self.manifest_file,
         )
         if not self.confirm(preview):
             print("Cleanup cancelled.", flush=True)
             return 0
         if self.args.dry_run:
             return 0
+        try:
+            self.apply()
+        finally:
+            self.save()
+        return 1 if self.failed else 0
 
+    def apply(self):
         if self.mode == "uninstall":
             self.logout()
+            self.save()
         stopped_projects = []
         for project in self.projects:
             if not self.stop_runner(project):
-                # The runner may already be gone; still tear down whatever it left in Compose.
+                # The runner is still up; still tear down whatever it left in Compose.
                 self.failed = True
             if self.compose_down(project):
                 project["active"] = False
                 project.pop("control_url", None)
+                project.pop("pid", None)
                 stopped_projects.append(project)
             else:
                 self.failed = True
-        if self.mode == "uninstall":
-            project_images = {
-                project.get("image") for project in stopped_projects if project.get("image")
-            }
-            self.remove_images(project_images)
-            # An unconfirmed login still needs its launcher, Garden home and the just/uv that
-            # run this command, so those files and their PATH folders stay until --drop-login.
-            needed = login_recovery_paths(self.data)
-            self.restore_user_path(login_recovery_dirs(self.data))
-            scoped, plan = cleanup_artifacts(self.data, keep=tuple(needed))
-            updated, warnings = apply_artifact_plan(scoped, plan)
-            for warning in warnings:
-                print(f"Warning: {warning}", file=sys.stderr)
-            if warnings:
-                self.failed = True
-            self.data["artifacts"] = updated["artifacts"] + [
-                entry for entry in self.data["artifacts"] if entry not in scoped["artifacts"]
-            ]
-            if self.data["logins"]:
-                for login in self.data["logins"]:
-                    launcher = Path(login["launcher"])
-                    if launcher.exists():
-                        print(
-                            f"Kept garden at {launcher}, its Garden home and the login record "
-                            f"for {login['portal']}, because the portal did not confirm sign-out.",
-                            flush=True,
-                        )
-                print("To finish, run: just demo-uninstall --drop-login", flush=True)
-            self.data["demo_projects"] = [
-                project for project in self.data["demo_projects"] if project not in stopped_projects
-            ]
-            env_file = Path(self.args.env_file).resolve()
-            if env_file.exists() and (
-                self.args.remove_env
-                or (
-                    sys.stdin.isatty()
-                    and input(f"Also move {env_file} to Trash? [y/N] ").strip().lower()
-                    in {"y", "yes"}
-                )
-            ):
+            self.save()
+        if self.mode != "uninstall":
+            return
+        project_images = {
+            project.get("image") for project in stopped_projects if project.get("image")
+        }
+        self.remove_images(project_images)
+        self.save()
+        # An unconfirmed login still needs its launcher, Garden home and the just/uv that run
+        # this command, so those files and their PATH folders stay until --drop-login.
+        needed = login_recovery_paths(self.data)
+        self.restore_user_path(login_recovery_dirs(self.data))
+        self.save()
+        scoped, plan = cleanup_artifacts(self.data, keep=tuple(needed))
+        updated, warnings = apply_artifact_plan(scoped, plan)
+        for warning in warnings:
+            print(f"Warning: {warning}", file=sys.stderr)
+        if warnings:
+            self.failed = True
+        self.data["artifacts"] = updated["artifacts"] + [
+            entry for entry in self.data["artifacts"] if entry not in scoped["artifacts"]
+        ]
+        self.save()
+        if self.data["logins"]:
+            for login in self.data["logins"]:
+                launcher = Path(login["launcher"])
+                if launcher.exists():
+                    print(
+                        f"Kept garden at {launcher}, its Garden home and the login record "
+                        f"for {login['portal']}, because the portal did not confirm sign-out.",
+                        flush=True,
+                    )
+            print("To finish, run: just demo-uninstall --drop-login", flush=True)
+        self.data["demo_projects"] = [
+            project for project in self.data["demo_projects"] if project not in stopped_projects
+        ]
+        self.save()
+        self.ask_about_env_file()
+
+    def ask_about_env_file(self):
+        # Only --remove-env or an interactive answer moves .env. --yes confirms the listed
+        # cleanup and never prompts, so an unattended run cannot wait here.
+        env_file = Path(self.args.env_file).resolve()
+        if not env_file.exists():
+            return
+        if self.args.remove_env:
+            trash_path(env_file)
+        elif sys.stdin.isatty() and not self.args.yes:
+            if input(f"Also move {env_file} to Trash? [y/N] ").strip().lower() in {"y", "yes"}:
                 trash_path(env_file)
-        save_manifest(self.manifest_file, self.data)
-        if (
-            not self.data["artifacts"]
-            and not self.data["path_entries"]
-            and not self.data["logins"]
-            and not self.data["demo_projects"]
-            and not self.data["docker_images"]
-        ):
-            try:
-                trash_path(self.manifest_file)
-                self.manifest_file.parent.rmdir()
-            except (OSError, FileNotFoundError):
-                pass
-        return 1 if self.failed else 0
+        else:
+            print(f"Kept {env_file}; pass --remove-env to move it to Trash.", flush=True)
 
 
 def main():

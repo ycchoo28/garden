@@ -532,7 +532,11 @@ function Invoke-SignIn([string]$python, [string]$pyz) {
             try { Start-Process $link } catch { }
         }
     }
-    $login.WaitForExit()
+    # The wait ends when a person approves the link. A login nobody approves is ended after ten minutes.
+    if (-not $login.WaitForExit(600000)) {
+        $login.Kill()
+        throw 'the sign-in was not approved within ten minutes'
+    }
     if ($login.ExitCode -ne 0) { throw 'garden login exited with an error' }
 }
 
