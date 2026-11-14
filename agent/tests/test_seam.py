@@ -272,7 +272,9 @@ def test_auth_logout_warning_on_remote_error(
     prev, warning = logout(settings=settings, revoke_remote=failing_revoke)
     assert prev is not None
     assert warning == "Portal unreachable"
-    assert load_session(settings) is None
+    active = load_session(settings)
+    assert active is not None
+    assert active.token == "token-xyz"
 
 
 def test_engine_connect_and_call_by_name(portal: FakePortal, tmp_path: Path) -> None:
@@ -354,3 +356,79 @@ def test_dsh_configure_and_run(portal: FakePortal, tmp_path: Path) -> None:
     assert "--headless" in commands_run[0]
     assert envs_received[0]["GARDEN_AGENT_MODEL_TOKEN"] == GOOD_TOKEN
     assert envs_received[0]["DSH_HOME"] == str(dsh_home)
+
+
+def test_client_converts_timeout_and_http_exception_to_garden_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import http.client
+    import urllib.request
+
+    from garden.engine import PortalClient
+    from garden.shared.errors import GardenError
+
+    client = PortalClient("http://127.0.0.1:55000")
+
+    def raise_timeout(*_args: object, **_kwargs: object) -> None:
+        raise TimeoutError("connection timed out")
+
+    monkeypatch.setattr(urllib.request, "urlopen", raise_timeout)
+    with pytest.raises(GardenError) as exc_info:
+        client.request("GET", "/test")
+    assert exc_info.value.title == "The portal cannot be reached"
+
+    def raise_http_exception(*_args: object, **_kwargs: object) -> None:
+        raise http.client.RemoteDisconnected("remote end closed connection")
+
+    monkeypatch.setattr(urllib.request, "urlopen", raise_http_exception)
+    with pytest.raises(GardenError) as exc_info:
+        client.request("GET", "/test")
+    assert exc_info.value.title == "The portal cannot be reached"
+
+    def raise_conn_reset(*_args: object, **_kwargs: object) -> None:
+        raise ConnectionResetError("Connection reset by peer")
+
+    monkeypatch.setattr(urllib.request, "urlopen", raise_conn_reset)
+    with pytest.raises(GardenError) as exc_info:
+        client.request("GET", "/test")
+    assert exc_info.value.title == "The portal cannot be reached"
+
+
+def test_valid_client_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    from garden.engine.client import PortalClient, parse_client_timeout
+
+    monkeypatch.setenv("GARDEN_CLIENT_TIMEOUT", "15.5")
+    assert parse_client_timeout() == 15.5
+    client = PortalClient("http://127.0.0.1:55000")
+    assert client.timeout == 15.5
+
+
+def test_invalid_client_timeout_falls_back_to_default_with_warning(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from garden.engine.client import (
+        DEFAULT_TIMEOUT_SECONDS,
+        PortalClient,
+        parse_client_timeout,
+        reset_client_timeout_warning,
+    )
+
+    reset_client_timeout_warning()
+    monkeypatch.setenv("GARDEN_CLIENT_TIMEOUT", "invalid_value")
+    timeout = parse_client_timeout()
+    assert timeout == DEFAULT_TIMEOUT_SECONDS
+    err = capsys.readouterr().err
+    assert "warning: invalid GARDEN_CLIENT_TIMEOUT value 'invalid_value'" in err
+
+    # Subsequent calls with invalid values warn only once
+    monkeypatch.setenv("GARDEN_CLIENT_TIMEOUT", "nan")
+    assert parse_client_timeout() == DEFAULT_TIMEOUT_SECONDS
+    assert capsys.readouterr().err == ""
+
+    # Negative / zero / inf also reject and return default
+    for invalid in ("-10", "0", "inf"):
+        monkeypatch.setenv("GARDEN_CLIENT_TIMEOUT", invalid)
+        assert parse_client_timeout() == DEFAULT_TIMEOUT_SECONDS
+
+    client = PortalClient("http://127.0.0.1:55000")
+    assert client.timeout == DEFAULT_TIMEOUT_SECONDS

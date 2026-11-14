@@ -83,7 +83,7 @@ Inside `agent/`, `uv run pytest tests` runs the tests on their own.
 - Sign-in is the last step.
   If it fails, the CLI, dsh and the skills stay installed, and the message names `garden login` as the one command to retry.
 - Node.js runs dsh.
-  Without it the installer still finishes, and it says so.
+  Both installers fetch a checksum-verified Node 26.13.0 into Garden's home when Node is missing or older than version 24.
 
 To install from a portal, the one-liners set the portal's address first, as the Get started page shows.
 

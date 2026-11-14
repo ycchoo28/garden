@@ -1,23 +1,33 @@
 # Local commands for Garden. Run `just` with no arguments to list them.
 set dotenv-load := true
+set positional-arguments := true
 
 # Fixed local ports, all on 127.0.0.1. Postgres and the fake sign-in provider are in dev/compose.yaml.
 api_url := "http://127.0.0.1:55000"
+demo_just_dotenv_path := env_var_or_default("GARDEN_DEMO_JUST_DOTENV_PATH", ".env")
 web_url := "http://127.0.0.1:55173"
+# Windows runs recipe lines through scripts/just_shell.py, which uses Git for Windows bash and never
+# the WSL bash.exe on PATH. Linux and macOS ignore this setting. Older just versions read it too.
+set windows-shell := ["uv", "run", "--no-project", "--python", "3.12", "python", "scripts/just_shell.py", "-cu"]
 
 default:
     @just --list
 
 # Create .env from the example if it is missing, then install backend, agent and frontend dependencies.
+[unix]
 setup:
     #!/usr/bin/env bash
     set -euo pipefail
+    root="$PWD"
+    uv run --no-project --python 3.12 python scripts/demo.py --record-checkout-baseline
+    trap 'uv run --no-project --python 3.12 python "$root/scripts/demo.py" --record-checkout-dependencies' EXIT
     [ -f .env ] || cp .env.example .env
     cd backend && uv sync
     cd ../agent && uv sync
     cd ../frontend && bun install --frozen-lockfile
 
 # Start Postgres and the fake sign-in provider in Docker Compose and wait until they are healthy.
+[unix]
 up:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -29,6 +39,7 @@ up:
     GARDEN_DEV_POSTGRES_IMAGE=garden-postgres:local docker compose -f dev/compose.yaml up -d --wait
 
 # Download the pinned bge-m3 model into var/models and check its SHA-256. A file that does not match is moved aside, never used.
+[unix]
 models:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -50,10 +61,12 @@ models:
     mv -f "$partial" "$target"
 
 # Start the local embedding service (llama.cpp serving bge-m3) in Compose. Not part of `just up`.
+[unix]
 embedding-up: models
     docker compose -f dev/compose.yaml --profile embedding up -d --wait embedding
 
 # Apply Alembic migrations, and create the job queue tables if they are missing.
+[unix]
 migrate: up
     #!/usr/bin/env bash
     set -euo pipefail
@@ -62,10 +75,12 @@ migrate: up
     uv run python -m app.migrate
 
 # Load the fake organisation and the seeded personas. Idempotent. Migrates first.
+[unix]
 seed: migrate
     cd backend && uv run python -m app.seed
 
 # Run the API with reload, the background worker and the Vite dev server until Ctrl+C. Seeds first.
+[unix]
 dev: seed
     #!/usr/bin/env bash
     set -euo pipefail
@@ -75,34 +90,43 @@ dev: seed
     (cd frontend && bun run dev --strictPort --port 55173) &
     wait
 
-# Start the demo: migrate, load the Fernhill Studio demo data, then run the API, the worker and the web app until Ctrl+C.
-# Embeddings come from the real service when it answers, and from the fake one otherwise (scripts/demo-embeddings.sh).
-# GARDEN_DEMO_API_PORT and GARDEN_DEMO_WEB_PORT move the ports, for example to 56018 and 56118.
-demo: migrate
+# Full agent demo: configure the model, publish/install garden and dsh, sign in, and run the portal.
+[unix]
+demo *args:
     #!/usr/bin/env bash
     set -euo pipefail
-    trap 'kill 0' EXIT
-    api_default="{{api_url}}"
-    web_default="{{web_url}}"
-    api_port="${GARDEN_DEMO_API_PORT:-${api_default##*:}}"
-    web_port="${GARDEN_DEMO_WEB_PORT:-${web_default##*:}}"
-    for port in "$api_port" "$web_port"; do
-        if (echo > "/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
-            echo "Port $port is already in use. Stop that process, or set GARDEN_DEMO_API_PORT or GARDEN_DEMO_WEB_PORT." >&2
-            exit 1
-        fi
-    done
-    source scripts/demo-embeddings.sh
-    garden_select_embeddings
-    export GARDEN_PUBLIC_URL="http://localhost:$web_port"
-    (cd backend && uv run python -m app.demo_seed)
-    echo "Open http://localhost:$web_port and sign in as a seeded person, for example priya.nair@fernhill.example."
-    (cd backend && uv run uvicorn app.main:app --host 127.0.0.1 --port "$api_port") &
-    (cd backend && uv run python -m app.worker) &
-    (cd frontend && GARDEN_E2E_API_URL="http://127.0.0.1:$api_port" bun run dev --strictPort --port "$web_port") &
-    wait
+    GARDEN_DEMO_JUST_DOTENV_PATH="{{demo_just_dotenv_path}}" uv run --no-project --python 3.12 python scripts/demo.py --check-docker "$@"
+    GARDEN_DEMO_JUST_DOTENV_PATH="{{demo_just_dotenv_path}}" uv run --project backend python scripts/demo.py "$@"
+
+# Web-only demo: initialize .env/dependencies, migrate, seed and run the portal without an agent install.
+[unix]
+demo-web *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    GARDEN_DEMO_JUST_DOTENV_PATH="{{demo_just_dotenv_path}}" uv run --no-project --python 3.12 python scripts/demo.py --check-docker --web-only "$@"
+    GARDEN_DEMO_JUST_DOTENV_PATH="{{demo_just_dotenv_path}}" uv run --project backend python scripts/demo.py --web-only "$@"
+
+# Stop this clone's demo processes and remove only its Compose containers, networks and volumes.
+[unix]
+demo-clean *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    uv run --no-project --python 3.12 python scripts/demo.py --clean "$@"
+
+# Revoke the Garden CLI login, then remove this clone's recorded Garden installation and demo artifacts.
+[unix]
+demo-uninstall *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    uv run --no-project --python 3.12 python scripts/demo.py --uninstall "$@"
+
+# Exercise both demo commands with fresh test databases, ports, environment files and homes.
+[unix]
+demo-e2e: up
+    GARDEN_DEMO_E2E=1 uv run --project backend pytest scripts/tests/test_demo_e2e.py -q
 
 # Drop and recreate the dev database named in .env, then migrate and load the demo data again. Asks for confirmation first.
+[unix]
 reset: up
     #!/usr/bin/env bash
     set -euo pipefail
@@ -126,9 +150,11 @@ reset: up
 quick: backend-check agent-check frontend-check architecture-check api-check secrets-check docs-check deny-check
 
 # Run every local check, quick ones first: then tests against Postgres, browser tests and dependency audits.
+[unix]
 check: quick test e2e backend-audit frontend-audit
 
 # Install the pinned lefthook and register the commit hooks in .git/hooks. Run once after cloning.
+[unix]
 hooks:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -184,6 +210,7 @@ agent-dsh-bundle:
 
 # Copy the installer's files into the folder the portal serves: garden.pyz, the dsh bundles, the dsh config template and the installers.
 # The dsh bundles take minutes to build, so existing ones are reused; run agent-dsh-bundle to rebuild them.
+[unix]
 agent-publish: agent-build
     #!/usr/bin/env bash
     set -euo pipefail
@@ -201,17 +228,20 @@ agent-publish: agent-build
 # the API on 56000 and the web app on 56173 (`just demo` uses 55000 and 55173), a fake model upstream, the installer
 # run as `curl ... | sh` with a fresh HOME, and every login and critical action approved in a headless browser.
 # The dev database is never used. Writes agent/dist/e2e (the transcript, logs and screenshots).
+[unix]
 agent-e2e: up
     cd agent && uv run python scripts/e2e.py
 
 # The same stack as agent-e2e, held up for a hand test from Windows. It prints the installer one-liner and the steps for
 # PowerShell, and it stays up until Ctrl+C, which stops its processes and drops its test database. Writes agent/dist/e2e-serve.
+[unix]
 agent-e2e-serve: up
     cd agent && uv run python scripts/e2e.py --serve
 
 # Backend tests against the real Postgres in Compose, in a separate *_test database.
 # CI runs this against the Postgres that `just up` starts in the same job.
 # Set GARDEN_TEST_DB to use another test database (its name must end in _test), for example when worktrees run tests in parallel.
+[unix]
 test:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -234,6 +264,7 @@ frontend-check:
 
 # Browser tests: a person signs in through the fake provider and sees the shell. Needs Postgres and the fake provider (see `just up`).
 # Playwright starts the API and Vite itself. Chromium must be installed (`bunx playwright install chromium`).
+[unix]
 e2e: up
     #!/usr/bin/env bash
     set -euo pipefail
@@ -268,8 +299,8 @@ api-check:
 
 # Static architecture checks need no database.
 architecture-check:
-    uv run --project backend ruff check --config backend/pyproject.toml scripts/check_*architecture.py scripts/check_reporting_contracts.py scripts/check_api.py scripts/check_authoring.py scripts/tests
-    uv run --project backend ruff format --check --config backend/pyproject.toml scripts/check_*architecture.py scripts/check_reporting_contracts.py scripts/check_api.py scripts/check_authoring.py scripts/tests
+    uv run --project backend ruff check --config backend/pyproject.toml scripts/check_*architecture.py scripts/check_reporting_contracts.py scripts/check_api.py scripts/check_authoring.py scripts/demo.py scripts/bootstrap.py scripts/tests
+    uv run --project backend ruff format --check --config backend/pyproject.toml scripts/check_*architecture.py scripts/check_reporting_contracts.py scripts/check_api.py scripts/check_authoring.py scripts/demo.py scripts/bootstrap.py scripts/tests
     uv run --project backend python scripts/check_shared_architecture.py
     uv run --project backend python scripts/check_frontend_architecture.py
     uv run --project backend python scripts/check_reporting_contracts.py
@@ -293,6 +324,7 @@ deny-check:
     uv run --no-project python scripts/deny_list_check.py
 
 # Audit the locked Python dependencies with pip-audit. Accepted advisories come from security/allowlist.txt.
+[unix]
 backend-audit:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -308,6 +340,7 @@ backend-audit:
     uv run pip-audit --requirement "$requirements" --progress-spinner off ${ignores[@]+"${ignores[@]}"}
 
 # Audit the locked Bun dependencies and fail on high and critical advisories. Accepted advisories come from security/allowlist.txt.
+[unix]
 frontend-audit:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -321,3 +354,25 @@ frontend-audit:
 # Scaffold a new business module: backend package, schema migration, starter tests and frontend folder.
 new-module name:
     uv run --project backend python scripts/new_module.py "{{name}}"
+
+# Windows versions of the demo recipes. Recipes marked [unix] above are not on Windows, so only
+# these run there. Lines run one at a time through the shell set above.
+[windows]
+setup:
+    uv run --no-project --python 3.12 python scripts/demo.py --record-checkout-baseline && { [ -f .env ] || cp .env.example .env; } && (cd backend && uv sync) && (cd agent && uv sync) && (cd frontend && bun install --frozen-lockfile); status=$?; uv run --no-project --python 3.12 python scripts/demo.py --record-checkout-dependencies; exit $status
+
+[windows]
+demo *args:
+    GARDEN_DEMO_JUST_DOTENV_PATH="{{demo_just_dotenv_path}}" uv run --no-project --python 3.12 python scripts/demo.py --check-docker "$@" && GARDEN_DEMO_JUST_DOTENV_PATH="{{demo_just_dotenv_path}}" uv run --project backend python scripts/demo.py "$@"
+
+[windows]
+demo-web *args:
+    GARDEN_DEMO_JUST_DOTENV_PATH="{{demo_just_dotenv_path}}" uv run --no-project --python 3.12 python scripts/demo.py --check-docker --web-only "$@" && GARDEN_DEMO_JUST_DOTENV_PATH="{{demo_just_dotenv_path}}" uv run --project backend python scripts/demo.py --web-only "$@"
+
+[windows]
+demo-clean *args:
+    uv run --no-project --python 3.12 python scripts/demo.py --clean "$@"
+
+[windows]
+demo-uninstall *args:
+    uv run --no-project --python 3.12 python scripts/demo.py --uninstall "$@"
