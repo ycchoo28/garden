@@ -657,9 +657,30 @@
             "title": "Device",
             "type": "string"
           },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
+            "type": "string"
+          },
+          "source": {
+            "default": "cli",
+            "enum": [
+              "cli",
+              "web"
+            ],
+            "title": "Source",
             "type": "string"
           },
           "token": {
@@ -730,6 +751,18 @@
             "title": "Device",
             "type": "string"
           },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -758,6 +791,14 @@
               }
             ],
             "title": "Revoked At"
+          },
+          "source": {
+            "enum": [
+              "cli",
+              "web"
+            ],
+            "title": "Source",
+            "type": "string"
           }
         },
         "required": [
@@ -765,7 +806,9 @@
           "device",
           "created_at",
           "last_used_at",
-          "revoked_at"
+          "revoked_at",
+          "expires_at",
+          "source"
         ],
         "title": "CliLoginOut",
         "type": "object"
@@ -2091,6 +2134,38 @@
         "title": "VoidLineIn",
         "type": "object"
       },
+      "WebCliLoginIn": {
+        "properties": {
+          "device": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Device",
+            "type": "string"
+          },
+          "expires_in_days": {
+            "anyOf": [
+              {
+                "enum": [
+                  30,
+                  90,
+                  365
+                ],
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 90,
+            "title": "Expires In Days"
+          }
+        },
+        "required": [
+          "device"
+        ],
+        "title": "WebCliLoginIn",
+        "type": "object"
+      },
       "fastapi___compat__v2__Body_files__file__upload": {
         "properties": {
           "file": {
@@ -2726,6 +2801,59 @@
           "tool": true
         },
         "x-permission": "agent.logins.view"
+      },
+      "post": {
+        "description": "Create a CLI login for a hosted agent. Its token is shown once.",
+        "operationId": "agent.my_login.create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebCliLoginIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CliLoginCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as a problem document"
+          }
+        },
+        "summary": "Create Browser Cli Login",
+        "x-agent": {
+          "confirm": false,
+          "save": true,
+          "tool": false
+        },
+        "x-permission": "agent.logins.create"
       }
     },
     "/api/agent/my-logins/{login_id}/sign-out": {

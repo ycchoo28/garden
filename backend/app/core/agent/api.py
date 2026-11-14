@@ -9,6 +9,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response
 from fastapi.responses import FileResponse, RedirectResponse
+from garden.mcp import HostedMCPSettings, create_streamable_http_app
+from starlette.routing import Match, Mount
+from starlette.types import Scope
 
 from app.config import Settings, get_settings
 from app.core.agent.downloads import download_path, offered_files
@@ -21,8 +24,10 @@ from app.core.agent.schemas import (
     DecisionIn,
     ManifestArtifact,
     ManifestOut,
+    WebCliLoginIn,
 )
 from app.core.agent.service import ConfirmationService, get_confirmation_service
+from app.core.audit import AuditService, get_audit_service
 from app.core.users import CurrentPerson, UserService, get_user_service, require
 from app.shared.errors import Forbidden
 from app.shared.operations import op
@@ -31,6 +36,37 @@ from app.shared.request_login import current_request_login
 router = APIRouter()
 # The model gateway's routes are declared in their own file, and this router serves them too.
 router.include_router(model_router)
+
+
+def _hosted_mcp_settings() -> HostedMCPSettings:
+    settings = get_settings()
+    return HostedMCPSettings(
+        enabled=settings.agent_mcp_enabled,
+        api_base_url=settings.agent_mcp_api_base_url or None,
+        allowed_origins=settings.agent_mcp_origins,
+        files_max_bytes=settings.files_max_bytes,
+        pending_per_login=settings.agent_mcp_pending_per_login,
+        pending_total=settings.agent_mcp_pending_total,
+    )
+
+
+# The self-contained ASGI app handles MCP. This module only mounts it and provides settings.
+class _ExactMCPMount(Mount):
+    """Mount the ASGI app at the exact operation URL without Starlette's slash redirect."""
+
+    def matches(self, scope: Scope) -> tuple[Match, Scope]:
+        path = scope.get("path", "")
+        root_path = scope.get("root_path", "")
+        route_path = path[len(root_path) :] if root_path and path.startswith(root_path) else path
+        if scope["type"] == "http" and route_path == self.path:
+            matching_scope = {**scope, "path": f"{path}/"}
+            return super().matches(matching_scope)
+        return super().matches(scope)
+
+
+router.routes.append(
+    _ExactMCPMount("/api/agent/mcp", create_streamable_http_app(_hosted_mcp_settings))
+)
 
 
 # The installer's manifest and files need no sign-in: they hold no secrets, and the installer
@@ -124,7 +160,53 @@ async def create_cli_login(
         nonce=body.nonce,
         device=body.device,
     )
-    return CliLoginCreated(id=row.id, device=row.device, created_at=row.created_at, token=token)
+    return CliLoginCreated(
+        id=row.id,
+        device=row.device,
+        created_at=row.created_at,
+        expires_at=row.expires_at,
+        source=row.source,
+        token=token,
+    )
+
+
+@router.post(
+    "/api/agent/my-logins",
+    response_model=CliLoginCreated,
+    status_code=201,
+    **op(
+        "agent.my_login.create",
+        "Create a CLI login for a hosted agent. Its token is shown once.",
+        tool=False,
+        confirm=False,
+    ),
+)
+async def create_browser_cli_login(
+    body: WebCliLoginIn,
+    person: Annotated[CurrentPerson, require("agent.logins.create")],
+    service: Annotated[UserService, Depends(get_user_service)],
+    audit: Annotated[AuditService, Depends(get_audit_service)],
+) -> CliLoginCreated:
+    token, row = await service.create_web_cli_login(
+        person_id=person.id,
+        device=body.device,
+        expires_in_days=body.expires_in_days,
+    )
+    audit.record(
+        actor_id=person.id,
+        operation="agent.my_login.create",
+        target=str(row.id),
+        summary=f"Created Agent login {row.device}",
+    )
+    await service.commit()
+    return CliLoginCreated(
+        id=row.id,
+        device=row.device,
+        created_at=row.created_at,
+        expires_at=row.expires_at,
+        source=row.source,
+        token=token,
+    )
 
 
 @router.get(
@@ -180,7 +262,7 @@ async def sign_out_cli_token(
 ) -> Response:
     login = current_request_login.get()
     if login is None or login.cli_login_id is None:
-        raise Forbidden("Only a CLI login ends with this call. Sign out in the browser instead.")
+        raise Forbidden("Only an Agent login ends with this call. Sign out in the browser instead.")
     await service.revoke_cli_login(person_id=person.id, login_id=login.cli_login_id)
     return Response(status_code=204)
 

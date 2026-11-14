@@ -2,8 +2,17 @@
 
 import uuid
 from datetime import datetime
+from typing import Literal
 
-from sqlalchemy import DateTime, ForeignKey, MetaData, String, Text, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    MetaData,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from app.shared.db import NAMING_CONVENTION
@@ -79,6 +88,7 @@ class CliLogin(Base):
     """
 
     __tablename__ = "cli_login"
+    __table_args__ = (CheckConstraint("source IN ('cli', 'web')", name="source"),)
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_id)
     person_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.person.id", ondelete="CASCADE"))
@@ -87,3 +97,5 @@ class CliLogin(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    source: Mapped[Literal["cli", "web"]] = mapped_column(String(8), default="cli")

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import sys
+import threading
 from typing import Any, TextIO
 
 from garden import __version__
@@ -88,7 +89,10 @@ def _notifier(stdout: TextIO, stderr: TextIO) -> Notify:
 
 
 def handle(
-    engine: Engine, message: dict[str, Any], notify: Notify | None = None
+    engine: Engine,
+    message: dict[str, Any],
+    notify: Notify | None = None,
+    cancel_event: threading.Event | None = None,
 ) -> dict[str, Any] | None:
     """One message in, one reply out. Notifications have no id and get no reply."""
     method = message.get("method")
@@ -103,7 +107,7 @@ def handle(
             "error": {"code": INVALID_PARAMS, "message": "Params must be an object."},
         }
     try:
-        result = _dispatch(engine, str(method), raw_params, notify)
+        result = _dispatch(engine, str(method), raw_params, notify, cancel_event)
     except _ProtocolError as error:
         return {
             "jsonrpc": "2.0",
@@ -127,7 +131,11 @@ class _ProtocolError(Exception):
 
 
 def _dispatch(
-    engine: Engine, method: str, params: dict[str, Any], notify: Notify | None
+    engine: Engine,
+    method: str,
+    params: dict[str, Any],
+    notify: Notify | None,
+    cancel_event: threading.Event | None,
 ) -> dict[str, Any]:
     if method == "initialize":
         requested = str(params.get("protocolVersion", PROTOCOL_VERSION))
@@ -141,22 +149,29 @@ def _dispatch(
     if method == "ping":
         return {}
     if method == "tools/list":
-        return {"tools": [_describe(tool) for tool in engine.tools()]}
+        return {
+            "tools": [_describe(tool, hosted_files=engine.hosted_files) for tool in engine.tools()]
+        }
     if method == "tools/call":
-        return _call(engine, params, notify)
+        return _call(engine, params, notify, cancel_event)
     raise _ProtocolError(METHOD_NOT_FOUND, f"Unknown method {method}.")
 
 
-def _describe(tool: Tool) -> dict[str, Any]:
+def _describe(tool: Tool, *, hosted_files: bool = False) -> dict[str, Any]:
     return {
         "name": tool.name,
         "description": tool.summary,
-        "inputSchema": tool.input_schema(),
+        "inputSchema": tool.input_schema(hosted_files=hosted_files),
         "annotations": {"title": tool.op_id, **tool.hints()},
     }
 
 
-def _call(engine: Engine, params: dict[str, Any], notify: Notify | None) -> dict[str, Any]:
+def _call(
+    engine: Engine,
+    params: dict[str, Any],
+    notify: Notify | None,
+    cancel_event: threading.Event | None,
+) -> dict[str, Any]:
     name = params.get("name")
     if not isinstance(name, str):
         raise _ProtocolError(INVALID_PARAMS, "tools/call needs a tool name.")
@@ -174,7 +189,7 @@ def _call(engine: Engine, params: dict[str, Any], notify: Notify | None) -> dict
             }
         )
     try:
-        value = engine.call(tool, arguments, notify=notify)
+        value = engine.call(tool, arguments, notify=notify, cancel_event=cancel_event)
     except GardenError as error:
         return _tool_error(error.to_dict()["error"])
     text = json.dumps(value, ensure_ascii=False)

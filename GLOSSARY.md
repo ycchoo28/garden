@@ -16,16 +16,18 @@ The terms are grouped by area, and the last section lists the words to avoid.
   Everyone who signs in holds it, so it grants the permissions every person has.
 - **Permission**: a named right, such as `claims.submit` or `audit.view`.
   Each permission says whether an agent may hold it.
-- **Person-only permission**: a permission with `agent_allowed=False`, which a CLI login never holds, such as `claims.decide`.
+- **Person-only permission**: a permission with `agent_allowed=False`, which an Agent login never holds, such as `claims.decide`.
 - **Data scope**: which departments a person may see.
   Finance and admins see all of them, and a manager sees their own department.
 - **Session**: a person's browser sign-in, kept in the `garden_session` cookie.
   It ends after 30 minutes without a request.
-- **Agent**: a program that acts for a person through a CLI login, such as a coding agent running the `garden` command or its MCP server.
-- **CLI login**: an agent's sign-in, which is one bearer token for one person on one device.
-  Every save made through it is marked as made by an agent, and the person can revoke it under CLI logins.
-- **Device**: the machine a CLI login belongs to, named when the login is made.
-- **Acting as agent**: a request that came through a CLI login, so the audit row and the confirmation gate treat it as the agent's.
+- **Agent**: a program that acts for a person through an Agent login, such as a coding agent running the `garden` command or its MCP server.
+- **Agent login**: an agent's sign-in, which is one bearer token for one person on one device.
+  A person can create one in the browser for a hosted agent or sign in with the `garden` command.
+  Its source is `web` or `cli`, and it may expire.
+  Every save made through it is marked as made by an agent, and the person can revoke it under Agent logins.
+- **Device**: the machine an Agent login belongs to, named when the login is made.
+- **Acting as agent**: a request that came through an Agent login, so the audit row and the confirmation gate treat it as the agent's.
 
 ## Platform
 
@@ -45,7 +47,7 @@ The terms are grouped by area, and the last section lists the words to avoid.
 - **Problem document**: an RFC 9457 error response with the media type `application/problem+json`.
 - **Audit event**: one saved change, with who made it, whether an agent made it, the operation, the target and a summary.
 - **Confirmation**: a person's approval for one critical action taken by an agent.
-  It is bound to that person, that CLI login, that operation and a digest of the request, works once and lasts ten minutes.
+  It is bound to that person, that Agent login, that operation and a digest of the request, works once and lasts ten minutes.
 - **Confirmation gate**: the check that makes an agent's critical request wait for a confirmation.
   It answers `428 Precondition Required` until the person approves.
 - **Stored file**: content saved once by its SHA-256, and shared by every upload of the same bytes.
@@ -144,7 +146,8 @@ The terms are grouped by area, and the last section lists the words to avoid.
 | user (for the human in the business) | person | The `users` module and the `/api/users` routes keep their names. |
 | team | department | A department sets data scope, and a team has no meaning in the code. |
 | approval (for an agent's critical action) | confirmation | An approval is a decision on a claim, batch or run, and a confirmation is the agent gate. |
-| bot, AI user (for a CLI login) | agent, CLI login | The login is one person's token on one device, and the agent is the program that uses it. |
+| bot, AI user (for an Agent login) | agent, Agent login | The login is one person's token on one device, and the agent is the program that uses it. |
+| CLI login | Agent login | A browser can make one for a hosted agent, which has no CLI, so the term covers both sources. The `users.cli_login` table keeps its name, and the `garden` command still signs in with one. |
 | expense report, reimbursement | claim | The code and the API use claim throughout. |
 | edit (for a budget line or claim) | replace (budget line) or void (claim line) | Business records are replaced or voided, never edited in place (ADR 0005). |
 | delete (for a claim or budget line) | void (or replace) | Only stored files can be deleted, and voiding keeps the history. |

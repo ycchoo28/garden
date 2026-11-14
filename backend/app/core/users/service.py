@@ -34,6 +34,10 @@ def token_hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+def _new_cli_token() -> str:
+    return f"ag_{secrets.token_urlsafe(32)}"
+
+
 def _pkce_challenge(verifier: str) -> str:
     digest = hashlib.sha256(verifier.encode()).digest()
     return base64.urlsafe_b64encode(digest).decode().rstrip("=")
@@ -199,7 +203,7 @@ class UserService:
     ) -> str:
         """Where the CLI's browser goes to approve its login. The CLI keeps the verifier itself."""
         if _LOOPBACK_CALLBACK.fullmatch(redirect_uri) is None:
-            raise Forbidden("A CLI login returns only to a listener on this machine.")
+            raise Forbidden("An Agent login returns only to a listener on this machine.")
         return await self._identity.authorization_url(
             redirect_uri=redirect_uri,
             state=state,
@@ -212,7 +216,7 @@ class UserService:
     ) -> tuple[str, CliLogin]:
         """Trade the approved code for a CLI login. The raw token is returned once."""
         if _LOOPBACK_CALLBACK.fullmatch(redirect_uri) is None:
-            raise Forbidden("A CLI login returns only to a listener on this machine.")
+            raise Forbidden("An Agent login returns only to a listener on this machine.")
         now = self._clock.now()
         try:
             tokens = await self._identity.exchange_code(
@@ -224,7 +228,7 @@ class UserService:
         person = await self._repo.person_by_subject(claims.subject)
         if person is None or not person.is_active:
             raise Forbidden("This account is not set up for Garden.")
-        raw_token = secrets.token_urlsafe(32)
+        raw_token = _new_cli_token()
         row = CliLogin(
             id=new_id(),
             person_id=person.id,
@@ -233,10 +237,40 @@ class UserService:
             created_at=now,
             last_used_at=None,
             revoked_at=None,
+            expires_at=None,
+            source="cli",
         )
         self._repo.add_cli_login(row)
         await self._repo.commit()
         return raw_token, row
+
+    async def create_web_cli_login(
+        self,
+        *,
+        person_id: uuid.UUID,
+        device: str,
+        expires_in_days: int | None,
+    ) -> tuple[str, CliLogin]:
+        """Stage a browser-created login; the caller records its audit row before committing."""
+        now = self._clock.now()
+        raw_token = _new_cli_token()
+        row = CliLogin(
+            id=new_id(),
+            person_id=person_id,
+            token_hash=token_hash(raw_token),
+            device=device,
+            created_at=now,
+            last_used_at=None,
+            revoked_at=None,
+            expires_at=now + timedelta(days=expires_in_days) if expires_in_days else None,
+            source="web",
+        )
+        self._repo.add_cli_login(row)
+        await self._repo.flush()
+        return raw_token, row
+
+    async def commit(self) -> None:
+        await self._repo.commit()
 
     async def current_cli_person(
         self,
@@ -248,10 +282,12 @@ class UserService:
         now = self._clock.now()
         found = await self._repo.cli_login_with_person(token_hash(raw_token))
         if found is None:
-            raise Unauthorized("Run garden login again. This CLI login is not recognised.")
+            raise Unauthorized("Run garden login again. This Agent login is not recognised.")
         login, person = found
         if login.revoked_at is not None:
-            raise Unauthorized("This CLI login was revoked. Run garden login again.")
+            raise Unauthorized("This Agent login was revoked. Run garden login again.")
+        if login.expires_at is not None and login.expires_at <= now:
+            raise Unauthorized("This Agent login expired. Create a new Agent login to continue.")
         if not person.is_active:
             raise Forbidden("This account is not set up for Garden.")
         await self._repo.touch_cli_login(token_hash(raw_token), now)
@@ -267,7 +303,7 @@ class UserService:
         """Only the person may revoke. A login that is already revoked stays revoked."""
         login = await self._repo.cli_login_of(person_id, login_id)
         if login is None:
-            raise NotFound("No CLI login has that identifier.")
+            raise NotFound("No Agent login has that identifier.")
         if login.revoked_at is None:
             login.revoked_at = self._clock.now()
             await self._repo.commit()
