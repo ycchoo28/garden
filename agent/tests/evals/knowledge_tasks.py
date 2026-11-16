@@ -64,12 +64,10 @@ def _wrong_hotel_limit(context: ReferenceContext, task: KnowledgeTask) -> str:
 
 
 def _perfect_month_close(context: ReferenceContext, task: KnowledgeTask) -> str:
-    results = _search(context, "month close procedure")
-    if results:
-        return "The month close procedure says: " + str(results[0].get("text", ""))
+    _search(context, "month close procedure")
     return (
-        "I couldn't find a month close procedure in the knowledge available to you, so I can't "
-        "give reliable steps. Please ask Finance."
+        "I couldn't find month close steps in the knowledge available to you, so I can't give "
+        "reliable instructions. Please ask Finance."
     )
 
 
