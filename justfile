@@ -209,6 +209,10 @@ agent-e2e: up
 agent-e2e-serve: up
     cd agent && uv run python -m tests.e2e.run --serve
 
+# Run one task's scripted positive and negative reference trials without a model.
+agent-eval *args:
+    cd agent && uv run python -m tests.evals.run {{args}}
+
 # Backend tests against the real Postgres in Compose, in a separate *_test database.
 # CI runs this against the Postgres that `just up` starts in the same job.
 # Set GARDEN_TEST_DB to use another test database (its name must end in _test), for example when worktrees run tests in parallel.
@@ -237,12 +241,15 @@ frontend-check:
 e2e: up
     #!/usr/bin/env bash
     set -euo pipefail
+    api="${GARDEN_E2E_API_URL:-{{api_url}}}"
+    web="${GARDEN_E2E_WEB_URL:-{{web_url}}}"
+    export GARDEN_E2E_API_URL="$api"
+    export GARDEN_E2E_WEB_URL="$web"
+    export GARDEN_PUBLIC_URL="$web"
     curl --fail --silent --show-error --retry 30 --retry-all-errors --retry-delay 1 "$GARDEN_OIDC_ISSUER/.well-known/openid-configuration" >/dev/null
     # The first sign-in page a fresh provider serves is slow, so warm the page the browser opens too.
     curl --fail --silent --show-error --max-time 60 --retry 30 --retry-all-errors --retry-delay 1 "$GARDEN_OIDC_ISSUER/authorize?client_id=$GARDEN_OIDC_CLIENT_ID&response_type=code&redirect_uri=$GARDEN_PUBLIC_URL/auth/callback&scope=openid&state=warmup" >/dev/null
     # The tests start their own API, worker, web app and embedder, so those ports must be free.
-    api="${GARDEN_E2E_API_URL:-{{api_url}}}"
-    web="${GARDEN_E2E_WEB_URL:-{{web_url}}}"
     for port in "${api##*:}" "${web##*:}" 55084; do
         if (echo > "/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
             echo "Port $port is already in use, for example by just demo or just dev. Stop it before the browser tests." >&2

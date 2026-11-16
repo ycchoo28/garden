@@ -54,7 +54,7 @@ export default defineConfig({
       timeout: 120_000,
     },
     {
-      command: `bun run dev --strictPort --port ${new URL(WEB_URL).port}`,
+      command: `bun run dev --host 127.0.0.1 --strictPort --port ${new URL(WEB_URL).port}`,
       url: WEB_URL,
       reuseExistingServer: false,
       timeout: 120_000,
