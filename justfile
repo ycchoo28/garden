@@ -70,6 +70,12 @@ dev: seed
     #!/usr/bin/env bash
     set -euo pipefail
     trap 'kill 0' EXIT
+    if [ -s var/openobserve.env ]; then
+        IFS='=' read -r _ GARDEN_OPENOBSERVE_ROOT_PASSWORD < var/openobserve.env
+        auth="$(printf 'root@example.com:%s' "$GARDEN_OPENOBSERVE_ROOT_PASSWORD" | base64 | tr -d '\n')"
+        export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="http://127.0.0.1:${GARDEN_EVAL_OPENOBSERVE_PORT:-55086}/api/default/v1/traces"
+        export OTEL_EXPORTER_OTLP_TRACES_HEADERS="Authorization=Basic $auth"
+    fi
     (cd backend && uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 55000) &
     (cd backend && uv run python -m app.worker) &
     (cd frontend && bun run dev --strictPort --port 55173) &
@@ -209,8 +215,48 @@ agent-e2e: up
 agent-e2e-serve: up
     cd agent && uv run python -m tests.e2e.run --serve
 
+# Start or reuse OpenObserve on 127.0.0.1:55086 and open its UI.
+eval-ui: eval-up
+    python3 -m webbrowser -t "http://127.0.0.1:${GARDEN_EVAL_OPENOBSERVE_PORT:-55086}"
+
+# Generate the local root password once and start or reuse OpenObserve.
+eval-up:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mkdir -p var
+    password=""
+    if [ -s var/openobserve.env ]; then
+        IFS='=' read -r _ password < var/openobserve.env
+    fi
+    if [ "${#password}" -lt 8 ] || [[ "$password" != *[[:lower:]]* ]] \
+        || [[ "$password" != *[[:upper:]]* ]] || [[ "$password" != *[[:digit:]]* ]] \
+        || [[ "$password" != *[^[:alnum:]]* ]]; then
+        password="$(openssl rand -hex 32)Aa7!"
+        (umask 077; printf 'GARDEN_OPENOBSERVE_ROOT_PASSWORD=%s\n' "$password" > var/openobserve.env)
+    fi
+    chmod 600 var/openobserve.env
+    docker compose -f dev/compose.yaml --profile eval --env-file var/openobserve.env up -d --wait openobserve
+    curl --fail --silent --show-error --retry 30 --retry-all-errors --retry-delay 1 \
+        "http://127.0.0.1:${GARDEN_EVAL_OPENOBSERVE_PORT:-55086}/healthz" >/dev/null
+
+# Stop the eval service while keeping its named data volume and generated password.
+eval-down:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -s var/openobserve.env ]; then
+        docker compose -f dev/compose.yaml --profile eval --env-file var/openobserve.env stop openobserve
+    else
+        docker compose -f dev/compose.yaml --profile eval stop openobserve
+    fi
+
 # Run one task's scripted positive and negative reference trials without a model.
-agent-eval *args:
+agent-eval *args: eval-up
+    #!/usr/bin/env bash
+    set -euo pipefail
+    IFS='=' read -r _ GARDEN_OPENOBSERVE_ROOT_PASSWORD < var/openobserve.env
+    auth="$(printf 'root@example.com:%s' "$GARDEN_OPENOBSERVE_ROOT_PASSWORD" | base64 | tr -d '\n')"
+    export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="http://127.0.0.1:${GARDEN_EVAL_OPENOBSERVE_PORT:-55086}/api/default/v1/traces"
+    export OTEL_EXPORTER_OTLP_TRACES_HEADERS="Authorization=Basic $auth"
     cd agent && uv run python -m tests.evals.run {{args}}
 
 # Backend tests against the real Postgres in Compose, in a separate *_test database.
