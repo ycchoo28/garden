@@ -72,9 +72,7 @@ def test_cli_reference_mode_keeps_the_scripted_runner(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     captured: dict[str, object] = {}
-    monkeypatch.setattr(
-        sys, "argv", ["agent-eval", "--reference", "--task", DRAFT_ONE_RECEIPT.id]
-    )
+    monkeypatch.setattr(sys, "argv", ["agent-eval", "--reference", "--task", DRAFT_ONE_RECEIPT.id])
 
     def reference_run(task: EvalTask, **options: object) -> tuple[dict[str, object], Path]:
         captured["task"] = task
