@@ -3,35 +3,21 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Literal, cast
+from typing import cast
 
 from tests.evals.knowledge_grading import (
     JudgeDecision,
     KnowledgeAnswerGrader,
     ScriptedJudgeModel,
 )
-from tests.evals.tasks import ReferenceContext
+from tests.evals.tasks import ClaimDraftTask, ReferenceContext
 
 
 @dataclass(frozen=True)
-class KnowledgeTask:
-    id: str
-    prompt: str
-    asking_person: str
-    judge_criteria: str
-    confirmation: Literal["approve", "deny", "none"] = "none"
-    suite: Literal["capability", "regression"] = "capability"
-    area: str = "knowledge"
-    budget_tool_calls: int | None = None
-    budget_seconds: int | None = None
-    budget_tokens: int | None = None
-    web_tools_off: bool = False
+class KnowledgeTask(ClaimDraftTask):
+    judge_criteria: str = ""
     requires_embedding: bool = True
-    graders: tuple[KnowledgeAnswerGrader, ...] = ()
-    perfect: Callable[[ReferenceContext, KnowledgeTask], str] | None = None
-    wrong: Callable[[ReferenceContext, KnowledgeTask], str] | None = None
 
 
 def _search(context: ReferenceContext, query: str) -> list[dict[str, object]]:
@@ -48,7 +34,7 @@ def _search(context: ReferenceContext, query: str) -> list[dict[str, object]]:
     return rows
 
 
-def _perfect_hotel_limit(context: ReferenceContext, task: KnowledgeTask) -> str:
+def _perfect_hotel_limit(context: ReferenceContext, task: ClaimDraftTask) -> str:
     results = _search(context, "hotel limit in the travel and accommodation policy")
     if not results:
         raise RuntimeError("The travel policy search returned no accessible result.")
@@ -58,12 +44,12 @@ def _perfect_hotel_limit(context: ReferenceContext, task: KnowledgeTask) -> str:
     )
 
 
-def _wrong_hotel_limit(context: ReferenceContext, task: KnowledgeTask) -> str:
+def _wrong_hotel_limit(context: ReferenceContext, task: ClaimDraftTask) -> str:
     _ = _search(context, "hotel limit in the travel and accommodation policy")
     return "Hotels are capped at 500 US dollars per night in every city."
 
 
-def _perfect_month_close(context: ReferenceContext, task: KnowledgeTask) -> str:
+def _perfect_month_close(context: ReferenceContext, task: ClaimDraftTask) -> str:
     _search(context, "month close procedure")
     return (
         "I couldn't find month close steps in the knowledge available to you, so I can't give "
@@ -71,7 +57,7 @@ def _perfect_month_close(context: ReferenceContext, task: KnowledgeTask) -> str:
     )
 
 
-def _wrong_month_close(context: ReferenceContext, task: KnowledgeTask) -> str:
+def _wrong_month_close(context: ReferenceContext, task: ClaimDraftTask) -> str:
     _ = _search(context, "month close procedure")
     return "First review every claim, then close the month and record a reason."
 

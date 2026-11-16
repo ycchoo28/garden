@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, Literal, Protocol
+from typing import Literal, Protocol
+
+
+class EvalGrader(Protocol):
+    id: str
 
 
 class EvalTask(Protocol):
@@ -41,13 +45,13 @@ class EvalTask(Protocol):
     def requires_embedding(self) -> bool: ...
 
     @property
-    def graders(self) -> tuple[Any, ...]: ...
+    def graders(self) -> tuple[EvalGrader, ...]: ...
 
     @property
-    def perfect(self) -> Any: ...
+    def perfect(self) -> ReferenceSolution | None: ...
 
     @property
-    def wrong(self) -> Any: ...
+    def wrong(self) -> ReferenceSolution | None: ...
 
 
 ReferenceSolution = Callable[..., str]

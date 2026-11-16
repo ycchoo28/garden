@@ -21,9 +21,11 @@ from urllib.request import Request, urlopen
 
 from garden.trace_contract import GARDEN_EVAL_RUN_ID_ENV, GARDEN_EVAL_TRIAL_ID_ENV
 from tests.evals.embedding import ensure_embedding_server
-from tests.evals.grading import GraderResult, trial_passed
+from tests.evals.grading import DraftClaimGrader, GraderResult, trial_passed
 from tests.evals.harness import DshHarnessAdapter
+from tests.evals.knowledge_grading import JudgeModel, KnowledgeAnswerGrader
 from tests.evals.task_types import EvalTask, ReferenceSolution
+from tests.evals.tasks import ClaimDraftTask
 from tests.shared.paths import AGENT_ROOT, REPO
 from tests.shared.stack import Services, free_port, psql, wait_for
 from tests.shared.transcript import StepFailed
@@ -150,13 +152,13 @@ def _database_exists(name: str) -> bool:
     return psql("postgres", f"select count(*) from pg_database where datname = '{name}'") == "1"
 
 
-def _drop_owned_database(name: str) -> None:
+def drop_owned_database(name: str) -> None:
     if not OWNED_DB.fullmatch(name):
         raise StepFailed(f"Refusing to drop a database not owned by this eval runner: {name}.")
     psql("postgres", f'drop database if exists "{name}" with (force)')
 
 
-def _new_database(name: str, *, template: str | None = None) -> None:
+def new_database(name: str, *, template: str | None = None) -> None:
     if not OWNED_DB.fullmatch(name):
         raise StepFailed(f"Refusing to create a database outside the eval namespace: {name}.")
     clause = f' with template "{template}"' if template else ""
@@ -175,6 +177,7 @@ def _backend_env(
     database: str,
     files_root: Path,
     base_env: dict[str, str],
+    model_env: dict[str, str] | None = None,
     *,
     run_id: str | None = None,
     trial_id: str | None = None,
@@ -202,15 +205,18 @@ def _backend_env(
         env[GARDEN_EVAL_RUN_ID_ENV] = run_id
     if trial_id is not None:
         env[GARDEN_EVAL_TRIAL_ID_ENV] = trial_id
+    if model_env is not None:
+        env.update(model_env)
     return env
 
 
-def _start_api(
+def start_api(
     database: str,
     files_root: Path,
     log: Path,
     base_env: dict[str, str],
     services: Services,
+    model_env: dict[str, str] | None = None,
     *,
     run_id: str | None = None,
     trial_id: str | None = None,
@@ -220,7 +226,14 @@ def _start_api(
     process = services.start(
         ["uv", "run", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", str(port)],
         cwd=REPO / "backend",
-        env=_backend_env(database, files_root, base_env, run_id=run_id, trial_id=trial_id),
+        env=_backend_env(
+            database,
+            files_root,
+            base_env,
+            model_env,
+            run_id=run_id,
+            trial_id=trial_id,
+        ),
         log=log,
     )
     url = f"http://127.0.0.1:{port}"
@@ -315,8 +328,8 @@ def ensure_template(
             pass
 
     if _database_exists(TEMPLATE_DB):
-        _drop_owned_database(TEMPLATE_DB)
-    _new_database(TEMPLATE_DB)
+        drop_owned_database(TEMPLATE_DB)
+    new_database(TEMPLATE_DB)
     try:
         template_env = _backend_env(TEMPLATE_DB, output / "template-files", env)
         seed_modules = (
@@ -343,7 +356,7 @@ def ensure_template(
             temp = Path(temp_name)
             services = Services()
             try:
-                api_url = _start_api(
+                api_url = start_api(
                     TEMPLATE_DB,
                     temp / "files",
                     temp / "api.log",
@@ -380,29 +393,35 @@ def ensure_template(
         login_file.chmod(0o600)
         return logins
     except Exception:
-        _drop_owned_database(TEMPLATE_DB)
+        drop_owned_database(TEMPLATE_DB)
         raise
 
 
-def _grade(
+def grade_task(
     task: EvalTask,
     api_url: str,
     grader_token: str,
-    answer: str,
     *,
+    answer: str,
     reference: bool,
+    judge: JudgeModel | None = None,
 ) -> list[GraderResult]:
     results: list[GraderResult] = []
     for grader in task.graders:
-        results.append(
-            grader.grade(
-                api_url,
-                grader_token,
-                task,
-                answer=answer,
-                reference=reference,
+        if isinstance(grader, KnowledgeAnswerGrader):
+            results.append(
+                grader.grade(
+                    api_url,
+                    grader_token,
+                    task,
+                    answer=answer,
+                    reference=reference,
+                    judge=judge,
+                )
             )
-        )
+        else:
+            claim_grader = cast(DraftClaimGrader, grader)
+            results.append(claim_grader.grade(api_url, grader_token, cast(ClaimDraftTask, task)))
     return results
 
 
@@ -482,11 +501,11 @@ def run_trial(
     graders: list[GraderResult] = []
     services = Services()
     try:
-        _new_database(database, template=TEMPLATE_DB)
+        new_database(database, template=TEMPLATE_DB)
         db_created = True
         with tempfile.TemporaryDirectory(prefix=f"garden-eval-{trial_id}-") as temp_name:
             temp = Path(temp_name)
-            api_url = _start_api(
+            api_url = start_api(
                 database,
                 temp / "files",
                 output / "logs" / f"{trial_id}.log",
@@ -516,11 +535,11 @@ def run_trial(
                     except Exception as failure:
                         if error is None:
                             error = f"Harness cleanup failed: {failure}"
-            graders = _grade(
+            graders = grade_task(
                 task,
                 api_url,
                 logins["grader"],
-                answer,
+                answer=answer,
                 reference=True,
             )
     except Exception as failure:
@@ -541,7 +560,7 @@ def run_trial(
         db_kept = True
     elif db_created:
         try:
-            _drop_owned_database(database)
+            drop_owned_database(database)
         except Exception as failure:
             if error is None:
                 error = f"Trial database cleanup failed: {failure}"

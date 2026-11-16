@@ -24,12 +24,14 @@ def test_trial_backend_environment_uses_the_shared_trace_contract(tmp_path: Path
             GARDEN_EVAL_RUN_ID_ENV: "stale-run",
             GARDEN_EVAL_TRIAL_ID_ENV: "stale-trial",
         },
+        model_env={"GARDEN_AGENT_MODEL_UPSTREAM_URL": "http://127.0.0.1:9090"},
         run_id="run-42",
         trial_id="run-42-perfect",
     )
 
     assert env[GARDEN_EVAL_RUN_ID_ENV] == "run-42"
     assert env[GARDEN_EVAL_TRIAL_ID_ENV] == "run-42-perfect"
+    assert env["GARDEN_AGENT_MODEL_UPSTREAM_URL"] == "http://127.0.0.1:9090"
 
 
 def test_trial_runner_error_is_recorded_and_does_not_stop_later_trials(
@@ -132,11 +134,11 @@ def test_template_rebuilds_when_recorded_embedder_changes(
 
     monkeypatch.setattr(runner, "_template_marker", template_marker)
     monkeypatch.setattr(runner, "_database_exists", database_exists)
-    monkeypatch.setattr(runner, "_drop_owned_database", drop_database)
-    monkeypatch.setattr(runner, "_new_database", create_database)
+    monkeypatch.setattr(runner, "drop_owned_database", drop_database)
+    monkeypatch.setattr(runner, "new_database", create_database)
     monkeypatch.setattr(runner, "_backend_env", backend_env)
     monkeypatch.setattr(runner, "_run", run_command)
-    monkeypatch.setattr(runner, "_start_api", start_api)
+    monkeypatch.setattr(runner, "start_api", start_api)
     monkeypatch.setattr(runner, "_create_agent_login", create_login)
     monkeypatch.setattr(runner, "psql", save_comment)
 

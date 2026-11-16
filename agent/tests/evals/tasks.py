@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Literal, Protocol, cast
 
 from tests.evals.grading import DraftClaimGrader
+from tests.evals.task_types import EvalGrader
 
 
 class ReferenceContext(Protocol):
@@ -35,7 +36,7 @@ class ClaimDraftTask:
     spent_on: date = date.min
     amount: str = ""
     description: str = ""
-    graders: tuple[DraftClaimGrader, ...] = ()
+    graders: tuple[EvalGrader, ...] = ()
     perfect: Callable[[ReferenceContext, ClaimDraftTask], str] | None = None
     wrong: Callable[[ReferenceContext, ClaimDraftTask], str] | None = None
 
