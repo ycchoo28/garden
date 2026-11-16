@@ -8,8 +8,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from conftest import as_json, run_garden, store_token
-from fake_portal import GOOD_TOKEN, FakePortal
+
+from tests.shared.fake_portal import GOOD_TOKEN, FakePortal
+from tests.shared.garden_cli import as_json, run_garden, store_token
 
 SHA = "ab" * 32
 

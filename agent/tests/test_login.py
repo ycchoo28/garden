@@ -8,8 +8,16 @@ import urllib.request
 from pathlib import Path
 
 import pytest
-from conftest import as_json, finish_login, open_sign_in, run_garden, sign_in, store_token
-from fake_portal import GOOD_TOKEN, FakePortal
+
+from tests.shared.fake_portal import GOOD_TOKEN, FakePortal
+from tests.shared.garden_cli import (
+    as_json,
+    finish_login,
+    open_sign_in,
+    run_garden,
+    sign_in,
+    store_token,
+)
 
 
 def test_login_then_whoami_then_logout(

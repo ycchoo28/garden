@@ -14,7 +14,11 @@ It never imports the portal backend, and it is not part of the server image.
   - `mcp/` serves tools over stdio.
   - `shared/` holds settings, errors, JSON guards and terminal output.
   - `skills/` holds the `SKILL.md` files that ship inside the package.
-- `tests/`: the process-level tests, run against `fake_portal.py`, a small stand-in for the portal.
+- `tests/`: all agent test code. The process-level tests sit at the top, run against `tests/shared/fake_portal.py`, a small stand-in for the portal.
+  - `tests/shared/`: test-only helpers shared by the other kinds of test (see its README).
+  - `tests/e2e/`: the end-to-end run (`just agent-e2e`) and its model-step tests.
+  - `tests/evals/`: reserved for the agent evals.
+  - `tests/architecture/`: the static checks, including the rule that product code never imports test code.
 - `install/install.sh` and `install/install.ps1`: the installers.
 - `install/dsh/cordis.patch.yml`: the template for dsh's home patch. `garden dsh-config` fills it in from the portal.
 - `scripts/build_zipapp.py`: builds `dist/garden.pyz`, the one file the portal serves.

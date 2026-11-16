@@ -23,16 +23,16 @@ PowerShell, and stops on Ctrl+C, which tears down its processes and drops its da
 goes to agent/dist/e2e-serve.
 """
 
+# pyright: basic
+# The run reads untyped JSON from the portal and the fake upstream, as the script always has.
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
 import os
-import re
 import shutil
 import signal
-import socket
 import subprocess
 import sys
 import tempfile
@@ -41,118 +41,70 @@ import time
 import urllib.error
 import urllib.request
 import uuid
-from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, ClassVar
 
-import yaml
+from tests.shared.browser import approve, sign_in_headless
+from tests.shared.dsh import LINK, dsh_overlay, run_dsh
+from tests.shared.mcp import Mcp
+from tests.shared.paths import AGENT_ROOT, REPO
+from tests.shared.stack import (
+    API_PORT,
+    DB_NAME,
+    PORTAL,
+    WEB,
+    WEB_PORT,
+    Services,
+    api,
+    drop_database,
+    psql,
+    read_token,
+    require_port_free,
+    wait_for,
+)
+from tests.shared.transcript import Interrupted, Run, StepFailed
 
-from garden.auth import load_session
-from garden.shared import Settings
+OUT = AGENT_ROOT / "dist" / "e2e"
 
-ROOT = Path(__file__).resolve().parents[1]
 
-REPO = ROOT.parent
-OUT = ROOT / "dist" / "e2e"
-SERVE_OUT = ROOT / "dist" / "e2e-serve"
+SERVE_OUT = AGENT_ROOT / "dist" / "e2e-serve"
+
+
 # The installer files serve mode checks through the web app, as a Windows laptop fetches them.
 WINDOWS_FILES = ("install.ps1", "dsh-bundle-windows-x64.tar.gz")
-API_PORT = 56000
-WEB_PORT = 56173
+
+
 OIDC_URL = "http://127.0.0.1:55081"
+
+
 PG_URL = "postgresql+psycopg://garden:garden-dev@127.0.0.1:55432"
+
+
 PG_PORT = 55432
-PORTAL = f"http://127.0.0.1:{API_PORT}"
-WEB = f"http://localhost:{WEB_PORT}"
+
+
 GATEWAY_PATH = "/api/agent/model/v1"
+
+
 MODEL = "e2e-fake-model"
-PERSON_NAME = "Dev Admin"
-PERSON_SUBJECT = "dev.admin@fernhill.example"
+
+
 # The tool that waits for the person: deleting a file is a critical action
 # (confirm=True in the API).
 CRITICAL_TOOL = "files_file_delete"
+
+
 PROBE_SHA = "0" * 64
+
+
 REPLY_MARKER = "E2E-FAKE-REPLY"
+
+
 PING = {
     "messages": [{"role": "user", "content": "Reply with the single word: pong"}],
     "max_tokens": 16,
 }
-DB_NAME = re.compile(r"^garden_e2e\d+_test$")
-LINK = re.compile(r"https?://\S+/agent/confirmations/[0-9a-f-]{36}")
-
-
-class Run:
-    """Collects the transcript and the checks. Every secret goes through `redact` before it is
-    kept."""
-
-    def __init__(self) -> None:
-        self.lines: list[str] = []
-        self.failures: list[str] = []
-        self.secrets: list[str] = []
-
-    def redact(self, text: str) -> str:
-        for secret in self.secrets:
-            if secret:
-                text = text.replace(secret, "[redacted]")
-        return text
-
-    def heading(self, title: str) -> None:
-        self.say(f"\n## {title}\n")
-
-    def say(self, text: str) -> None:
-        text = self.redact(text)
-        self.lines.append(text)
-        print(text, flush=True)
-
-    def record(self, command: str, output: str, code: int | None = None) -> None:
-        shown = self.redact(output.strip())
-        if len(shown) > 1500:
-            shown = shown[:1500] + "\n[... truncated ...]"
-        status = "" if code is None else f" (exit {code})"
-        self.say(f"$ {self.redact(command)}{status}\n```\n{shown}\n```")
-
-    def check(self, ok: bool, what: str) -> None:
-        self.say(f"- {'PASS' if ok else 'FAIL'}: {what}")
-        if not ok:
-            self.failures.append(what)
-
-
-class StepFailed(Exception):
-    """A step cannot go on, so the run stops here and the transcript says why."""
-
-
-class Interrupted(Exception):
-    """A stop signal arrived while the stack was up, so the run tears down and ends."""
-
-
-@dataclass
-class Services:
-    """Every process this run starts. They run in their own sessions, so each one can be stopped
-    with its group."""
-
-    procs: list[subprocess.Popen[bytes]] = field(default_factory=list)
-
-    def start(
-        self, args: list[str], *, cwd: Path, env: dict[str, str], log: Path
-    ) -> subprocess.Popen[bytes]:
-        handle = log.open("w", encoding="utf-8")
-        proc = subprocess.Popen(
-            args, cwd=cwd, env=env, stdout=handle, stderr=subprocess.STDOUT, start_new_session=True
-        )
-        self.procs.append(proc)
-        return proc
-
-    def stop_all(self) -> None:
-        for proc in self.procs:
-            if proc.poll() is None:
-                os.killpg(proc.pid, signal.SIGTERM)
-        for proc in self.procs:
-            try:
-                proc.wait(timeout=20)
-            except subprocess.TimeoutExpired:
-                os.killpg(proc.pid, signal.SIGKILL)
-                proc.wait(timeout=20)
 
 
 class FakeUpstream(BaseHTTPRequestHandler):
@@ -260,276 +212,10 @@ class FakeUpstream(BaseHTTPRequestHandler):
         return
 
 
-def free_port() -> int:
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        return int(probe.getsockname()[1])
-
-
-def require_port_free(port: int, what: str) -> None:
-    try:
-        with socket.create_connection(("127.0.0.1", port), timeout=1):
-            pass
-    except OSError:
-        return
-    raise StepFailed(
-        f"Port {port} ({what}) is already in use. Stop that process, or pick another port."
-    )
-
-
-def wait_for(url: str, timeout: float = 120.0) -> None:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        try:
-            with urllib.request.urlopen(url, timeout=5):
-                return
-        except (urllib.error.URLError, OSError):
-            time.sleep(0.5)
-    raise StepFailed(f"Nothing answered at {url} within {int(timeout)} seconds.")
-
-
 def _tokens_today(token: str) -> int:
     """The person's total tokens today, as the gateway counts them."""
     status, text = api("GET", "/api/agent/model/my-usage", token=token)
     return int(json.loads(text).get("total_tokens", 0)) if status == 200 else 0
-
-
-def api(method: str, path: str, token: str | None = None, body: Any = None) -> tuple[int, str]:
-    """One portal call. Returns the status and the body, and never raises on an HTTP error."""
-    data = None if body is None else json.dumps(body).encode()
-    request = urllib.request.Request(f"{PORTAL}{path}", data=data, method=method)
-    if data is not None:
-        request.add_header("Content-Type", "application/json")
-    if token is not None:
-        request.add_header("Authorization", f"Bearer {token}")
-    try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            return response.status, response.read().decode("utf-8", "replace")
-    except urllib.error.HTTPError as error:
-        return error.code, error.read().decode("utf-8", "replace")
-
-
-def psql(database: str, sql: str) -> str:
-    """One query in the Compose Postgres container, for the database this run owns."""
-    command = [
-        "docker",
-        "compose",
-        "-f",
-        str(REPO / "dev" / "compose.yaml"),
-        "exec",
-        "-T",
-        "postgres",
-        "psql",
-        "-U",
-        "garden",
-        "-d",
-        database,
-        "-v",
-        "ON_ERROR_STOP=1",
-        "-tAc",
-        sql,
-    ]
-    result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=120)
-    if result.returncode != 0:
-        raise StepFailed(f"psql failed: {result.stderr.strip()}")
-    return result.stdout.strip()
-
-
-def approve(script: str, link: str, media: Path) -> subprocess.CompletedProcess[str]:
-    """Approves a login or an action in a headless browser, through its own script."""
-    args = ["node", str(ROOT / "scripts" / script), link, str(media), PERSON_NAME, PERSON_SUBJECT]
-    return subprocess.run(args, capture_output=True, text=True, timeout=240, check=False)
-
-
-def read_token(target: Path) -> str:
-    """The CLI token from the test-only secret file. It is returned, never printed."""
-    secrets_file = (
-        target if target.is_file() or target.suffix == ".json" else target / "secrets.json"
-    )
-    home_dir = target if target.is_dir() else target.parent
-    old_store = os.environ.get("GARDEN_SECRET_STORE")
-    os.environ["GARDEN_SECRET_STORE"] = f"file:{secrets_file}"
-    try:
-        settings = Settings(portal_url=PORTAL, home=home_dir, dsh_home=home_dir / ".dsh")
-        session = load_session(settings)
-        if session is None:
-            raise StepFailed(f"Could not load session from {target}")
-        return session.token
-    finally:
-        if old_store is not None:
-            os.environ["GARDEN_SECRET_STORE"] = old_store
-        else:
-            os.environ.pop("GARDEN_SECRET_STORE", None)
-
-
-def sign_in_headless(
-    command: list[str], env: dict[str, str], media: Path, run: Run, label: str
-) -> tuple[int, str]:
-    """Runs `garden login` with its link printed, approves the link in a headless browser, and waits
-    for the CLI to finish. Returns the exit code and the CLI's output."""
-    proc = subprocess.Popen(
-        command, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
-    )
-    assert proc.stdout is not None
-    link = ""
-    collected: list[str] = []
-    for line in proc.stdout:
-        collected.append(line)
-        if line.startswith("  http") and not link:
-            link = line.strip()
-            run.secrets.append(link)
-            approval = approve("approve-login.cjs", link, media)
-            run.record(
-                f"{label}: approve-login.cjs <login link> (headless)",
-                approval.stdout + approval.stderr,
-                approval.returncode,
-            )
-            run.check(
-                approval.returncode == 0, f"{label}: the login was approved in the headless browser"
-            )
-    code = proc.wait(timeout=300)
-    output = "".join(collected)
-    if not link:
-        raise StepFailed(f"{label}: the CLI printed no login link:\n{output}")
-    return code, output
-
-
-def run_dsh(
-    command: list[str], env: dict[str, str], media: Path, run: Run
-) -> tuple[int, str, str, list[subprocess.CompletedProcess[str]]]:
-    """Runs dsh, and approves each critical action it announces, as the person would in the browser.
-    The approval link arrives while dsh's call waits, so the approval runs alongside dsh."""
-    proc = subprocess.Popen(
-        command, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-    )
-    assert proc.stdout is not None and proc.stderr is not None
-    out: list[str] = []
-    err: list[str] = []
-    approvals: list[subprocess.CompletedProcess[str]] = []
-    seen: set[str] = set()
-    lock = threading.Lock()
-
-    def watch(stream: Any, sink: list[str]) -> None:
-        for line in stream:
-            with lock:
-                sink.append(line)
-            for match in LINK.finditer(line):
-                link = match.group(0)
-                if link in seen:
-                    continue
-                seen.add(link)
-                run.secrets.append(link)
-                approvals.append(approve("approve-confirmation.cjs", link, media))
-
-    readers = [
-        threading.Thread(target=watch, args=(proc.stdout, out), daemon=True),
-        threading.Thread(target=watch, args=(proc.stderr, err), daemon=True),
-    ]
-    for reader in readers:
-        reader.start()
-    try:
-        code = proc.wait(timeout=600)
-    finally:
-        for reader in readers:
-            reader.join(timeout=300)
-    return code, "".join(out), "".join(err), approvals
-
-
-class Mcp:
-    """`garden mcp` over stdin and stdout, the way an MCP client talks to it."""
-
-    def __init__(self, launcher: Path, env: dict[str, str]) -> None:
-        self.process = subprocess.Popen(
-            [str(launcher), "mcp"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            text=True,
-            env=env,
-        )
-        self.next_id = 1
-        # Log notifications, such as a critical call's approval link, that arrive before a reply.
-        self.notices: list[dict[str, Any]] = []
-        self.request(
-            "initialize",
-            {
-                "protocolVersion": "2025-06-18",
-                "capabilities": {},
-                "clientInfo": {"name": "agent-e2e", "version": "0"},
-            },
-        )
-        self.notify("notifications/initialized")
-
-    def notify(self, method: str) -> None:
-        self._write({"jsonrpc": "2.0", "method": method})
-
-    def request(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        return self.reply(self.start(method, params))
-
-    def start(self, method: str, params: dict[str, Any] | None = None) -> int:
-        """Send a request and return its id, without waiting for the reply."""
-        request_id = self.next_id
-        self.next_id += 1
-        message: dict[str, Any] = {"jsonrpc": "2.0", "id": request_id, "method": method}
-        if params is not None:
-            message["params"] = params
-        self._write(message)
-        return request_id
-
-    def reply(self, request_id: int) -> dict[str, Any]:
-        """The reply to one request. Notifications read on the way are kept in `notices`."""
-        while True:
-            message = self._read()
-            if message.get("id") == request_id:
-                return message
-            self.notices.append(message)
-
-    def notice(self) -> dict[str, Any]:
-        """The next log notification, waiting for one if none has arrived yet."""
-        for index, message in enumerate(self.notices):
-            if message.get("method") == "notifications/message":
-                return self.notices.pop(index)
-        while True:
-            message = self._read()
-            if message.get("method") == "notifications/message":
-                return message
-            self.notices.append(message)
-
-    def _read(self) -> dict[str, Any]:
-        assert self.process.stdout is not None
-        line = self.process.stdout.readline()
-        if not line:
-            raise StepFailed("garden mcp closed its output before it answered.")
-        return json.loads(line)  # type: ignore[no-any-return]
-
-    def _write(self, message: dict[str, Any]) -> None:
-        assert self.process.stdin is not None
-        self.process.stdin.write(json.dumps(message) + "\n")
-        self.process.stdin.flush()
-
-    def close(self) -> None:
-        if self.process.stdin is not None:
-            self.process.stdin.close()
-        self.process.wait(timeout=60)
-
-
-def dsh_overlay(launcher: Path, secrets_file: Path, installed_patch: Path, out: Path) -> Path:
-    """dsh's patch for this run: the installed one, with the garden server given the test-only
-    file store.
-
-    dsh passes only some environment variables to an MCP server, and the secret store variable
-    is one of those it drops. On a laptop the server reads the keychain and needs no overlay.
-    The model and the login stay as the installer and `garden dsh` set them: the token is in
-    dsh's environment, never here.
-    """
-    document = yaml.safe_load(installed_patch.read_text(encoding="utf-8"))
-    rows = document[0]["insert"]
-    for row in rows:
-        if row.get("id") == "mcp-garden":
-            row["config"]["command"] = str(launcher)
-            row["config"]["env"] = {"GARDEN_SECRET_STORE": f"file:{secrets_file}"}
-    path = out / "dsh-e2e-overlay.yml"
-    path.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
-    return path
 
 
 def main(serve: bool = False) -> int:
@@ -571,21 +257,6 @@ def main(serve: bool = False) -> int:
         transcript.write_text("\n".join(run.lines) + "\n", encoding="utf-8")
         print(f"\nTranscript: {transcript}")
     return status
-
-
-def drop_database(database: str, run: Run) -> None:
-    """Drops the database this run created, and only that one. The dev database is never named
-    here."""
-    if not DB_NAME.match(database):
-        return
-    try:
-        psql(
-            "postgres",
-            f'drop database if exists "{database}" with (force)',
-        )
-        run.say(f"Dropped {database}.")
-    except StepFailed as error:
-        run.say(f"Could not drop {database}: {error}")
 
 
 def _run(
@@ -779,7 +450,7 @@ def _run(
     run.say("The installer wrote the login link, and the headless browser approves it.")
     approval = approve("approve-login.cjs", link, media)
     run.record(
-        "node scripts/approve-login.cjs <login link> (headless)",
+        "node tests/shared/approve-login.cjs <login link> (headless)",
         approval.stdout + approval.stderr,
         approval.returncode,
     )
@@ -949,7 +620,7 @@ def _run(
         run.secrets.append(link)
         approval = approve("approve-confirmation.cjs", link, media)
         run.record(
-            "node scripts/approve-confirmation.cjs <approval link> (headless)",
+            "node tests/shared/approve-confirmation.cjs <approval link> (headless)",
             approval.stdout + approval.stderr,
             approval.returncode,
         )
@@ -1036,7 +707,7 @@ def _run(
     )
     for approval in dsh_approvals:
         run.record(
-            "node scripts/approve-confirmation.cjs <approval link> (dsh's call, headless)",
+            "node tests/shared/approve-confirmation.cjs <approval link> (dsh's call, headless)",
             approval.stdout + approval.stderr,
             approval.returncode,
         )
