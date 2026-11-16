@@ -10,13 +10,27 @@ in the browser, and its link is sent as a log notification meanwhile (ADR 0012).
 from __future__ import annotations
 
 import json
+import os
 import sys
 import threading
 from typing import Any, TextIO
 
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
+
 from garden import __version__
 from garden.engine import Engine, Notify, Tool
 from garden.shared import GardenError, as_object, is_object
+from garden.trace_contract import (
+    GARDEN_AGENT_FLAG,
+    GARDEN_CONTENT_CAPTURED,
+    GARDEN_EVAL_RUN_ID,
+    GARDEN_EVAL_RUN_ID_ENV,
+    GARDEN_EVAL_TRIAL_ID,
+    GARDEN_EVAL_TRIAL_ID_ENV,
+    GEN_AI_OPERATION_NAME,
+    GEN_AI_TOOL_NAME,
+)
 
 PROTOCOL_VERSION = "2025-06-18"
 SUPPORTED_VERSIONS = ("2025-06-18", "2025-03-26")
@@ -179,24 +193,40 @@ def _call(
     if raw_arguments is not None and not is_object(raw_arguments):
         raise _ProtocolError(INVALID_PARAMS, "Arguments must be an object.")
     arguments = as_object(raw_arguments)
-    tool = engine.tool(name)
-    if tool is None:
-        return _tool_error(
-            {
-                "title": "Tool not available",
-                "detail": f"{name} is not a tool you may use.",
-                "fix": "Call tools/list to see the tools available to you.",
-            }
-        )
-    try:
-        value = engine.call(tool, arguments, notify=notify, cancel_event=cancel_event)
-    except GardenError as error:
-        return _tool_error(error.to_dict()["error"])
-    text = json.dumps(value, ensure_ascii=False)
-    result: dict[str, Any] = {"content": [{"type": "text", "text": text}], "isError": False}
-    if isinstance(value, dict):
-        result["structuredContent"] = value
-    return result
+    attributes: dict[str, str | bool] = {
+        GEN_AI_OPERATION_NAME: "execute_tool",
+        GEN_AI_TOOL_NAME: name,
+        GARDEN_AGENT_FLAG: True,
+        GARDEN_CONTENT_CAPTURED: False,
+    }
+    for attribute, environ in (
+        (GARDEN_EVAL_RUN_ID, GARDEN_EVAL_RUN_ID_ENV),
+        (GARDEN_EVAL_TRIAL_ID, GARDEN_EVAL_TRIAL_ID_ENV),
+    ):
+        value = os.environ.get(environ)
+        if value:
+            attributes[attribute] = value
+
+    with trace.get_tracer("garden.mcp").start_as_current_span(name, attributes=attributes) as span:
+        tool = engine.tool(name)
+        if tool is None:
+            return _tool_error(
+                {
+                    "title": "Tool not available",
+                    "detail": f"{name} is not a tool you may use.",
+                    "fix": "Call tools/list to see the tools available to you.",
+                }
+            )
+        try:
+            value = engine.call(tool, arguments, notify=notify, cancel_event=cancel_event)
+        except GardenError as error:
+            span.set_status(Status(StatusCode.ERROR))
+            return _tool_error(error.to_dict()["error"])
+        text = json.dumps(value, ensure_ascii=False)
+        result: dict[str, Any] = {"content": [{"type": "text", "text": text}], "isError": False}
+        if isinstance(value, dict):
+            result["structuredContent"] = value
+        return result
 
 
 def _tool_error(body: dict[str, Any]) -> dict[str, Any]:

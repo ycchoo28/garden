@@ -4,11 +4,25 @@ from __future__ import annotations
 
 import json
 import uuid
+from io import StringIO
 from pathlib import Path
 from typing import Any
 
 import pytest
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
+from garden.mcp.server import serve
+from garden.trace_contract import (
+    GARDEN_CONTENT_CAPTURED,
+    GARDEN_EVAL_RUN_ID,
+    GARDEN_EVAL_RUN_ID_ENV,
+    GARDEN_EVAL_TRIAL_ID,
+    GARDEN_EVAL_TRIAL_ID_ENV,
+    GEN_AI_OPERATION_NAME,
+)
 from tests.shared.fake_portal import GOOD_TOKEN, FakePortal
 from tests.shared.garden_cli import as_json, run_garden, store_token
 
@@ -189,3 +203,40 @@ def test_truthy_non_object_params_are_refused_on_stdio(
     store_token(env, portal.url, GOOD_TOKEN)
     replies = _serve(env, [{"jsonrpc": "2.0", "id": 1, "method": "ping", "params": ["x"]}])
     assert _by_id(replies, 1)["error"]["code"] == -32602
+
+
+def test_stdio_mcp_traces_each_tool_call(engine: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    provider = TracerProvider()
+    exporter = InMemorySpanExporter()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    monkeypatch.setattr(trace, "get_tracer", provider.get_tracer)
+    monkeypatch.setenv(GARDEN_EVAL_RUN_ID_ENV, "run-stdio")
+    monkeypatch.setenv(GARDEN_EVAL_TRIAL_ID_ENV, "trial-stdio")
+    messages: list[dict[str, Any]] = [
+        {
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "method": "tools/call",
+            "params": {"name": "files_file_delete", "arguments": {}},
+        }
+        for request_id in (1, 2)
+    ]
+
+    serve(engine, StringIO("\n".join(json.dumps(message) for message in messages)), StringIO())
+
+    spans = exporter.get_finished_spans()
+    tool_spans = [
+        span
+        for span in spans
+        if span.attributes is not None
+        and span.attributes.get(GEN_AI_OPERATION_NAME) == "execute_tool"
+    ]
+    assert len(tool_spans) == 2
+    for span in tool_spans:
+        assert span.name == "files_file_delete"
+        assert span.attributes is not None
+        assert span.attributes["garden.agent.flag"] is True
+        assert span.attributes[GARDEN_CONTENT_CAPTURED] is False
+        assert span.attributes[GARDEN_EVAL_RUN_ID] == "run-stdio"
+        assert span.attributes[GARDEN_EVAL_TRIAL_ID] == "trial-stdio"
+    provider.shutdown()

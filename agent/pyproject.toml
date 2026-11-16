@@ -7,6 +7,7 @@ requires-python = ">=3.12"
 # `uv tool install` (see README.md). Nothing here imports the backend.
 dependencies = [
     "keyring==25.6.0",
+    "opentelemetry-api==1.45.2",
 ]
 
 [project.scripts]
@@ -21,6 +22,7 @@ dev = [
     "pyright==1.1.414",
     "import-linter==2.15",
     "mcp==1.30.0",
+    "opentelemetry-sdk==1.45.2",
 ]
 
 [build-system]

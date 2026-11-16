@@ -5,6 +5,7 @@ can be queried together without depending on producer-specific fields.
 """
 
 GEN_AI_OPERATION_NAME = "gen_ai.operation.name"
+GEN_AI_TOOL_NAME = "gen_ai.tool.name"
 GEN_AI_PROVIDER_NAME = "gen_ai.provider.name"
 GEN_AI_CUSTOM_PROVIDER = "custom"
 GEN_AI_CONVERSATION_ID = "gen_ai.conversation.id"
@@ -27,6 +28,7 @@ GEN_AI_CAPTURE_EVENT_MODES = frozenset({"EVENT_ONLY", "SPAN_AND_EVENT"})
 
 GARDEN_PERSON_ID = "garden.person.id"
 GARDEN_AGENT_LOGIN_ID = "garden.agent.login.id"
+GARDEN_AGENT_FLAG = "garden.agent.flag"
 GARDEN_AGENT_CONVERSATION_ID = "garden.agent.conversation.id"
 GARDEN_EVAL_RUN_ID = "garden.eval.run.id"
 GARDEN_EVAL_TRIAL_ID = "garden.eval.trial.id"
@@ -40,3 +42,5 @@ GARDEN_EVAL_TRIAL_ID_ENV = "GARDEN_EVAL_TRIAL_ID"
 
 AGENT_CONVERSATION_HEADER = "X-Garden-Agent-Conversation-ID"
 MODEL_SIDE_CALL_HEADER = "X-Garden-Model-Side-Call"
+GARDEN_AGENT_LOGIN_ID_HEADER = "x-garden-agent-login-id"
+GARDEN_PERSON_ID_HEADER = "x-garden-person-id"
