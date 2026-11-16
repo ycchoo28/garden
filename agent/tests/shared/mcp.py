@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -13,26 +14,31 @@ from tests.shared.transcript import StepFailed
 class Mcp:
     """`garden mcp` over stdin and stdout, the way an MCP client talks to it."""
 
-    def __init__(self, launcher: Path, env: dict[str, str]) -> None:
+    def __init__(self, launcher: Path, env: dict[str, str], cwd: Path | None = None) -> None:
         self.process = subprocess.Popen(
             [str(launcher), "mcp"],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             text=True,
             env=env,
+            cwd=cwd,
         )
         self.next_id = 1
         # Log notifications, such as a critical call's approval link, that arrive before a reply.
         self.notices: list[dict[str, Any]] = []
-        self.request(
-            "initialize",
-            {
-                "protocolVersion": "2025-06-18",
-                "capabilities": {},
-                "clientInfo": {"name": "agent-e2e", "version": "0"},
-            },
-        )
-        self.notify("notifications/initialized")
+        try:
+            self.request(
+                "initialize",
+                {
+                    "protocolVersion": "2025-06-18",
+                    "capabilities": {},
+                    "clientInfo": {"name": "agent-e2e", "version": "0"},
+                },
+            )
+            self.notify("notifications/initialized")
+        except BaseException:
+            self.close()
+            raise
 
     def notify(self, method: str) -> None:
         self._write({"jsonrpc": "2.0", "method": method})
@@ -83,5 +89,10 @@ class Mcp:
 
     def close(self) -> None:
         if self.process.stdin is not None:
-            self.process.stdin.close()
-        self.process.wait(timeout=60)
+            with suppress(BrokenPipeError):
+                self.process.stdin.close()
+        try:
+            self.process.wait(timeout=60)
+        except subprocess.TimeoutExpired:
+            self.process.kill()
+            self.process.wait(timeout=20)

@@ -209,6 +209,10 @@ agent-e2e: up
 agent-e2e-serve: up
     cd agent && uv run python -m tests.e2e.run --serve
 
+# Run one task's scripted positive and negative reference trials without a model.
+agent-eval *args:
+    cd agent && uv run python -m tests.evals.run {{args}}
+
 # Backend tests against the real Postgres in Compose, in a separate *_test database.
 # CI runs this against the Postgres that `just up` starts in the same job.
 # Set GARDEN_TEST_DB to use another test database (its name must end in _test), for example when worktrees run tests in parallel.
