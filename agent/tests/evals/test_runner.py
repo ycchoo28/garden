@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 from typing import cast
 
@@ -10,6 +11,7 @@ import pytest
 
 from tests.evals import runner
 from tests.evals.tasks import DRAFT_ONE_RECEIPT, ClaimDraftTask
+from tests.shared.stack import Services
 
 
 def test_trial_runner_error_is_recorded_and_does_not_stop_later_trials(
@@ -22,7 +24,7 @@ def test_trial_runner_error_is_recorded_and_does_not_stop_later_trials(
         return None
 
     def ensure_template(
-        _env: dict[str, str], _output: Path, _task: ClaimDraftTask
+        _env: dict[str, str], _output: Path, _task: ClaimDraftTask, _embedder: str
     ) -> dict[str, str]:
         return {"acting": "token", "grader": "token"}
 
@@ -59,3 +61,74 @@ def test_trial_runner_error_is_recorded_and_does_not_stop_later_trials(
     assert trials[1]["passed"] is False
     assert trials[1]["error"] == "Trial runner failed: wrong trial setup failed"
     assert json.loads(path.read_text(encoding="utf-8"))["trials"] == trials
+
+
+def test_template_rebuilds_when_recorded_embedder_changes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    current_embedder = "fake:current"
+    stale_marker = "garden-agent-eval-template:fake:old:old-fingerprint"
+    calls: list[tuple[str, str]] = []
+
+    def template_marker() -> str:
+        return stale_marker
+
+    def database_exists(_name: str) -> bool:
+        return True
+
+    def drop_database(name: str) -> None:
+        calls.append(("drop", name))
+
+    def create_database(name: str, *, template: str | None = None) -> None:
+        del template
+        calls.append(("create", name))
+
+    def backend_env(_database: str, _files_root: Path, _base_env: dict[str, str]) -> dict[str, str]:
+        return {}
+
+    def run_command(
+        command: list[str],
+        *,
+        cwd: Path,
+        env: dict[str, str],
+        timeout: float = 600,
+    ) -> subprocess.CompletedProcess[str]:
+        del cwd, env, timeout
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    def start_api(
+        _database: str,
+        _files_root: Path,
+        _log: Path,
+        _base_env: dict[str, str],
+        _services: Services,
+    ) -> str:
+        return "http://127.0.0.1:1"
+
+    def create_login(_api_url: str, _database: str, _subject: str, _device: str) -> str:
+        return "token"
+
+    def save_comment(_database: str, command: str) -> str:
+        calls.append(("comment", command))
+        return ""
+
+    monkeypatch.setattr(runner, "_template_marker", template_marker)
+    monkeypatch.setattr(runner, "_database_exists", database_exists)
+    monkeypatch.setattr(runner, "_drop_owned_database", drop_database)
+    monkeypatch.setattr(runner, "_new_database", create_database)
+    monkeypatch.setattr(runner, "_backend_env", backend_env)
+    monkeypatch.setattr(runner, "_run", run_command)
+    monkeypatch.setattr(runner, "_start_api", start_api)
+    monkeypatch.setattr(runner, "_create_agent_login", create_login)
+    monkeypatch.setattr(runner, "psql", save_comment)
+
+    logins = runner.ensure_template({}, tmp_path, DRAFT_ONE_RECEIPT, current_embedder)
+
+    assert calls[0] == ("drop", runner.TEMPLATE_DB)
+    assert calls[1] == ("create", runner.TEMPLATE_DB)
+    assert current_embedder in calls[2][1]
+    assert logins == {
+        "acting_subject": "marcus.lee@fernhill.example",
+        "acting": "token",
+        "grader": "token",
+    }

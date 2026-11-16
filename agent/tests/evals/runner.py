@@ -19,9 +19,10 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
+from tests.evals.embedding import ensure_embedding_server
 from tests.evals.grading import GraderResult, trial_passed
 from tests.evals.harness import DshHarnessAdapter
-from tests.evals.tasks import ClaimDraftTask, ReferenceSolution
+from tests.evals.task_types import EvalTask, ReferenceSolution
 from tests.shared.paths import AGENT_ROOT, REPO
 from tests.shared.stack import Services, free_port, psql, wait_for
 from tests.shared.transcript import StepFailed
@@ -122,13 +123,20 @@ def _database_url(database: str, env: dict[str, str]) -> str:
     return urlunsplit((parsed.scheme, parsed.netloc, f"/{database}", parsed.query, parsed.fragment))
 
 
-def _template_fingerprint(task: ClaimDraftTask) -> str:
+def _template_fingerprint(task: EvalTask, embedder: str) -> str:
     backend = REPO / "backend"
     paths = [backend / "app" / "seed.py", backend / "app" / "composition.py"]
     paths.extend(sorted((backend / "migrations").rglob("*.py")))
     paths.extend(sorted((backend / "app").rglob("permissions.py")))
-    digest = hashlib.sha256(b"garden-agent-eval-template-v1\n")
+    if task.requires_embedding:
+        paths.append(backend / "app" / "demo_seed.py")
+        paths.extend(sorted((backend / "app" / "demo_data" / "policies").glob("*.md")))
+        if embedder.startswith("fake:"):
+            paths.append(backend / "tests" / "fakes.py")
+    digest = hashlib.sha256(b"garden-agent-eval-template-v2\n")
     digest.update(task.asking_person.encode())
+    digest.update(b"\0")
+    digest.update(embedder.encode())
     for path in sorted(set(paths)):
         digest.update(path.relative_to(backend).as_posix().encode())
         digest.update(b"\0")
@@ -180,6 +188,8 @@ def _backend_env(database: str, files_root: Path, base_env: dict[str, str]) -> d
             "GARDEN_FILES_ROOT": str(files_root),
         }
     )
+    if "GARDEN_EMBEDDING_URL" in base_env:
+        env["GARDEN_EMBEDDING_URL"] = base_env["GARDEN_EMBEDDING_URL"]
     return env
 
 
@@ -267,10 +277,13 @@ def _create_agent_login(api_url: str, database: str, subject: str, device: str) 
     return token
 
 
-def ensure_template(env: dict[str, str], output: Path, task: ClaimDraftTask) -> dict[str, str]:
-    fingerprint = _template_fingerprint(task)
+def ensure_template(
+    env: dict[str, str], output: Path, task: EvalTask, embedder: str
+) -> dict[str, str]:
+    fingerprint = _template_fingerprint(task, embedder)
+    marker = f"garden-agent-eval-template:{embedder}:{fingerprint}"
     login_file = output / "template-logins.json"
-    if _template_marker() == fingerprint and login_file.is_file():
+    if _template_marker() == marker and login_file.is_file():
         try:
             logins = _as_object(cast(object, json.loads(login_file.read_text(encoding="utf-8"))))
             if (
@@ -291,7 +304,15 @@ def ensure_template(env: dict[str, str], output: Path, task: ClaimDraftTask) -> 
     _new_database(TEMPLATE_DB)
     try:
         template_env = _backend_env(TEMPLATE_DB, output / "template-files", env)
-        for module in ("app.migrate", "app.seed"):
+        seed_modules = (
+            ("app.migrate", "app.demo_seed")
+            if task.requires_embedding
+            else (
+                "app.migrate",
+                "app.seed",
+            )
+        )
+        for module in seed_modules:
             result = _run(
                 ["uv", "run", "python", "-m", module],
                 cwd=REPO / "backend",
@@ -334,7 +355,7 @@ def ensure_template(env: dict[str, str], output: Path, task: ClaimDraftTask) -> 
 
         psql(
             "postgres",
-            f"comment on database \"{TEMPLATE_DB}\" is 'garden-agent-eval-template:{fingerprint}'",
+            f"comment on database \"{TEMPLATE_DB}\" is '{marker}'",
         )
         login_file.parent.mkdir(parents=True, exist_ok=True)
         fd = os.open(login_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -348,17 +369,33 @@ def ensure_template(env: dict[str, str], output: Path, task: ClaimDraftTask) -> 
         raise
 
 
-def _grade(task: ClaimDraftTask, api_url: str, grader_token: str) -> list[GraderResult]:
+def _grade(
+    task: EvalTask,
+    api_url: str,
+    grader_token: str,
+    answer: str,
+    *,
+    reference: bool,
+) -> list[GraderResult]:
     results: list[GraderResult] = []
     for grader in task.graders:
-        results.append(grader.grade(api_url, grader_token, task))
+        results.append(
+            grader.grade(
+                api_url,
+                grader_token,
+                task,
+                answer=answer,
+                reference=reference,
+            )
+        )
     return results
 
 
 def _trial_record(
     *,
     run_id: str,
-    task: ClaimDraftTask,
+    task: EvalTask,
+    embedder: str,
     variant: str,
     expected_pass: bool,
     started: float,
@@ -398,7 +435,7 @@ def _trial_record(
         "dsh_exit_code": exit_code,
         "final_answer": answer,
         "trace_id": None,
-        "embedder": "none",
+        "embedder": embedder,
         "database": database,
         "database_kept": db_kept,
         "confirmation": task.confirmation,
@@ -408,7 +445,8 @@ def _trial_record(
 def run_trial(
     *,
     run_id: str,
-    task: ClaimDraftTask,
+    task: EvalTask,
+    embedder: str,
     variant: str,
     expected_pass: bool,
     solution: ReferenceSolution,
@@ -461,7 +499,13 @@ def run_trial(
                     except Exception as failure:
                         if error is None:
                             error = f"Harness cleanup failed: {failure}"
-            graders = _grade(task, api_url, logins["grader"])
+            graders = _grade(
+                task,
+                api_url,
+                logins["grader"],
+                answer,
+                reference=True,
+            )
     except Exception as failure:
         error = f"Trial setup failed: {failure}"
         graders = [
@@ -489,6 +533,7 @@ def run_trial(
     return _trial_record(
         run_id=run_id,
         task=task,
+        embedder=embedder,
         variant=variant,
         expected_pass=expected_pass,
         started=started,
@@ -504,10 +549,11 @@ def run_trial(
 
 
 def run_reference(
-    task: ClaimDraftTask,
+    task: EvalTask,
     *,
     keep_failed: bool = False,
     environ: dict[str, str] | None = None,
+    fake_embedding: bool = False,
 ) -> tuple[dict[str, object], Path]:
     started_at = datetime.now(UTC)
     env = dict(os.environ if environ is None else environ)
@@ -520,75 +566,93 @@ def run_reference(
     OUTPUT.mkdir(parents=True, exist_ok=True)
     RUNS.mkdir(parents=True, exist_ok=True)
     (OUTPUT / "logs").mkdir(parents=True, exist_ok=True)
-    logins = ensure_template(env, OUTPUT, task)
-    run_id = str(uuid.uuid4())
-    records: list[dict[str, object]] = []
-    for variant, expected_pass, solution in (
-        ("perfect", True, task.perfect),
-        ("wrong", False, task.wrong),
-    ):
-        if solution is None:
-            raise StepFailed(f"Task {task.id!r} has no {variant} reference solution.")
-        try:
-            record = run_trial(
-                run_id=run_id,
-                task=task,
-                variant=variant,
-                expected_pass=expected_pass,
-                solution=solution,
-                logins=logins,
-                env=env,
-                output=OUTPUT,
-                keep_failed=keep_failed,
+    embedder = "none"
+    embedder_services = Services()
+    try:
+        if task.requires_embedding:
+            selected_embedder = ensure_embedding_server(
+                env,
+                OUTPUT / "logs",
+                embedder_services,
+                fake=fake_embedding,
             )
-        except Exception as failure:
-            record = _trial_record(
-                run_id=run_id,
-                task=task,
-                variant=variant,
-                expected_pass=expected_pass,
-                started=time.monotonic(),
-                database=f"garden_agent_eval_{run_id[:8]}-{variant}",
-                db_kept=False,
-                reference_solution=variant,
-                answer="",
-                exit_code=1,
-                tool_calls=0,
-                graders=[
-                    GraderResult(grader.id, "fail", f"The trial runner failed: {failure}")
-                    for grader in task.graders
-                ],
-                error=f"Trial runner failed: {failure}",
-            )
-        records.append(record)
-    passed = all(
-        record["passed"] is record["expected_pass"] and record["error"] is None
-        for record in records
-    )
-    summary: dict[str, object] = {
-        "run_id": run_id,
-        "started_at": started_at.isoformat(),
-        "finished_at": datetime.now(UTC).isoformat(),
-        "mode": "reference",
-        "task": {
-            "id": task.id,
-            "prompt": task.prompt,
-            "asking_person": task.asking_person,
-            "confirmation": task.confirmation,
-            "suite": task.suite,
-            "area": task.area,
-            "graders": [grader.id for grader in task.graders],
-            "budget_tool_calls": task.budget_tool_calls,
-            "budget_seconds": task.budget_seconds,
-            "budget_tokens": task.budget_tokens,
-            "web_tools_off": task.web_tools_off,
-        },
-        "passed": passed,
-        "trials": records,
-    }
-    path = RUNS / f"{run_id}.json"
-    path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
-    return summary, path
+            embedder = selected_embedder.embedder
+            env["GARDEN_EMBEDDING_URL"] = selected_embedder.url
+        logins = ensure_template(env, OUTPUT, task, embedder)
+        run_id = str(uuid.uuid4())
+        records: list[dict[str, object]] = []
+        for variant, expected_pass, solution in (
+            ("perfect", True, task.perfect),
+            ("wrong", False, task.wrong),
+        ):
+            if solution is None:
+                raise StepFailed(f"Task {task.id!r} has no {variant} reference solution.")
+            try:
+                record = run_trial(
+                    run_id=run_id,
+                    task=task,
+                    embedder=embedder,
+                    variant=variant,
+                    expected_pass=expected_pass,
+                    solution=solution,
+                    logins=logins,
+                    env=env,
+                    output=OUTPUT,
+                    keep_failed=keep_failed,
+                )
+            except Exception as failure:
+                record = _trial_record(
+                    run_id=run_id,
+                    task=task,
+                    embedder=embedder,
+                    variant=variant,
+                    expected_pass=expected_pass,
+                    started=time.monotonic(),
+                    database=f"garden_agent_eval_{run_id[:8]}-{variant}",
+                    db_kept=False,
+                    reference_solution=variant,
+                    answer="",
+                    exit_code=1,
+                    tool_calls=0,
+                    graders=[
+                        GraderResult(grader.id, "fail", f"The trial runner failed: {failure}")
+                        for grader in task.graders
+                    ],
+                    error=f"Trial runner failed: {failure}",
+                )
+            records.append(record)
+        passed = all(
+            record["passed"] is record["expected_pass"] and record["error"] is None
+            for record in records
+        )
+        summary: dict[str, object] = {
+            "run_id": run_id,
+            "started_at": started_at.isoformat(),
+            "finished_at": datetime.now(UTC).isoformat(),
+            "mode": "reference",
+            "task": {
+                "id": task.id,
+                "prompt": task.prompt,
+                "asking_person": task.asking_person,
+                "confirmation": task.confirmation,
+                "suite": task.suite,
+                "area": task.area,
+                "graders": [grader.id for grader in task.graders],
+                "budget_tool_calls": task.budget_tool_calls,
+                "budget_seconds": task.budget_seconds,
+                "budget_tokens": task.budget_tokens,
+                "web_tools_off": task.web_tools_off,
+                "requires_embedding": task.requires_embedding,
+                "embedder": embedder,
+            },
+            "passed": passed,
+            "trials": records,
+        }
+        path = RUNS / f"{run_id}.json"
+        path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+        return summary, path
+    finally:
+        embedder_services.stop_all()
 
 
 def print_summary(summary: dict[str, object], path: Path) -> None:

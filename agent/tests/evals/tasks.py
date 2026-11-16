@@ -29,6 +29,7 @@ class ClaimDraftTask:
     budget_seconds: int | None = None
     budget_tokens: int | None = None
     web_tools_off: bool = False
+    requires_embedding: bool = False
     claim_title: str = ""
     category: str = ""
     spent_on: date = date.min
