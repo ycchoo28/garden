@@ -19,9 +19,10 @@ from typing import cast
 from urllib.parse import urlsplit
 
 from tests.evals import runner
+from tests.evals.embedding import ensure_embedding_server
 from tests.evals.grading import GraderResult
 from tests.evals.model_harness import installed_dsh_entry, prepare_dsh, run_dsh
-from tests.evals.tasks import ClaimDraftTask
+from tests.evals.task_types import EvalTask
 from tests.shared.stack import Services
 from tests.shared.transcript import StepFailed
 
@@ -102,7 +103,7 @@ def _budget_reason(record: dict[str, object]) -> str | None:
 
 
 def _aborted_trial(
-    *, run_id: str, task: ClaimDraftTask, model: str, repeat_number: int
+    *, run_id: str, task: EvalTask, model: str, repeat_number: int
 ) -> dict[str, object]:
     return {
         "run_id": run_id,
@@ -173,7 +174,7 @@ def _cell_summary(
 
 
 def run_model_trials(
-    tasks: list[ClaimDraftTask],
+    tasks: list[EvalTask],
     models: list[str],
     *,
     repeat: int = 3,
@@ -184,6 +185,7 @@ def run_model_trials(
     environ: dict[str, str] | None = None,
     gateway_url: str = "",
     upstream_key: str = "",
+    embedder: str = "none",
     keep_failed: bool = False,
     trial_runner: TrialRunner | None = None,
 ) -> tuple[dict[str, object], Path]:
@@ -205,7 +207,7 @@ def run_model_trials(
     active_env = {} if environ is None else environ
     cells = [(task, model) for task in tasks for model in models]
 
-    def run_one_trial(task: ClaimDraftTask, model: str, repeat_number: int) -> dict[str, object]:
+    def run_one_trial(task: EvalTask, model: str, repeat_number: int) -> dict[str, object]:
         raw: dict[str, object]
         try:
             raw = active_runner(
@@ -218,6 +220,7 @@ def run_model_trials(
                 environ=active_env,
                 gateway_url=gateway_url,
                 upstream_key=upstream_key,
+                embedder=embedder,
                 output=output,
                 keep_failed=keep_failed,
             )
@@ -344,6 +347,7 @@ def run_model_trials(
         "jobs": jobs,
         "models": models,
         "tasks": [task.id for task in tasks],
+        "embedder": embedder,
         "passed": all(cell["pass_k"] is True for cell in summaries),
         "task_status": task_status,
         "cells": summaries,
@@ -419,13 +423,14 @@ def run_model_trial(
     *,
     run_id: str,
     trial_id: str,
-    task: ClaimDraftTask,
+    task: EvalTask,
     model: str,
     repeat: int,
     logins: dict[str, str],
     environ: dict[str, str],
     gateway_url: str,
     upstream_key: str,
+    embedder: str = "none",
     output: Path,
     keep_failed: bool,
 ) -> dict[str, object]:
@@ -507,7 +512,13 @@ def run_model_trial(
                 with log_path.open("a", encoding="utf-8") as log:
                     log.write("dsh stderr:\n")
                     log.write(result.stderr)
-            graders = runner.grade_task(task, api_url, logins["grader"])
+            graders = runner.grade_task(
+                task,
+                api_url,
+                logins["grader"],
+                answer=answer,
+                reference=False,
+            )
     except Exception as failure:
         error = f"Trial setup or dsh execution failed: {failure}"
         graders = [GraderResult(grader.id, "fail", error) for grader in task.graders]
@@ -576,7 +587,7 @@ def run_model_trial(
         "budget_exceeded": budget_exceeded,
         "aborted": False,
         "trace_id": None,
-        "embedder": "none",
+        "embedder": embedder,
         "database": database,
         "database_kept": db_kept,
         "confirmation": task.confirmation,
@@ -584,7 +595,7 @@ def run_model_trial(
 
 
 def run_real_model_eval(
-    task: ClaimDraftTask,
+    tasks: list[EvalTask],
     *,
     selected_model: str | None = None,
     repeat: int = 3,
@@ -598,8 +609,11 @@ def run_real_model_eval(
     safe_env = {name: value for name, value in env.items() if name != "GARDEN_EVAL_UPSTREAM_KEY"}
     if repeat < 1 or jobs < 1:
         raise StepFailed("Repeat and jobs must both be positive integers.")
+    if not tasks:
+        raise StepFailed("Select at least one eval task.")
     if any(
         budget is not None and budget < 1
+        for task in tasks
         for budget in (task.budget_tool_calls, task.budget_seconds, task.budget_tokens)
     ):
         raise StepFailed("Task budgets must be positive integers.")
@@ -624,16 +638,32 @@ def run_real_model_eval(
     output = runner.OUTPUT
     output.mkdir(parents=True, exist_ok=True)
     (output / "logs").mkdir(parents=True, exist_ok=True)
-    logins = runner.ensure_template(safe_env, output, task)
-    return run_model_trials(
-        [task],
-        models,
-        repeat=repeat,
-        jobs=jobs,
-        output=output,
-        logins=logins,
-        environ=safe_env,
-        gateway_url=upstream_url,
-        upstream_key=upstream_key,
-        keep_failed=keep_failed,
-    )
+    template_task = next((task for task in tasks if task.requires_embedding), tasks[0])
+    embedder_services = Services()
+    try:
+        embedder = "none"
+        if any(task.requires_embedding for task in tasks):
+            selected_embedder = ensure_embedding_server(
+                safe_env,
+                output / "logs",
+                embedder_services,
+                fake=False,
+            )
+            embedder = selected_embedder.embedder
+            safe_env["GARDEN_EMBEDDING_URL"] = selected_embedder.url
+        logins = runner.ensure_template(safe_env, output, template_task, embedder)
+        return run_model_trials(
+            tasks,
+            models,
+            repeat=repeat,
+            jobs=jobs,
+            output=output,
+            logins=logins,
+            environ=safe_env,
+            gateway_url=upstream_url,
+            upstream_key=upstream_key,
+            embedder=embedder,
+            keep_failed=keep_failed,
+        )
+    finally:
+        embedder_services.stop_all()

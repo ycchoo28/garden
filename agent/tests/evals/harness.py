@@ -11,7 +11,7 @@ from typing import cast
 
 import yaml
 
-from tests.evals.tasks import ClaimDraftTask, ReferenceSolution
+from tests.evals.task_types import EvalTask, ReferenceSolution
 from tests.shared.garden_cli import store_token
 from tests.shared.mcp import Mcp
 from tests.shared.paths import AGENT_ROOT
@@ -30,7 +30,7 @@ class DshHarnessAdapter:
 
     def __init__(
         self,
-        task: ClaimDraftTask,
+        task: EvalTask,
         *,
         portal_url: str,
         home: Path,

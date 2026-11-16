@@ -22,7 +22,7 @@ import yaml
 
 from garden.dsh.launcher import entry_point
 from garden.dsh.patch import TOKEN_ENV, render_patch
-from tests.evals.tasks import ClaimDraftTask
+from tests.evals.task_types import EvalTask
 from tests.shared.garden_cli import store_token
 from tests.shared.paths import AGENT_ROOT
 from tests.shared.transcript import StepFailed
@@ -155,7 +155,7 @@ def installed_dsh_entry(environ: dict[str, str]) -> Path | None:
 
 
 def prepare_dsh(
-    task: ClaimDraftTask,
+    task: EvalTask,
     *,
     portal_url: str,
     model: str,
