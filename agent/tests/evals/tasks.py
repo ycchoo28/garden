@@ -22,8 +22,6 @@ class ReferenceContext(Protocol):
 
     def call(self, name: str, arguments: dict[str, object]) -> object: ...
 
-    def person_call(self, method: str, path: str, body: dict[str, object]) -> dict[str, object]: ...
-
 
 @dataclass(frozen=True)
 class ClaimDraftTask:

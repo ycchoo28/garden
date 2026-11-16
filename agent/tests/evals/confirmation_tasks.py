@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Protocol, cast
 
 if TYPE_CHECKING:
     from tests.evals.tasks import ClaimDraftTask, ReferenceContext
 
 
 JsonObject = dict[str, object]
+
+
+class PersonApiContext(Protocol):
+    def person_call(self, method: str, path: str, body: dict[str, object]) -> dict[str, object]: ...
 
 
 def _as_object(value: object) -> JsonObject | None:
@@ -59,7 +63,7 @@ def _prepare_claim(context: ReferenceContext, task: ClaimDraftTask) -> tuple[str
 
 
 def _submit_as_person(context: ReferenceContext, claim_id: str, version: int) -> int:
-    result = context.person_call(
+    result = cast(PersonApiContext, context).person_call(
         "POST",
         f"/api/claims/{claim_id}/submit",
         {"expected_version": version},

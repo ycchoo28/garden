@@ -281,6 +281,4 @@ def test_start_stack_reuses_ready_local_services_without_running_just_up(
         }
     )
 
-    assert waited == [
-        ("http://127.0.0.1:55086/default/.well-known/openid-configuration", 120)
-    ]
+    assert waited == [("http://127.0.0.1:55086/default/.well-known/openid-configuration", 120)]

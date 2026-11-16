@@ -122,7 +122,9 @@ def start_stack(env: dict[str, str]) -> None:
             ) from error
         if result.returncode != 0:
             output = (result.stdout + result.stderr).strip()
-            raise StepFailed(f"Could not start the Garden dev stack with 'just up':\n{output[-4000:]}")
+            raise StepFailed(
+                f"Could not start the Garden dev stack with 'just up':\n{output[-4000:]}"
+            )
     issuer = env.get("GARDEN_OIDC_ISSUER", "http://127.0.0.1:55081/default").rstrip("/")
     wait_for(f"{issuer}/.well-known/openid-configuration", timeout=120)
 
@@ -637,9 +639,7 @@ def run_trial(
                         portal_url=api_url,
                         database=database,
                         public_url=web_url,
-                        oidc_url=env.get(
-                            "GARDEN_OIDC_ISSUER", "http://127.0.0.1:55081/default"
-                        ),
+                        oidc_url=env.get("GARDEN_OIDC_ISSUER", "http://127.0.0.1:55081/default"),
                         home=temp / "home",
                         workspace=temp / "workspace",
                         media=temp / "media",
