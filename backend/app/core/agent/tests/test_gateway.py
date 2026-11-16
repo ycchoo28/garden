@@ -66,6 +66,14 @@ def _span_attributes(span: Any) -> Mapping[str, Any]:
     return cast("Mapping[str, Any]", attributes)
 
 
+def _model_gateway_spans(exporter: InMemorySpanExporter) -> list[Any]:
+    return [
+        span
+        for span in exporter.get_finished_spans()
+        if GEN_AI_PROVIDER_NAME in _span_attributes(span)
+    ]
+
+
 def _log_event_attributes(
     exporter: InMemoryLogRecordExporter, name: str
 ) -> list[Mapping[str, Any]]:
@@ -187,7 +195,7 @@ async def test_model_calls_emit_contract_spans_with_usage_matching_the_usage_row
         assert answered.status_code == 200, answered.text
 
     usage = (await client.get("/api/agent/model/my-usage", headers=bearer(token))).json()
-    spans = span_exporter.get_finished_spans()
+    spans = _model_gateway_spans(span_exporter)
     attributes = [_span_attributes(span) for span in spans]
 
     assert len(spans) == 2
@@ -231,7 +239,7 @@ async def test_content_capture_records_messages_only_when_enabled_in_dev(
     answered = await client.post("/api/agent/model/v1/chat/completions", json=CHAT)
 
     assert answered.status_code == 200, answered.text
-    [span] = span_exporter.get_finished_spans()
+    [span] = _model_gateway_spans(span_exporter)
     attributes = _span_attributes(span)
     assert attributes[GARDEN_CONTENT_CAPTURED] is True
     assert "hello" in attributes[GEN_AI_INPUT_MESSAGES]
@@ -259,7 +267,7 @@ async def test_content_capture_event_modes_follow_the_configured_signal(
     )
 
     assert answered.status_code == 200, answered.text
-    [span] = span_exporter.get_finished_spans()
+    [span] = _model_gateway_spans(span_exporter)
     attributes = _span_attributes(span)
     [log_record] = log_exporter.get_finished_logs()
     assert log_record.log_record.event_name == GEN_AI_INFERENCE_EVENT
@@ -312,7 +320,7 @@ async def test_gateway_tags_a_recognizable_conversation_title_side_call(
     )
 
     assert answered.status_code == 200, answered.text
-    [span] = span_exporter.get_finished_spans()
+    [span] = _model_gateway_spans(span_exporter)
     assert (
         _span_attributes(span)[GARDEN_MODEL_SIDE_CALL_TYPE] == GARDEN_CONVERSATION_TITLE_SIDE_CALL
     )
@@ -335,7 +343,7 @@ async def test_upstream_failure_is_recorded_as_an_error_span(
     )
 
     assert failed.status_code == 502
-    [span] = span_exporter.get_finished_spans()
+    [span] = _model_gateway_spans(span_exporter)
     attributes = _span_attributes(span)
     assert attributes[GEN_AI_RESPONSE_STATUS] == "failed"
     assert span.status.status_code == trace.StatusCode.ERROR
@@ -367,7 +375,7 @@ async def test_inferred_agent_conversation_reuses_until_an_idle_gap(
     )
 
     assert first.status_code == second.status_code == third.status_code == 200
-    [earlier, continuing, later] = span_exporter.get_finished_spans()
+    [earlier, continuing, later] = _model_gateway_spans(span_exporter)
     earlier_id = _span_attributes(earlier)[GARDEN_AGENT_CONVERSATION_ID]
     continuing_id = _span_attributes(continuing)[GARDEN_AGENT_CONVERSATION_ID]
     later_id = _span_attributes(later)[GARDEN_AGENT_CONVERSATION_ID]
