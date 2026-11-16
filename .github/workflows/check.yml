@@ -2,7 +2,9 @@ name: check
 
 on:
   push:
+    branches: [main]
   pull_request:
+    branches: [main]
 
 # No model keys and no network services beyond the local Compose stack are needed.
 env:
