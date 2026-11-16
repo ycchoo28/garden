@@ -94,6 +94,14 @@ COMPOSE_ENV_KEYS = (
 )
 
 
+def open_browser_link(url: str) -> bool:
+    """Use the agent package's shared browser opener from the source checkout."""
+    sys.path.insert(0, str(ROOT / "agent" / "src"))
+    from garden.shared import open_link
+
+    return open_link(url)
+
+
 def wsl_env(existing: str, keys: tuple[str, ...]) -> str:
     """Add keys to a WSLENV value without dropping or repeating existing entries."""
     parts = [part for part in existing.split(":") if part]
@@ -1260,13 +1268,16 @@ class Demo:
                 env=env,
             )
         else:
-            import webbrowser
-
             print(
                 "Choose your seeded persona in the browser to approve CLI sign-in.",
                 flush=True,
             )
-            webbrowser.open(link)
+            if not open_browser_link(link):
+                print(
+                    "No browser could be opened here. Open this sign-in link yourself:",
+                    flush=True,
+                )
+                print(f"  {link}", flush=True)
         process.wait(timeout=300)
         self.procs.remove(process)
         if process.returncode:

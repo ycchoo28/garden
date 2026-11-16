@@ -116,6 +116,8 @@ Node must be at least version 24.
 Windows bootstrap also locates Git Bash or installs a checksum-verified portable Git, and updates the current and user PATH.
 POSIX bootstrap must be sourced to update the current shell's PATH.
 Supported bootstrap hosts are Linux and macOS on x64 or ARM64, and Windows on x64.
+Inside WSL 2, `just demo` opens CLI sign-in in the Windows browser automatically.
+Installing `wslu` and setting `BROWSER=wslview` remain optional if you prefer that opener.
 
 `just demo` initializes `.env` and missing dependencies, validates the saved model upstream, publishes the agent downloads, and starts the seeded portal.
 When model settings are missing or unusable, it offers a provider menu (OpenRouter, OpenAI, another OpenAI-compatible URL, or the local fake model), then asks for a hidden API token.

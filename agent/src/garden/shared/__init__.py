@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from garden.shared.browser import open_link
 from garden.shared.config import (
     Settings,
     home_dir,
@@ -40,6 +41,7 @@ __all__ = [
     "is_list",
     "is_object",
     "load_settings",
+    "open_link",
     "render",
     "render_error",
 ]

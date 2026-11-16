@@ -378,7 +378,24 @@ export GARDEN_HOME="$garden_home" GARDEN_API_URL="$portal"
 
 # Opens a link in the browser without printing anything. A machine with no opener is not an error.
 open_link() {
-    if command -v open >/dev/null 2>&1; then
+    if "$python" - "$garden_home/garden.pyz" >/dev/null 2>&1 <<'PY'
+import sys
+
+sys.path.insert(0, sys.argv[1])
+from garden.shared.browser import is_wsl
+
+raise SystemExit(0 if is_wsl() else 1)
+PY
+    then
+        "$python" - "$garden_home/garden.pyz" "$1" >/dev/null 2>&1 <<'PY' || true
+import sys
+
+sys.path.insert(0, sys.argv[1])
+from garden.shared import open_link
+
+open_link(sys.argv[2])
+PY
+    elif command -v open >/dev/null 2>&1; then
         open "$1" >/dev/null 2>&1 || true
     elif command -v xdg-open >/dev/null 2>&1; then
         xdg-open "$1" >/dev/null 2>&1 || true
