@@ -53,7 +53,7 @@ class DraftClaimGrader:
         token: str,
         task: ClaimDraftTask,
         *,
-        answer: str = "",
+        answer: str | None = None,
         reference: bool = False,
     ) -> GraderResult:
         del answer, reference
