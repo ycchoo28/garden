@@ -15,6 +15,7 @@ dependencies = [
     "pyjwt==2.15.0",
     "cryptography==50.0.1",
     "httpx==0.28.1",
+    "opentelemetry-api==1.45.2",
     "pgvector==0.4.2",
     "pypdf==6.21.4",
     "garden-cli",
@@ -30,6 +31,7 @@ dev = [
     "ruff==0.16.10",
     "pyright==1.1.414",
     "import-linter==2.15",
+    "opentelemetry-sdk==1.45.2",
     "pip-audit==2.10.1",
 ]
 
