@@ -28,3 +28,8 @@
   config:
     provider: "{{MODEL_PROVIDER}}"
     model: "{{MODEL_NAME}}"
+# dsh's base patch loads the session telemetry plugin in FEEDBACK_ONLY mode under this id. Garden
+# changes only its mode: DISABLED constructs no exporter, so no session record leaves the machine.
+- id: session-telemetry-otel
+  config:
+    mode: DISABLED
