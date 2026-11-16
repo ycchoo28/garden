@@ -781,6 +781,33 @@ def _uninstall_args(env_file: Path, **flags) -> argparse.Namespace:
     return argparse.Namespace(**values)
 
 
+def test_uninstall_continues_when_manifest_is_already_missing(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    env_file = tmp_path / ".env"
+    env_file.write_text("GARDEN_X=1\n")
+    moved: list[Path] = []
+
+    def record_trash(path):
+        target = Path(path)
+        moved.append(target)
+        target.unlink()
+
+    monkeypatch.setattr(DEMO, "trash_path", record_trash)
+    manifest_file = MANIFEST.manifest_path(tmp_path)
+    assert not manifest_file.exists()
+
+    result = DEMO.DemoCleanup(_uninstall_args(env_file, remove_env=True), "uninstall").run()
+
+    assert result == 0
+    assert moved == [env_file]
+    assert not env_file.exists()
+    output = capsys.readouterr().out
+    assert output.count("Garden install manifest already absent") == 1
+    assert f"Move {env_file} to Trash after separate confirmation" in output
+
+
 def test_uninstall_dry_run_lists_exactly_what_it_removes(
     installed_demo: dict[str, Any], tmp_path: Path, monkeypatch
 ) -> None:

@@ -248,18 +248,37 @@ def _unique_trash_path(root: Path, name: str) -> Path:
 
 
 def _trash_path(path: Path, trash_root: Path | None = None) -> None:
+    if not os.path.lexists(path):
+        return
     if trash_root is not None:
         trash_root.mkdir(parents=True, exist_ok=True)
-        path.rename(_unique_trash_path(trash_root, path.name))
+        try:
+            path.rename(_unique_trash_path(trash_root, path.name))
+        except FileNotFoundError:
+            if not os.path.lexists(path):
+                return
+            raise
         return
     command = shutil.which("trash")
     if command:
         try:
-            subprocess.run([command, str(path)], check=True)
-            return
-        except (OSError, subprocess.SubprocessError):
+            result = subprocess.run(
+                [command, str(path)],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+        except (OSError, subprocess.SubprocessError) as error:
             if not os.path.lexists(path):
                 return
+            raise error
+        if result.returncode:
+            if not os.path.lexists(path):
+                return
+            detail = result.stderr.strip() or f"trash exited with status {result.returncode}"
+            raise OSError(f"Could not move {path} to Trash: {detail}")
+        return
     if os.name == "nt":
         import ctypes
         from ctypes import wintypes
@@ -289,6 +308,8 @@ def _trash_path(path: Path, trash_root: Path | None = None) -> None:
         )
         result = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(operation))
         if result or operation.fAnyOperationsAborted:
+            if not os.path.lexists(path):
+                return
             raise OSError(result, f"Windows could not move {path} to the Recycle Bin")
         return
     if sys.platform == "darwin":
@@ -304,7 +325,12 @@ def _trash_path(path: Path, trash_root: Path | None = None) -> None:
     files.mkdir(parents=True, exist_ok=True)
     info.mkdir(parents=True, exist_ok=True)
     destination = _unique_trash_path(files, path.name)
-    path.rename(destination)
+    try:
+        path.rename(destination)
+    except FileNotFoundError:
+        if not os.path.lexists(path):
+            return
+        raise
     metadata = info / f"{destination.name}.trashinfo"
     escaped_path = quote(str(path.absolute()), safe="/")
     deleted = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S")
@@ -381,12 +407,16 @@ def apply_artifact_plan(
         action = item["action"]
         entry = {key: value for key, value in item.items() if key not in {"action", "reason"}}
         if action == "missing":
+            print(f"Already absent: {item['path']}", flush=True)
             continue
         if action != "remove":
             remaining["artifacts"].append(entry)
             warnings.append(f"Skipping {item['path']}: {item['reason']}.")
             continue
         checked = artifact_plan({**data, "artifacts": [entry]})[0]
+        if checked["action"] == "missing":
+            print(f"Already absent: {item['path']}", flush=True)
+            continue
         if checked["action"] != "remove":
             remaining["artifacts"].append(entry)
             warnings.append(f"Skipping {item['path']}: {checked['reason']}.")
@@ -397,7 +427,17 @@ def apply_artifact_plan(
                 target.rmdir()
             else:
                 _trash_path(target, trash_root)
-        except OSError as error:
+        except (OSError, subprocess.SubprocessError) as error:
+            if not os.path.lexists(target):
+                print(f"Already absent: {target}", flush=True)
+                continue
             remaining["artifacts"].append(entry)
-            warnings.append(f"Could not remove {item['path']}: {error}.")
+            detail = getattr(error, "stderr", None)
+            message = detail.strip() if isinstance(detail, str) and detail.strip() else str(error)
+            warnings.append(f"Could not remove {item['path']}: {message}.")
+            continue
+        if item["kind"] == "directory":
+            print(f"Removed empty directory: {target}", flush=True)
+        else:
+            print(f"Moved to Trash: {target}", flush=True)
     return remaining, warnings

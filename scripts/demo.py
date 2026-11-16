@@ -1743,6 +1743,7 @@ class DemoCleanup:
         self.data = load_manifest(self.manifest_file)
         self.projects = demo_projects_for(self.data, self.root)
         self.failed = False
+        self.manifest_finalized = False
 
     def confirm(self, preview: list[str]) -> bool:
         print("Garden demo cleanup preview:", flush=True)
@@ -2133,11 +2134,32 @@ class DemoCleanup:
             or self.data["docker_images"]
         )
         if nothing_left:
+            if not self.manifest_finalized:
+                self.trash_with_report(self.manifest_file, "Garden install manifest")
+                self.manifest_finalized = True
             with contextlib.suppress(OSError):
-                trash_path(self.manifest_file)
                 self.manifest_file.parent.rmdir()
             return
         save_manifest(self.manifest_file, self.data)
+
+    def trash_with_report(self, path: Path, description: str) -> None:
+        if not os.path.lexists(path):
+            print(f"{description} already absent: {path}", flush=True)
+            return
+        try:
+            trash_path(path)
+        except (OSError, subprocess.SubprocessError) as error:
+            if not os.path.lexists(path):
+                print(f"{description} already absent: {path}", flush=True)
+                return
+            print(f"Warning: could not move {description} to Trash: {error}", file=sys.stderr)
+            self.failed = True
+            return
+        if os.path.lexists(path):
+            print(f"Warning: {description} remains at {path}.", file=sys.stderr)
+            self.failed = True
+            return
+        print(f"Moved {description} to Trash: {path}", flush=True)
 
     def run(self):
         force = bool(getattr(self.args, "force", False) or getattr(self.args, "drop_login", False))
@@ -2222,13 +2244,14 @@ class DemoCleanup:
         # Only --remove-env or an interactive answer moves .env. --yes confirms the listed
         # cleanup and never prompts, so an unattended run cannot wait here.
         env_file = Path(self.args.env_file).resolve()
+        if self.args.remove_env:
+            self.trash_with_report(env_file, "Environment file")
+            return
         if not env_file.exists():
             return
-        if self.args.remove_env:
-            trash_path(env_file)
-        elif sys.stdin.isatty() and not self.args.yes:
+        if sys.stdin.isatty() and not self.args.yes:
             if input(f"Also move {env_file} to Trash? [y/N] ").strip().lower() in {"y", "yes"}:
-                trash_path(env_file)
+                self.trash_with_report(env_file, "Environment file")
         else:
             print(f"Kept {env_file}; pass --remove-env to move it to Trash.", flush=True)
 
