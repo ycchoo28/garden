@@ -9,9 +9,27 @@ from typing import cast
 
 import pytest
 
+from garden.trace_contract import GARDEN_EVAL_RUN_ID_ENV, GARDEN_EVAL_TRIAL_ID_ENV
 from tests.evals import runner
 from tests.evals.tasks import DRAFT_ONE_RECEIPT, ClaimDraftTask
 from tests.shared.stack import Services
+
+
+def test_trial_backend_environment_uses_the_shared_trace_contract(tmp_path: Path) -> None:
+    env = runner._backend_env(  # pyright: ignore[reportPrivateUsage]
+        "garden_agent_eval_run-perfect",
+        tmp_path,
+        {
+            "GARDEN_DATABASE_URL": "postgresql://garden@127.0.0.1:55432/garden",
+            GARDEN_EVAL_RUN_ID_ENV: "stale-run",
+            GARDEN_EVAL_TRIAL_ID_ENV: "stale-trial",
+        },
+        run_id="run-42",
+        trial_id="run-42-perfect",
+    )
+
+    assert env[GARDEN_EVAL_RUN_ID_ENV] == "run-42"
+    assert env[GARDEN_EVAL_TRIAL_ID_ENV] == "run-42-perfect"
 
 
 def test_trial_runner_error_is_recorded_and_does_not_stop_later_trials(

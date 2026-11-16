@@ -19,6 +19,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
+from garden.trace_contract import GARDEN_EVAL_RUN_ID_ENV, GARDEN_EVAL_TRIAL_ID_ENV
 from tests.evals.embedding import ensure_embedding_server
 from tests.evals.grading import GraderResult, trial_passed
 from tests.evals.harness import DshHarnessAdapter
@@ -170,7 +171,14 @@ def _template_marker() -> str:
     )
 
 
-def _backend_env(database: str, files_root: Path, base_env: dict[str, str]) -> dict[str, str]:
+def _backend_env(
+    database: str,
+    files_root: Path,
+    base_env: dict[str, str],
+    *,
+    run_id: str | None = None,
+    trial_id: str | None = None,
+) -> dict[str, str]:
     env = {key: value for key, value in base_env.items() if not key.startswith("GARDEN_")}
     env.update(
         {
@@ -190,6 +198,10 @@ def _backend_env(database: str, files_root: Path, base_env: dict[str, str]) -> d
     )
     if "GARDEN_EMBEDDING_URL" in base_env:
         env["GARDEN_EMBEDDING_URL"] = base_env["GARDEN_EMBEDDING_URL"]
+    if run_id is not None:
+        env[GARDEN_EVAL_RUN_ID_ENV] = run_id
+    if trial_id is not None:
+        env[GARDEN_EVAL_TRIAL_ID_ENV] = trial_id
     return env
 
 
@@ -199,13 +211,16 @@ def _start_api(
     log: Path,
     base_env: dict[str, str],
     services: Services,
+    *,
+    run_id: str | None = None,
+    trial_id: str | None = None,
 ) -> str:
     port = free_port()
     files_root.mkdir(parents=True, exist_ok=True)
     process = services.start(
         ["uv", "run", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", str(port)],
         cwd=REPO / "backend",
-        env=_backend_env(database, files_root, base_env),
+        env=_backend_env(database, files_root, base_env, run_id=run_id, trial_id=trial_id),
         log=log,
     )
     url = f"http://127.0.0.1:{port}"
@@ -477,6 +492,8 @@ def run_trial(
                 output / "logs" / f"{trial_id}.log",
                 env,
                 services,
+                run_id=run_id,
+                trial_id=trial_id,
             )
             adapter: DshHarnessAdapter | None = None
             try:

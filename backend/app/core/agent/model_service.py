@@ -6,11 +6,43 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
+from threading import Lock
 from typing import Annotated, Any, cast
 
 import anyio
 import httpx
 from fastapi import Depends
+from garden.trace_contract import (
+    GARDEN_AGENT_CONVERSATION_ID,
+    GARDEN_AGENT_LOGIN_ID,
+    GARDEN_CONTENT_CAPTURED,
+    GARDEN_CONVERSATION_TITLE_SIDE_CALL,
+    GARDEN_EVAL_RUN_ID,
+    GARDEN_EVAL_TRIAL_ID,
+    GARDEN_MODEL_SIDE_CALL_TYPE,
+    GARDEN_MODEL_TOOL_NAMES,
+    GARDEN_MODEL_TOTAL_TOKENS,
+    GARDEN_PERSON_ID,
+    GEN_AI_CAPTURE_EVENT_MODES,
+    GEN_AI_CAPTURE_SPAN_MODES,
+    GEN_AI_CONVERSATION_ID,
+    GEN_AI_CUSTOM_PROVIDER,
+    GEN_AI_INFERENCE_EVENT,
+    GEN_AI_INPUT_MESSAGES,
+    GEN_AI_OPERATION_NAME,
+    GEN_AI_OUTPUT_MESSAGES,
+    GEN_AI_PROVIDER_NAME,
+    GEN_AI_REQUEST_MODEL,
+    GEN_AI_REQUEST_STREAM,
+    GEN_AI_RESPONSE_ID,
+    GEN_AI_RESPONSE_MODEL,
+    GEN_AI_RESPONSE_STATUS,
+    GEN_AI_USAGE_INPUT_TOKENS,
+    GEN_AI_USAGE_OUTPUT_TOKENS,
+)
+from opentelemetry import _logs, trace
+from opentelemetry._logs import SeverityNumber
+from opentelemetry.trace import Span, SpanKind, Status, StatusCode
 
 from app.config import Settings, get_settings
 from app.core.agent.models import Usage
@@ -24,6 +56,9 @@ UPSTREAM_TIMEOUT_SECONDS = 60.0
 # How long to keep reading a stream the client dropped, to learn what the upstream billed.
 DRAIN_SECONDS = 30.0
 RATE_WINDOW = timedelta(minutes=1)
+AGENT_CONVERSATION_IDLE_GAP = timedelta(minutes=30)
+_agent_conversations: dict[tuple[uuid.UUID, uuid.UUID | None], tuple[str, datetime]] = {}
+_agent_conversations_lock = Lock()
 
 
 class ModelUnavailable(ProblemError):
@@ -85,6 +120,180 @@ def _count(value: object) -> int:
     return value if isinstance(value, int) and not isinstance(value, bool) else 0
 
 
+def _usage_counts(usage: dict[str, Any]) -> tuple[int, int, int]:
+    prompt = _count(usage.get("prompt_tokens"))
+    completion = _count(usage.get("completion_tokens"))
+    total = _count(usage.get("total_tokens")) or prompt + completion
+    return prompt, completion, total
+
+
+def _conversation_id(
+    *,
+    person_id: uuid.UUID,
+    cli_login_id: uuid.UUID | None,
+    now: datetime,
+    supplied: str | None,
+) -> str:
+    if supplied and len(supplied) > 128:
+        supplied = None
+    key = (person_id, cli_login_id)
+    with _agent_conversations_lock:
+        expired = [
+            login
+            for login, (_, last_seen) in _agent_conversations.items()
+            if now - last_seen > AGENT_CONVERSATION_IDLE_GAP
+        ]
+        for login in expired:
+            _agent_conversations.pop(login, None)
+        previous = _agent_conversations.get(key)
+        if supplied:
+            conversation = supplied
+        elif previous is not None and now - previous[1] <= AGENT_CONVERSATION_IDLE_GAP:
+            conversation = previous[0]
+        else:
+            conversation = str(uuid.uuid4())
+        _agent_conversations[key] = (conversation, now)
+        return conversation
+
+
+def _content_parts(content: object) -> list[dict[str, Any]]:
+    if isinstance(content, str):
+        return [{"type": "text", "content": content}]
+    if not isinstance(content, list):
+        return []
+    parts: list[dict[str, Any]] = []
+    for raw_part in cast("list[object]", content):
+        part = raw_part
+        if isinstance(part, str):
+            parts.append({"type": "text", "content": part})
+        elif isinstance(part, dict):
+            part = cast("dict[str, Any]", part)
+            if part.get("type") == "text":
+                text = part.get("text", part.get("content"))
+                if isinstance(text, str):
+                    parts.append({"type": "text", "content": text})
+            else:
+                parts.append(part)
+    return parts
+
+
+def _trace_messages(messages: object) -> list[dict[str, Any]] | None:
+    if not isinstance(messages, list):
+        return None
+    result: list[dict[str, Any]] = []
+    for raw_message in cast("list[object]", messages):
+        if not isinstance(raw_message, dict):
+            continue
+        message = cast("dict[str, Any]", raw_message)
+        role = message.get("role")
+        traced: dict[str, Any] = {
+            "role": role if isinstance(role, str) else "unknown",
+            "parts": _content_parts(message.get("content")),
+        }
+        tool_calls = message.get("tool_calls")
+        if isinstance(tool_calls, list):
+            for raw_call in cast("list[object]", tool_calls):
+                if not isinstance(raw_call, dict):
+                    continue
+                call = cast("dict[str, Any]", raw_call)
+                function = call.get("function")
+                if not isinstance(function, dict):
+                    continue
+                function = cast("dict[str, Any]", function)
+                arguments: object = function.get("arguments", {})
+                if isinstance(arguments, str):
+                    try:
+                        arguments = json.loads(arguments)
+                    except ValueError:
+                        arguments = {"value": arguments}
+                traced["parts"].append(
+                    {
+                        "type": "tool_call",
+                        "id": call.get("id", ""),
+                        "name": function.get("name", ""),
+                        "arguments": arguments,
+                    }
+                )
+        result.append(traced)
+    return result
+
+
+def _tool_names(messages: object) -> list[str]:
+    traced = _trace_messages(messages)
+    if traced is None:
+        return []
+    names: list[str] = []
+    for message in traced:
+        for part in message["parts"]:
+            name = part.get("name")
+            if part.get("type") == "tool_call" and isinstance(name, str) and name not in names:
+                names.append(name)
+    return names
+
+
+def _response_messages(response: dict[str, Any]) -> list[dict[str, Any]]:
+    choices = response.get("choices")
+    if not isinstance(choices, list):
+        return []
+    result: list[dict[str, Any]] = []
+    for raw_choice in cast("list[object]", choices):
+        if not isinstance(raw_choice, dict):
+            continue
+        choice = cast("dict[str, Any]", raw_choice)
+        message = choice.get("message")
+        if not isinstance(message, dict):
+            continue
+        message = cast("dict[str, Any]", message)
+        result.extend(_trace_messages([message]) or [])
+        finish_reason = choice.get("finish_reason")
+        if isinstance(finish_reason, str):
+            result[-1]["finish_reason"] = finish_reason
+    return result
+
+
+def _stream_delta(line: str) -> tuple[str, list[str]]:
+    if not line.startswith("data:"):
+        return "", []
+    try:
+        event: object = json.loads(line[len("data:") :])
+    except ValueError:
+        return "", []
+    if not isinstance(event, dict):
+        return "", []
+    event = cast("dict[str, Any]", event)
+    choices = event.get("choices")
+    if not isinstance(choices, list):
+        return "", []
+    text = ""
+    names: list[str] = []
+    for raw_choice in cast("list[object]", choices):
+        if not isinstance(raw_choice, dict):
+            continue
+        choice = cast("dict[str, Any]", raw_choice)
+        delta = choice.get("delta")
+        if not isinstance(delta, dict):
+            continue
+        delta = cast("dict[str, Any]", delta)
+        content = delta.get("content")
+        if isinstance(content, str):
+            text += content
+        tool_calls = delta.get("tool_calls")
+        if isinstance(tool_calls, list):
+            for raw_call in cast("list[object]", tool_calls):
+                if not isinstance(raw_call, dict):
+                    continue
+                call = cast("dict[str, Any]", raw_call)
+                function = call.get("function")
+                name = (
+                    cast("dict[str, Any]", function).get("name")
+                    if isinstance(function, dict)
+                    else None
+                )
+                if isinstance(name, str) and name not in names:
+                    names.append(name)
+    return text, names
+
+
 class ModelService:
     def __init__(
         self,
@@ -104,32 +313,237 @@ class ModelService:
             default=self._settings.default_model,
         )
 
+    def _start_chat_span(
+        self,
+        person_id: uuid.UUID,
+        cli_login_id: uuid.UUID | None,
+        model: str,
+        now: datetime,
+        body: dict[str, Any],
+        supplied_conversation_id: str | None,
+        supplied_side_call_type: str | None,
+    ) -> tuple[Span, bool, list[dict[str, Any]] | None, dict[str, Any]]:
+        metadata = body.get("metadata")
+        if not supplied_conversation_id and isinstance(metadata, dict):
+            metadata = cast("dict[str, Any]", metadata)
+            candidate = metadata.get(GARDEN_AGENT_CONVERSATION_ID)
+            if isinstance(candidate, str) and 0 < len(candidate) <= 128:
+                supplied_conversation_id = candidate
+        conversation_id = _conversation_id(
+            person_id=person_id,
+            cli_login_id=cli_login_id,
+            now=now,
+            supplied=supplied_conversation_id,
+        )
+        messages = _trace_messages(body.get("messages"))
+        capture_content = (
+            self._settings.gen_ai_capture_content != "NO_CONTENT" and messages is not None
+        )
+        capture_on_span = self._settings.gen_ai_capture_content in GEN_AI_CAPTURE_SPAN_MODES
+        attributes: dict[str, Any] = {
+            GEN_AI_OPERATION_NAME: "chat",
+            GEN_AI_PROVIDER_NAME: GEN_AI_CUSTOM_PROVIDER,
+            GEN_AI_REQUEST_MODEL: model,
+            GEN_AI_CONVERSATION_ID: conversation_id,
+            GARDEN_PERSON_ID: str(person_id),
+            GARDEN_AGENT_CONVERSATION_ID: conversation_id,
+            GARDEN_CONTENT_CAPTURED: capture_content,
+        }
+        if body.get("stream") is True:
+            attributes[GEN_AI_REQUEST_STREAM] = True
+        if cli_login_id is not None:
+            attributes[GARDEN_AGENT_LOGIN_ID] = str(cli_login_id)
+        if self._settings.eval_run_id:
+            attributes[GARDEN_EVAL_RUN_ID] = self._settings.eval_run_id
+        if self._settings.eval_trial_id:
+            attributes[GARDEN_EVAL_TRIAL_ID] = self._settings.eval_trial_id
+        if capture_content and capture_on_span and messages is not None:
+            attributes[GEN_AI_INPUT_MESSAGES] = json.dumps(messages, ensure_ascii=False)
+
+        side_call_type = supplied_side_call_type
+        if not side_call_type and isinstance(metadata, dict):
+            metadata = cast("dict[str, Any]", metadata)
+            candidate = metadata.get(GARDEN_MODEL_SIDE_CALL_TYPE)
+            if candidate == GARDEN_CONVERSATION_TITLE_SIDE_CALL or metadata.get("task") in {
+                "title",
+                "title_generation",
+                GARDEN_CONVERSATION_TITLE_SIDE_CALL,
+            }:
+                side_call_type = GARDEN_CONVERSATION_TITLE_SIDE_CALL
+        if side_call_type in {
+            "title",
+            "title_generation",
+            GARDEN_CONVERSATION_TITLE_SIDE_CALL,
+        }:
+            attributes[GARDEN_MODEL_SIDE_CALL_TYPE] = GARDEN_CONVERSATION_TITLE_SIDE_CALL
+
+        span = trace.get_tracer("garden.model_gateway").start_span(
+            "chat", kind=SpanKind.CLIENT, attributes=attributes
+        )
+        return span, capture_content, messages, attributes
+
+    def _finish_chat_span(
+        self,
+        span: Span,
+        status: str,
+        usage: dict[str, Any],
+        model: str,
+        *,
+        capture_content: bool,
+        input_messages: list[dict[str, Any]] | None,
+        attributes: dict[str, Any],
+        response: dict[str, Any] | None = None,
+        output_messages: list[dict[str, Any]] | None = None,
+        tool_names: list[str] | None = None,
+    ) -> None:
+        prompt_tokens, completion_tokens, total_tokens = _usage_counts(usage)
+        attributes[GEN_AI_USAGE_INPUT_TOKENS] = prompt_tokens
+        attributes[GEN_AI_USAGE_OUTPUT_TOKENS] = completion_tokens
+        attributes[GARDEN_MODEL_TOTAL_TOKENS] = total_tokens
+        attributes[GEN_AI_RESPONSE_STATUS] = {
+            "ok": "completed",
+            "upstream_error": "failed",
+            "cancelled": "cancelled",
+        }[status]
+        response_model = response.get("model") if response is not None else None
+        attributes[GEN_AI_RESPONSE_MODEL] = (
+            response_model if isinstance(response_model, str) else model
+        )
+        if response is not None:
+            response_id = response.get("id")
+            if isinstance(response_id, str) and response_id:
+                attributes[GEN_AI_RESPONSE_ID] = response_id
+            output_messages = _response_messages(response)
+            choices = response.get("choices")
+            if isinstance(choices, list):
+                messages: list[dict[str, Any]] = []
+                for raw_choice in cast("list[object]", choices):
+                    if not isinstance(raw_choice, dict):
+                        continue
+                    choice = cast("dict[str, Any]", raw_choice)
+                    message = choice.get("message")
+                    if isinstance(message, dict):
+                        messages.append(cast("dict[str, Any]", message))
+                tool_names = _tool_names(messages)
+        if tool_names:
+            attributes[GARDEN_MODEL_TOOL_NAMES] = tool_names
+        capture_on_span = self._settings.gen_ai_capture_content in GEN_AI_CAPTURE_SPAN_MODES
+        capture_on_event = self._settings.gen_ai_capture_content in GEN_AI_CAPTURE_EVENT_MODES
+        if capture_content and capture_on_span and output_messages:
+            attributes[GEN_AI_OUTPUT_MESSAGES] = json.dumps(output_messages, ensure_ascii=False)
+        if status == "ok":
+            span.set_status(Status(StatusCode.OK))
+        else:
+            attributes["error.type"] = status
+            span.set_status(Status(StatusCode.ERROR, status))
+        for name, value in attributes.items():
+            span.set_attribute(name, value)
+        if capture_content and capture_on_event:
+            event_attributes = dict(attributes)
+            if input_messages is not None:
+                event_attributes[GEN_AI_INPUT_MESSAGES] = input_messages
+            if output_messages:
+                event_attributes[GEN_AI_OUTPUT_MESSAGES] = output_messages
+            _logs.get_logger("garden.model_gateway").emit(
+                event_name=GEN_AI_INFERENCE_EVENT,
+                severity_number=SeverityNumber.DEBUG,
+                attributes=event_attributes,
+                context=trace.set_span_in_context(span),
+            )
+        span.end()
+
     async def complete(
-        self, *, person_id: uuid.UUID, cli_login_id: uuid.UUID | None, body: dict[str, Any]
+        self,
+        *,
+        person_id: uuid.UUID,
+        cli_login_id: uuid.UUID | None,
+        body: dict[str, Any],
+        agent_conversation_id: str | None = None,
+        model_side_call_type: str | None = None,
     ) -> dict[str, Any]:
         if not self._settings.agent_model_upstream_url:
             raise ModelUnavailable("The model gateway has no upstream model configured.")
         model, now = await self._admit(person_id=person_id, cli_login_id=cli_login_id, body=body)
+        span, capture_content, input_messages, trace_attributes = self._start_chat_span(
+            person_id,
+            cli_login_id,
+            model,
+            now,
+            body,
+            agent_conversation_id,
+            model_side_call_type,
+        )
         try:
             response = await self._forward(body)
         except UpstreamFailed:
-            await self._settle(person_id, cli_login_id, model, now, "upstream_error", {})
+            usage: dict[str, Any] = {}
+            try:
+                self._finish_chat_span(
+                    span,
+                    "upstream_error",
+                    usage,
+                    model,
+                    capture_content=capture_content,
+                    input_messages=input_messages,
+                    attributes=trace_attributes,
+                )
+            finally:
+                await self._settle(person_id, cli_login_id, model, now, "upstream_error", usage)
             raise
         except BaseException:
             # The caller went away while the upstream was thinking. The call still counts.
-            await self._settle(person_id, cli_login_id, model, now, "cancelled", {})
+            usage = {}
+            try:
+                self._finish_chat_span(
+                    span,
+                    "cancelled",
+                    usage,
+                    model,
+                    capture_content=capture_content,
+                    input_messages=input_messages,
+                    attributes=trace_attributes,
+                )
+            finally:
+                await self._settle(person_id, cli_login_id, model, now, "cancelled", usage)
             raise
         reported: object = response.get("usage")
         usage = cast("dict[str, Any]", reported) if isinstance(reported, dict) else {}
-        await self._settle(person_id, cli_login_id, model, now, "ok", usage)
+        try:
+            self._finish_chat_span(
+                span,
+                "ok",
+                usage,
+                model,
+                capture_content=capture_content,
+                input_messages=input_messages,
+                attributes=trace_attributes,
+                response=response,
+            )
+        finally:
+            await self._settle(person_id, cli_login_id, model, now, "ok", usage)
         return response
 
     async def stream(
-        self, *, person_id: uuid.UUID, cli_login_id: uuid.UUID | None, body: dict[str, Any]
+        self,
+        *,
+        person_id: uuid.UUID,
+        cli_login_id: uuid.UUID | None,
+        body: dict[str, Any],
+        agent_conversation_id: str | None = None,
+        model_side_call_type: str | None = None,
     ) -> AsyncIterator[bytes]:
         """Open a streamed completion. Refusals and upstream failures raise before any bytes
         go out. The usage is asked for in the stream, so it can be recorded when the answer ends."""
         model, now = await self._admit(person_id=person_id, cli_login_id=cli_login_id, body=body)
+        span, capture_content, input_messages, trace_attributes = self._start_chat_span(
+            person_id,
+            cli_login_id,
+            model,
+            now,
+            body,
+            agent_conversation_id,
+            model_side_call_type,
+        )
         url = f"{self._settings.agent_model_upstream_url.rstrip('/')}/chat/completions"
         client = httpx.AsyncClient(transport=self._transport, timeout=UPSTREAM_TIMEOUT_SECONDS)
         options = body.get("stream_options")
@@ -144,14 +558,64 @@ class ModelService:
             )
         except httpx.HTTPError as error:
             await client.aclose()
-            await self._settle(person_id, cli_login_id, model, now, "upstream_error", {})
+            usage: dict[str, Any] = {}
+            try:
+                self._finish_chat_span(
+                    span,
+                    "upstream_error",
+                    usage,
+                    model,
+                    capture_content=capture_content,
+                    input_messages=input_messages,
+                    attributes=trace_attributes,
+                )
+            finally:
+                await self._settle(person_id, cli_login_id, model, now, "upstream_error", usage)
             raise UpstreamFailed("The upstream model could not answer.") from error
+        except BaseException:
+            usage = {}
+            with anyio.CancelScope(shield=True):
+                await client.aclose()
+                self._finish_chat_span(
+                    span,
+                    "cancelled",
+                    usage,
+                    model,
+                    capture_content=capture_content,
+                    input_messages=input_messages,
+                    attributes=trace_attributes,
+                )
+                await self._settle(person_id, cli_login_id, model, now, "cancelled", usage)
+            raise
         if upstream.status_code >= 400:
             await upstream.aclose()
             await client.aclose()
-            await self._settle(person_id, cli_login_id, model, now, "upstream_error", {})
+            usage = {}
+            try:
+                self._finish_chat_span(
+                    span,
+                    "upstream_error",
+                    usage,
+                    model,
+                    capture_content=capture_content,
+                    input_messages=input_messages,
+                    attributes=trace_attributes,
+                )
+            finally:
+                await self._settle(person_id, cli_login_id, model, now, "upstream_error", usage)
             raise UpstreamFailed("The upstream model could not answer.")
-        return self._relay(client, upstream, person_id, cli_login_id, model, now)
+        return self._relay(
+            client,
+            upstream,
+            person_id,
+            cli_login_id,
+            model,
+            now,
+            span,
+            capture_content,
+            input_messages,
+            trace_attributes,
+        )
 
     async def _relay(
         self,
@@ -161,15 +625,27 @@ class ModelService:
         cli_login_id: uuid.UUID | None,
         model: str,
         now: datetime,
+        span: Span,
+        capture_content: bool,
+        input_messages: list[dict[str, Any]] | None,
+        trace_attributes: dict[str, Any],
     ) -> AsyncIterator[bytes]:
         """Pass the upstream's server-sent events through unchanged and count usage when it ends."""
         usage: dict[str, Any] = {}
         status = "ok"
+        content: list[str] = []
+        tool_names: list[str] = []
         lines = upstream.aiter_lines()
         try:
             async for line in lines:
                 if line.startswith("data:") and '"usage"' in line:
                     _merge(usage, _event_usage(line))
+                text, names = _stream_delta(line)
+                if capture_content and text:
+                    content.append(text)
+                for name in names:
+                    if name not in tool_names:
+                        tool_names.append(name)
                 yield f"{line}\n".encode()
         except httpx.HTTPError:
             status = "upstream_error"
@@ -186,10 +662,28 @@ class ModelService:
                     pass
             raise
         finally:
+            output_messages = (
+                [{"role": "assistant", "parts": [{"type": "text", "content": "".join(content)}]}]
+                if content
+                else []
+            )
             with anyio.CancelScope(shield=True):
                 await upstream.aclose()
                 await client.aclose()
-            await self._settle(person_id, cli_login_id, model, now, status, usage)
+                try:
+                    self._finish_chat_span(
+                        span,
+                        status,
+                        usage,
+                        model,
+                        capture_content=capture_content,
+                        input_messages=input_messages,
+                        attributes=trace_attributes,
+                        output_messages=output_messages,
+                        tool_names=tool_names,
+                    )
+                finally:
+                    await self._settle(person_id, cli_login_id, model, now, status, usage)
 
     async def _admit(
         self, *, person_id: uuid.UUID, cli_login_id: uuid.UUID | None, body: dict[str, Any]
@@ -262,10 +756,7 @@ class ModelService:
         status: str,
         usage: dict[str, Any],
     ) -> None:
-        counts = usage
-        prompt = _count(counts.get("prompt_tokens"))
-        completion = _count(counts.get("completion_tokens"))
-        total = _count(counts.get("total_tokens")) or prompt + completion
+        prompt, completion, total = _usage_counts(usage)
         self._repo.add(
             Usage(
                 id=new_id(),
