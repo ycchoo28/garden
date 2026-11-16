@@ -311,9 +311,9 @@ architecture-check:
 guardrail-test:
     uv run --project backend pytest scripts/tests -q
 
-# Scan the git history and the working tree for committed secrets.
+# Scan all committed history reachable from the checked-out commit.
 secrets-check:
-    gitleaks git --no-banner --redact --exit-code 1 --log-opts='origin/main..HEAD' .
+    gitleaks git --no-banner --redact --exit-code 1 --log-opts='HEAD' .
 
 # Check that the relative links in the Markdown files point at files and headings that exist.
 docs-check:
