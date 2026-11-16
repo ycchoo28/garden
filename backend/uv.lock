@@ -521,15 +521,20 @@ version = "0.1.0"
 source = { editable = "../agent" }
 dependencies = [
     { name = "keyring" },
+    { name = "opentelemetry-api" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "keyring", specifier = "==25.6.0" }]
+requires-dist = [
+    { name = "keyring", specifier = "==25.6.0" },
+    { name = "opentelemetry-api", specifier = "==1.45.2" },
+]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "import-linter", specifier = "==2.15" },
     { name = "mcp", specifier = "==1.30.0" },
+    { name = "opentelemetry-sdk", specifier = "==1.45.2" },
     { name = "pyright", specifier = "==1.1.414" },
     { name = "pytest", specifier = "==9.1.1" },
     { name = "pytest-asyncio", specifier = "==1.4.0" },

@@ -26,7 +26,7 @@ def _as_object(value: object) -> JsonObject | None:
 @dataclass(frozen=True)
 class GraderResult:
     grader: str
-    verdict: Literal["pass", "fail"]
+    verdict: Literal["pass", "fail", "unknown"]
     reason: str
 
 
@@ -47,7 +47,16 @@ def api_json(base_url: str, path: str, token: str) -> object:
 class DraftClaimGrader:
     id = "draft-claim-with-one-receipt"
 
-    def grade(self, base_url: str, token: str, task: ClaimDraftTask) -> GraderResult:
+    def grade(
+        self,
+        base_url: str,
+        token: str,
+        task: ClaimDraftTask,
+        *,
+        answer: str = "",
+        reference: bool = False,
+    ) -> GraderResult:
+        del answer, reference
         try:
             summary_value = api_json(base_url, "/api/claims", token)
             if not isinstance(summary_value, list):

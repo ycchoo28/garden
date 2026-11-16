@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Literal, Protocol, cast
 
 from tests.evals.grading import DraftClaimGrader
+from tests.evals.task_types import EvalGrader
 
 
 class ReferenceContext(Protocol):
@@ -29,12 +30,13 @@ class ClaimDraftTask:
     budget_seconds: int | None = None
     budget_tokens: int | None = None
     web_tools_off: bool = False
+    requires_embedding: bool = False
     claim_title: str = ""
     category: str = ""
     spent_on: date = date.min
     amount: str = ""
     description: str = ""
-    graders: tuple[DraftClaimGrader, ...] = ()
+    graders: tuple[EvalGrader, ...] = ()
     perfect: Callable[[ReferenceContext, ClaimDraftTask], str] | None = None
     wrong: Callable[[ReferenceContext, ClaimDraftTask], str] | None = None
 

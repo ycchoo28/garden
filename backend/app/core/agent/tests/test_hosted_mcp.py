@@ -7,18 +7,34 @@ import base64
 import hashlib
 import json
 import re
+import secrets
 import socket
-from collections.abc import AsyncGenerator, AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator, Iterator, Mapping
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 import pytest
 import pytest_asyncio
 from fastapi import FastAPI
+from garden.trace_contract import (
+    GARDEN_AGENT_LOGIN_ID,
+    GARDEN_CONTENT_CAPTURED,
+    GARDEN_EVAL_RUN_ID,
+    GARDEN_EVAL_RUN_ID_ENV,
+    GARDEN_EVAL_TRIAL_ID,
+    GARDEN_EVAL_TRIAL_ID_ENV,
+    GARDEN_PERSON_ID,
+    GEN_AI_OPERATION_NAME,
+)
 from httpx import AsyncClient, Response
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+from opentelemetry.trace import SpanContext
 from sqlalchemy import select
 from uvicorn import Config, Server
 
@@ -34,6 +50,28 @@ from tests.support import bearer, cli_sign_in, sign_in
 
 ENDPOINT = "/api/agent/mcp"
 MARCUS = "marcus.lee@fernhill.example"
+
+
+def _span_attributes(span: Any) -> Mapping[str, Any]:
+    attributes: object = span.attributes
+    assert isinstance(attributes, Mapping)
+    return cast("Mapping[str, Any]", attributes)
+
+
+def _span_context(span: Any) -> SpanContext:
+    context = span.context
+    assert context is not None
+    return context
+
+
+@pytest.fixture
+def trace_exporter(monkeypatch: pytest.MonkeyPatch) -> Iterator[InMemorySpanExporter]:
+    provider = TracerProvider()
+    exporter = InMemorySpanExporter()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    monkeypatch.setattr(trace, "get_tracer", provider.get_tracer)
+    yield exporter
+    provider.shutdown()
 
 
 def _loopback_listener() -> socket.socket:
@@ -764,3 +802,131 @@ async def test_path_like_upload_arguments_are_refused_through_the_mounted_endpoi
         [path for path in stored_root.rglob("*") if path.is_file()] if stored_root.exists() else []
     )
     assert stored == []
+
+
+@pytest.mark.asyncio
+async def test_api_and_hosted_mcp_spans_continue_traceparent_and_share_identity(
+    client: AsyncClient,
+    identity: FakeIdentity,
+    hosted_mcp_server: str,
+    trace_exporter: InMemorySpanExporter,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(GARDEN_EVAL_RUN_ID_ENV, "run-14")
+    monkeypatch.setenv(GARDEN_EVAL_TRIAL_ID_ENV, "trial-14")
+    token = await cli_sign_in(client, identity, MARCUS, device="trace-test")
+    async with session_factory(get_settings().database_url)() as session:
+        login = await session.scalar(
+            select(CliLogin).where(CliLogin.token_hash == token_hash(token))
+        )
+    assert login is not None
+
+    api_trace_id = secrets.token_hex(16)
+    api_parent_id = secrets.token_hex(8)
+    response = await client.get(
+        "/api/users/me",
+        headers={
+            **bearer(token),
+            "traceparent": f"00-{api_trace_id}-{api_parent_id}-01",
+        },
+    )
+    assert response.status_code == 200, response.text
+    person_id = response.json()["id"]
+    assert response.headers["x-garden-agent-login-id"] == str(login.id)
+    assert response.headers["x-garden-person-id"] == person_id
+
+    async with AsyncClient(
+        base_url=hosted_mcp_server,
+        timeout=None,
+        headers={"Accept": "application/json, text/event-stream"},
+    ) as mcp:
+        hosted_trace_id = secrets.token_hex(16)
+        hosted_parent_id = secrets.token_hex(8)
+        tool_call = await mcp.post(
+            ENDPOINT,
+            headers={
+                **bearer(token),
+                "traceparent": f"00-{hosted_trace_id}-{hosted_parent_id}-01",
+            },
+            json=_call(1, "users_self_read", {}),
+        )
+    assert tool_call.status_code == 200, tool_call.text
+    assert tool_call.json()["result"]["isError"] is False
+
+    spans = trace_exporter.get_finished_spans()
+    for _ in range(100):
+        if any(span.name == "agent.mcp" for span in spans):
+            break
+        await asyncio.sleep(0.01)
+        spans = trace_exporter.get_finished_spans()
+    api_span = next(
+        span
+        for span in spans
+        if span.name == "users.self.read" and _span_context(span).trace_id == int(api_trace_id, 16)
+    )
+    api_attributes = _span_attributes(api_span)
+    assert api_span.parent is not None
+    assert api_span.parent.span_id == int(api_parent_id, 16)
+    assert api_attributes["garden.agent.flag"] is True
+    assert api_attributes[GARDEN_AGENT_LOGIN_ID] == str(login.id)
+    assert api_attributes[GARDEN_PERSON_ID] == person_id
+    assert api_attributes[GARDEN_EVAL_RUN_ID] == "run-14"
+    assert api_attributes[GARDEN_EVAL_TRIAL_ID] == "trial-14"
+    assert api_attributes[GARDEN_CONTENT_CAPTURED] is False
+
+    hosted_trace_spans = [
+        span for span in spans if _span_context(span).trace_id == int(hosted_trace_id, 16)
+    ]
+    assert hosted_trace_spans, [
+        (
+            span.name,
+            f"{_span_context(span).trace_id:032x}",
+            span.parent.span_id if span.parent else None,
+        )
+        for span in spans
+    ]
+    hosted_span = next((span for span in hosted_trace_spans if span.name == "agent.mcp"), None)
+    assert hosted_span is not None, [
+        (
+            span.name,
+            f"{_span_context(span).span_id:016x}",
+            f"{span.parent.span_id:016x}" if span.parent else None,
+        )
+        for span in hosted_trace_spans
+    ]
+    tool_span = next(span for span in hosted_trace_spans if span.name == "users_self_read")
+    route_span = next(
+        span
+        for span in hosted_trace_spans
+        if span.name == "users.self.read"
+        and span.parent is not None
+        and span.parent.span_id == _span_context(tool_span).span_id
+    )
+    assert hosted_span.parent is not None
+    assert hosted_span.parent.span_id == int(hosted_parent_id, 16)
+    assert tool_span.parent is not None
+    assert tool_span.parent.span_id == _span_context(hosted_span).span_id
+    assert route_span.parent is not None
+    assert route_span.parent.span_id == _span_context(tool_span).span_id
+    hosted_attributes = _span_attributes(hosted_span)
+    tool_attributes = _span_attributes(tool_span)
+    route_attributes = _span_attributes(route_span)
+    assert hosted_attributes["garden.agent.flag"] is True, [
+        (
+            span.name,
+            f"{_span_context(span).span_id:016x}",
+            f"{span.parent.span_id:016x}" if span.parent else None,
+            dict(_span_attributes(span)),
+        )
+        for span in hosted_trace_spans
+    ]
+    assert hosted_attributes[GARDEN_AGENT_LOGIN_ID] == str(login.id)
+    assert hosted_attributes[GARDEN_PERSON_ID] == person_id
+    assert hosted_attributes[GARDEN_EVAL_TRIAL_ID] == "trial-14"
+    assert tool_attributes[GEN_AI_OPERATION_NAME] == "execute_tool"
+    assert tool_attributes["garden.agent.flag"] is True
+    assert tool_attributes[GARDEN_AGENT_LOGIN_ID] == str(login.id)
+    assert tool_attributes[GARDEN_PERSON_ID] == person_id
+    assert tool_attributes[GARDEN_EVAL_TRIAL_ID] == "trial-14"
+    assert route_attributes[GEN_AI_OPERATION_NAME] == "execute_tool"
+    assert route_attributes[GARDEN_AGENT_LOGIN_ID] == str(login.id)

@@ -23,6 +23,7 @@ from app.shared.permissions import (
     check_roles_declare_permissions,
     merge_roles,
 )
+from app.shared.tracing import TraceAPIOperations
 
 
 def _configure_tracing() -> TracerProvider | None:
@@ -69,6 +70,7 @@ def create_app(modules: tuple[InstalledModule, ...] = MODULES) -> FastAPI:
         # Under /api, which every portal address forwards to the API, so the CLI can read it.
         openapi_url="/api/openapi.json",
     )
+    app.add_middleware(TraceAPIOperations)
     install_problem_handlers(app)
     install_contract_headers(app)
     advertise_permissions(app)
