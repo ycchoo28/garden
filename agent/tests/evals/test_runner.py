@@ -22,12 +22,14 @@ def test_trial_backend_environment_uses_the_shared_trace_contract(tmp_path: Path
             GARDEN_EVAL_RUN_ID_ENV: "stale-run",
             GARDEN_EVAL_TRIAL_ID_ENV: "stale-trial",
         },
+        model_env={"GARDEN_AGENT_MODEL_UPSTREAM_URL": "http://127.0.0.1:9090"},
         run_id="run-42",
         trial_id="run-42-perfect",
     )
 
     assert env[GARDEN_EVAL_RUN_ID_ENV] == "run-42"
     assert env[GARDEN_EVAL_TRIAL_ID_ENV] == "run-42-perfect"
+    assert env["GARDEN_AGENT_MODEL_UPSTREAM_URL"] == "http://127.0.0.1:9090"
 
 
 def test_trial_runner_error_is_recorded_and_does_not_stop_later_trials(
