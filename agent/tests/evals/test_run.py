@@ -7,8 +7,8 @@ import pytest
 
 from tests.evals import run
 from tests.evals.registry import TASKS
-from tests.evals.tasks import DRAFT_ONE_RECEIPT
 from tests.evals.task_types import EvalTask
+from tests.evals.tasks import DRAFT_ONE_RECEIPT
 
 
 def _ignore_summary(_summary: dict[str, object], _path: Path) -> None:
