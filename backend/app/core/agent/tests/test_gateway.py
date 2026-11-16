@@ -1,10 +1,12 @@
 """The model gateway, against a fake upstream: allowlist, limits, forwarding and usage counts."""
 
 import json
-from collections.abc import Callable
-from datetime import timedelta
-from typing import Any
+import uuid
+from collections.abc import AsyncGenerator, AsyncIterator, Callable
+from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 
+import anyio
 import httpx
 import pytest
 from fastapi import FastAPI
@@ -14,6 +16,9 @@ from pydantic import SecretStr
 from app.config import Settings
 from app.config import get_settings as real_get_settings
 from app.core.agent import get_upstream_transport
+from app.core.agent.model_service import ModelService
+from app.core.agent.repository import AgentRepository
+from app.shared.db import session_factory
 from tests.fakes import FakeIdentity, MovableClock
 from tests.support import bearer, cli_sign_in, sign_in
 
@@ -356,3 +361,109 @@ def test_the_default_model_must_be_on_the_allowlist() -> None:
             agent_model_models="garden-small",
             agent_model_default="garden-large",
         )
+
+
+class Wire:
+    """A scripted upstream stream: each item is one `data:` event, sent as written."""
+
+    def __init__(self, events: list[dict[str, Any]], *, hold: bool = False) -> None:
+        self.events = events
+        self.hold = hold
+        self.requests = 0
+
+    async def __call__(self, request: httpx.Request) -> httpx.Response:
+        self.requests += 1
+        if self.hold:
+            await anyio.sleep_forever()
+        sent: dict[str, Any] = json.loads(request.content)
+        if sent.get("stream") is True:
+            body = "".join(f"data: {json.dumps(event)}\n\n" for event in self.events)
+            return httpx.Response(
+                200,
+                content=(body + "data: [DONE]\n\n").encode(),
+                headers={"content-type": "text/event-stream"},
+            )
+        return httpx.Response(200, json={"choices": [], **self.events[-1]})
+
+
+async def rows(person_id: uuid.UUID) -> tuple[int, int, int, int]:
+    async with session_factory(real_get_settings().database_url)() as session:
+        return await AgentRepository(session).totals_since(
+            person_id=person_id, since=datetime(2000, 1, 1, tzinfo=UTC)
+        )
+
+
+def service_on(wire: Wire, session: Any) -> ModelService:
+    settings = real_get_settings().model_copy(
+        update={
+            "agent_model_upstream_url": UPSTREAM,
+            "agent_model_models": "garden-small",
+            "agent_model_requests_per_minute": 1000,
+        }
+    )
+    return ModelService(
+        AgentRepository(session),
+        MovableClock(datetime(2026, 11, 3, 9, 0, tzinfo=UTC)),
+        settings,
+        httpx.MockTransport(wire),
+    )
+
+
+async def abandon_after_first_event(events: AsyncIterator[bytes]) -> None:
+    """Read one event and then drop the connection, as a client that is killed does.
+    The server closes the abandoned stream, which is what this does explicitly."""
+    with anyio.CancelScope() as scope:
+        async for _ in events:
+            scope.cancel()
+            await anyio.sleep_forever()
+    await cast("AsyncGenerator[bytes, None]", events).aclose()
+
+
+USAGE = {"prompt_tokens": 11, "completion_tokens": 5, "total_tokens": 16}
+CONTENT = {"choices": [{"delta": {"content": "x"}}]}
+
+
+@pytest.mark.asyncio
+async def test_a_stream_the_client_drops_still_writes_its_row_with_the_upstream_usage(
+    clean_database: None,
+) -> None:
+    person = uuid.uuid4()
+    wire = Wire([CONTENT, CONTENT, {"choices": [], "usage": USAGE}])
+    async with session_factory(real_get_settings().database_url)() as session:
+        events = await service_on(wire, session).stream(
+            person_id=person, cli_login_id=None, body={**CHAT, "stream": True}
+        )
+        await abandon_after_first_event(events)
+    assert await rows(person) == (1, 11, 5, 16)
+
+
+@pytest.mark.asyncio
+async def test_a_call_cancelled_while_the_upstream_thinks_still_writes_its_row(
+    clean_database: None,
+) -> None:
+    person = uuid.uuid4()
+    wire = Wire([], hold=True)
+    async with session_factory(real_get_settings().database_url)() as session:
+        with anyio.move_on_after(0.2):
+            await service_on(wire, session).complete(person_id=person, cli_login_id=None, body=CHAT)
+    assert wire.requests == 1
+    assert await rows(person) == (1, 0, 0, 0)
+
+
+@pytest.mark.asyncio
+async def test_stream_usage_is_counted_when_it_rides_with_content_or_arrives_in_pieces(
+    clean_database: None,
+) -> None:
+    person = uuid.uuid4()
+    wire = Wire(
+        [
+            {**CONTENT, "usage": {"prompt_tokens": 11}},
+            {**CONTENT, "usage": {"completion_tokens": 5}},
+        ]
+    )
+    async with session_factory(real_get_settings().database_url)() as session:
+        service = service_on(wire, session)
+        body = {**CHAT, "stream": True}
+        async for _ in await service.stream(person_id=person, cli_login_id=None, body=body):
+            pass
+    assert await rows(person) == (1, 11, 5, 16)

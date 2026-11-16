@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
 from typing import Annotated, Any, cast
 
+import anyio
 import httpx
 from fastapi import Depends
 
@@ -20,6 +21,8 @@ from app.shared.errors import Forbidden, ProblemError, TooManyRequests
 from app.shared.ids import new_id
 
 UPSTREAM_TIMEOUT_SECONDS = 60.0
+# How long to keep reading a stream the client dropped, to learn what the upstream billed.
+DRAIN_SECONDS = 30.0
 RATE_WINDOW = timedelta(minutes=1)
 
 
@@ -68,6 +71,15 @@ def _event_usage(line: str) -> dict[str, Any]:
     return cast("dict[str, Any]", usage) if isinstance(usage, dict) else {}
 
 
+def _merge(into: dict[str, Any], found: dict[str, Any]) -> None:
+    """Fold one event's usage into the stream's. Counts only grow, so the largest one wins."""
+    for key, value in found.items():
+        if key in into and isinstance(value, int) and isinstance(into[key], int):
+            into[key] = max(into[key], value)
+        else:
+            into[key] = value
+
+
 def _count(value: object) -> int:
     """Token counts from the upstream. Anything that is not a whole number counts as zero."""
     return value if isinstance(value, int) and not isinstance(value, bool) else 0
@@ -101,11 +113,15 @@ class ModelService:
         try:
             response = await self._forward(body)
         except UpstreamFailed:
-            self._record(person_id, cli_login_id, model, now, "upstream_error", {})
-            await self._repo.commit()
+            await self._settle(person_id, cli_login_id, model, now, "upstream_error", {})
             raise
-        self._record(person_id, cli_login_id, model, now, "ok", response.get("usage") or {})
-        await self._repo.commit()
+        except BaseException:
+            # The caller went away while the upstream was thinking. The call still counts.
+            await self._settle(person_id, cli_login_id, model, now, "cancelled", {})
+            raise
+        reported: object = response.get("usage")
+        usage = cast("dict[str, Any]", reported) if isinstance(reported, dict) else {}
+        await self._settle(person_id, cli_login_id, model, now, "ok", usage)
         return response
 
     async def stream(
@@ -128,12 +144,12 @@ class ModelService:
             )
         except httpx.HTTPError as error:
             await client.aclose()
-            await self._record_failure(person_id, cli_login_id, model, now)
+            await self._settle(person_id, cli_login_id, model, now, "upstream_error", {})
             raise UpstreamFailed("The upstream model could not answer.") from error
         if upstream.status_code >= 400:
             await upstream.aclose()
             await client.aclose()
-            await self._record_failure(person_id, cli_login_id, model, now)
+            await self._settle(person_id, cli_login_id, model, now, "upstream_error", {})
             raise UpstreamFailed("The upstream model could not answer.")
         return self._relay(client, upstream, person_id, cli_login_id, model, now)
 
@@ -149,20 +165,31 @@ class ModelService:
         """Pass the upstream's server-sent events through unchanged and count usage when it ends."""
         usage: dict[str, Any] = {}
         status = "ok"
+        lines = upstream.aiter_lines()
         try:
-            async for line in upstream.aiter_lines():
+            async for line in lines:
                 if line.startswith("data:") and '"usage"' in line:
-                    found = _event_usage(line)
-                    if found:
-                        usage = found
+                    _merge(usage, _event_usage(line))
                 yield f"{line}\n".encode()
         except httpx.HTTPError:
             status = "upstream_error"
+        except BaseException:
+            # The client dropped the connection. The upstream bills the whole answer anyway,
+            # so read what is left to count the tokens it reports, within a bound.
+            status = "cancelled"
+            with anyio.CancelScope(shield=True), anyio.move_on_after(DRAIN_SECONDS):
+                try:
+                    async for line in lines:
+                        if line.startswith("data:") and '"usage"' in line:
+                            _merge(usage, _event_usage(line))
+                except httpx.HTTPError:
+                    pass
+            raise
         finally:
-            await upstream.aclose()
-            await client.aclose()
-            self._record(person_id, cli_login_id, model, now, status, usage)
-            await self._repo.commit()
+            with anyio.CancelScope(shield=True):
+                await upstream.aclose()
+                await client.aclose()
+            await self._settle(person_id, cli_login_id, model, now, status, usage)
 
     async def _admit(
         self, *, person_id: uuid.UUID, cli_login_id: uuid.UUID | None, body: dict[str, Any]
@@ -181,11 +208,19 @@ class ModelService:
         key = self._settings.agent_model_api_key.get_secret_value()
         return {"Authorization": f"Bearer {key}"} if key else {}
 
-    async def _record_failure(
-        self, person_id: uuid.UUID, cli_login_id: uuid.UUID | None, model: str, now: datetime
+    async def _settle(
+        self,
+        person_id: uuid.UUID,
+        cli_login_id: uuid.UUID | None,
+        model: str,
+        now: datetime,
+        status: str,
+        usage: dict[str, Any],
     ) -> None:
-        self._record(person_id, cli_login_id, model, now, "upstream_error", {})
-        await self._repo.commit()
+        """Write the call's usage row and commit it, even when the caller is being cancelled."""
+        with anyio.CancelScope(shield=True):
+            self._record(person_id, cli_login_id, model, now, status, usage)
+            await self._repo.commit()
 
     async def _check_limits(
         self, *, person_id: uuid.UUID, cli_login_id: uuid.UUID | None, now: datetime
