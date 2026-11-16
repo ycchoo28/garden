@@ -6,6 +6,7 @@ from typing import cast
 import pytest
 
 from tests.evals import task_20
+from tests.evals.grading import DraftClaimGrader
 from tests.evals.tasks import TASKS, ClaimDraftTask, ReferenceContext
 
 
@@ -26,6 +27,10 @@ def _line(expected: task_20.ExpectedLine, receipt_sha256: str) -> dict[str, obje
     }
 
 
+def _draft_grader(task: ClaimDraftTask, index: int) -> DraftClaimGrader:
+    return cast(DraftClaimGrader, task.graders[index])
+
+
 def test_two_receipt_grader_accepts_lines_in_either_order(monkeypatch: pytest.MonkeyPatch) -> None:
     first, second = task_20.TWO_RECEIPTS.expected_lines
     detail = _claim_state([_line(second, "b" * 64), _line(first, "a" * 64)])
@@ -38,7 +43,7 @@ def test_two_receipt_grader_accepts_lines_in_either_order(monkeypatch: pytest.Mo
         raise AssertionError(f"Unexpected API path: {path}")
 
     monkeypatch.setattr(task_20, "api_json", api_json)
-    grader = task_20.TWO_RECEIPTS.graders[0]
+    grader = _draft_grader(task_20.TWO_RECEIPTS, 0)
     result = grader.grade("http://portal", "grader-token", task_20.TWO_RECEIPTS)
 
     assert result.verdict == "pass"
@@ -58,7 +63,7 @@ def test_two_receipt_grader_fails_when_a_receipt_line_is_missing(
         raise AssertionError(f"Unexpected API path: {path}")
 
     monkeypatch.setattr(task_20, "api_json", api_json)
-    result = task_20.TWO_RECEIPTS.graders[0].grade(
+    result = _draft_grader(task_20.TWO_RECEIPTS, 0).grade(
         "http://portal", "grader-token", task_20.TWO_RECEIPTS
     )
 
@@ -66,7 +71,7 @@ def test_two_receipt_grader_fails_when_a_receipt_line_is_missing(
 
 
 def test_variance_answer_grader_rejects_the_wrong_budget_line() -> None:
-    grader = task_20.OVER_BUDGET_VARIANCE.graders[1]
+    grader = _draft_grader(task_20.OVER_BUDGET_VARIANCE, 1)
 
     result = grader.grade(
         "http://portal",
@@ -79,7 +84,7 @@ def test_variance_answer_grader_rejects_the_wrong_budget_line() -> None:
 
 
 def test_conflict_answer_grader_requires_recovery() -> None:
-    grader = task_20.VERSION_CONFLICT.graders[1]
+    grader = _draft_grader(task_20.VERSION_CONFLICT, 1)
 
     result = grader.grade(
         "http://portal",

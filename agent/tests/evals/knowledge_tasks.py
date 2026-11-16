@@ -21,7 +21,10 @@ class KnowledgeTask(ClaimDraftTask):
 
 
 def _search(context: ReferenceContext, query: str) -> list[dict[str, object]]:
-    response = context.call("knowledge_search_run", {"body": {"query": query}})
+    response_value = context.call("knowledge_search_run", {"body": {"query": query}})
+    if not isinstance(response_value, dict):
+        raise RuntimeError("The knowledge search tool did not return an object.")
+    response = cast(dict[str, object], response_value)
     results_value = response.get("results")
     if not isinstance(results_value, list):
         raise RuntimeError("The knowledge search tool did not return a results list.")

@@ -5,6 +5,9 @@ from tests.evals.knowledge_tasks import MONTH_CLOSE_PROCEDURE
 
 class ExpensePolicySearchContext:
     workspace = Path(".")
+    portal_url = "http://portal"
+    acting_token = "acting-token"
+    database = "garden_agent_eval_fixture"
 
     def call(self, name: str, arguments: dict[str, object]) -> dict[str, object]:
         assert name == "knowledge_search_run"
