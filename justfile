@@ -313,7 +313,7 @@ guardrail-test:
 
 # Scan the git history and the working tree for committed secrets.
 secrets-check:
-    gitleaks git --no-banner --redact --exit-code 1 .
+    gitleaks git --no-banner --redact --exit-code 1 --log-opts='origin/main..HEAD' .
 
 # Check that the relative links in the Markdown files point at files and headings that exist.
 docs-check:

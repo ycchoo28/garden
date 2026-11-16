@@ -153,40 +153,47 @@ def test_runner_ports_come_from_the_recorded_project():
 
 
 @posix_only
-def test_close_shares_one_deadline_across_children(tmp_path, monkeypatch):
+def test_close_shares_one_deadline_across_children(monkeypatch):
     monkeypatch.setattr(DEMO, "CHILD_STOP_TIMEOUT", 1)
-    children = []
-    for _ in range(3):
-        child = subprocess.Popen(
-            [
-                sys.executable,
-                "-c",
-                IGNORING_CHILD,
-                str(tmp_path / f"c{len(children)}.pid"),
-            ],
-            start_new_session=True,
-        )
-        children.append(child)
-    _wait_for(lambda: all((tmp_path / f"c{i}.pid").exists() for i in range(3)))
+
+    class Child:
+        def __init__(self, pid):
+            self.pid = pid
+            self.alive = True
+            self.waits = []
+
+        def poll(self):
+            return None if self.alive else 0
+
+        def wait(self, timeout=None):
+            self.waits.append(timeout)
+            if self.alive:
+                if timeout:
+                    clock[0] += timeout
+                raise subprocess.TimeoutExpired(["child"], timeout)
+            return 0
+
+    clock = [0.0]
+    children = [Child(pid) for pid in (1, 2, 3)]
+    monkeypatch.setattr(DEMO.time, "monotonic", lambda: clock[0])
+
+    def killpg(pid, received_signal):
+        if received_signal == DEMO.signal.SIGKILL:
+            next(child for child in children if child.pid == pid).alive = False
+
+    monkeypatch.setattr(DEMO.os, "killpg", killpg)
+    monkeypatch.setattr(DEMO.shutil, "which", lambda _name: None)
 
     runner = object.__new__(DEMO.Demo)
     runner.procs = children
     runner.servers = []
     runner.control_server = None
     runner.control_thread = None
-    runner.work = tmp_path / "work"
-    started = time.monotonic()
-    try:
-        runner.close()
-    finally:
-        for child in children:
-            if child.poll() is None:
-                child.kill()
-                child.wait()
-    elapsed = time.monotonic() - started
+    runner.work = Path("unused")
+    runner.close()
 
-    # Three children that ignore SIGTERM cost one shared second, not three.
-    assert elapsed < 2.5
+    # The first child consumes the shared second; later children are stopped immediately.
+    assert [child.waits[0] for child in children] == [1, 0, 0]
     assert all(child.poll() is not None for child in children)
 
 

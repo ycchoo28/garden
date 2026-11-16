@@ -768,6 +768,7 @@ class Demo:
             self.env["GARDEN_DATABASE_URL"] = self.env["GARDEN_DATABASE_URL"].replace(
                 ":55432/", f":{self.compose_postgres_port}/", 1
             )
+        self.env.setdefault("GARDEN_OIDC_ISSUER", example["GARDEN_OIDC_ISSUER"])
         if self.env.get("GARDEN_OIDC_ISSUER") == example.get("GARDEN_OIDC_ISSUER"):
             self.env["GARDEN_OIDC_ISSUER"] = self.env["GARDEN_OIDC_ISSUER"].replace(
                 ":55081/", f":{self.compose_oidc_port}/", 1
