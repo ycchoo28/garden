@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from tests.evals.knowledge_tasks import MONTH_CLOSE_PROCEDURE, _perfect_month_close
+from tests.evals.knowledge_tasks import MONTH_CLOSE_PROCEDURE
 
 
 class ExpensePolicySearchContext:
@@ -20,7 +20,9 @@ class ExpensePolicySearchContext:
 
 
 def test_month_close_reference_does_not_treat_general_policy_as_procedure() -> None:
-    answer = _perfect_month_close(ExpensePolicySearchContext(), MONTH_CLOSE_PROCEDURE)
+    reference = MONTH_CLOSE_PROCEDURE.perfect
+    assert reference is not None
+    answer = reference(ExpensePolicySearchContext(), MONTH_CLOSE_PROCEDURE)
 
     assert "couldn't find month close steps" in answer
     assert "ask Finance" in answer
