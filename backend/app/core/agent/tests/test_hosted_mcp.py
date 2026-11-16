@@ -7,6 +7,7 @@ import base64
 import hashlib
 import json
 import re
+import secrets
 import socket
 from collections.abc import AsyncGenerator, AsyncIterator, Iterator, Mapping
 from contextlib import asynccontextmanager
@@ -820,8 +821,8 @@ async def test_api_and_hosted_mcp_spans_continue_traceparent_and_share_identity(
         )
     assert login is not None
 
-    api_trace_id = "4bf92f3577b34da6a3ce929d0e0e4736"
-    api_parent_id = "00f067aa0ba902b7"
+    api_trace_id = secrets.token_hex(16)
+    api_parent_id = secrets.token_hex(8)
     response = await client.get(
         "/api/users/me",
         headers={
@@ -839,8 +840,8 @@ async def test_api_and_hosted_mcp_spans_continue_traceparent_and_share_identity(
         timeout=None,
         headers={"Accept": "application/json, text/event-stream"},
     ) as mcp:
-        hosted_trace_id = "0af7651916cd43dd8448eb211c80319c"
-        hosted_parent_id = "b7ad6b7169203331"
+        hosted_trace_id = secrets.token_hex(16)
+        hosted_parent_id = secrets.token_hex(8)
         tool_call = await mcp.post(
             ENDPOINT,
             headers={
