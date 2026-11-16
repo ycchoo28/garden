@@ -282,6 +282,9 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         parts = urlsplit(self.path)
+        if parts.path == "/api/health":
+            self._send(200, {"status": "ok"})
+            return
         if parts.path == "/api/openapi.json":
             self.fake.contract_fetches += 1
             if self.fake.contract_down:

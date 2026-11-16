@@ -13,13 +13,18 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import re
+import selectors
 import shutil
+import signal
 import socket
 import subprocess
 import sys
 import tarfile
+import time
 import zipapp
+from contextlib import suppress
 from pathlib import Path
 
 import pytest
@@ -150,7 +155,10 @@ def test_installer_runs_unattended_and_the_launchers_and_dsh_patch_work(
     assert str(bin_dir / "dsh") in recorded_paths
     # The installer reports the smoke check and emits no uv warning or force suggestion.
     assert "Ready:" in installed.stdout
-    assert "Approve the sign-in in your browser: http" in installed.stdout
+    assert "Approve this login in your browser:" in installed.stdout
+    assert f"  {portal.url}/api/agent/cli/authorize?" in installed.stdout
+    assert "Opening the sign-in link in your browser..." in installed.stdout
+    assert "Waiting for approval, up to 30 minutes." in installed.stdout
     _assert_numbered_stages(installed.stderr, total=8)
     assert re.search(
         r"\[2/8\] Downloading garden\.pyz \([\d.]+ (?:KB|MB|bytes)\)\.\.\.", installed.stderr
@@ -299,13 +307,168 @@ def test_a_failed_sign_in_shows_what_garden_login_printed() -> None:
     assert "throw ('the login link did not appear.' + (Get-LoginOutputTail))" in script
 
 
+def test_sign_in_timeout_keeps_installed_files_and_returns_a_retry_path(
+    portal: FakePortal, env: dict[str, str], tmp_path: Path
+) -> None:
+    _serve_downloads(portal, _build_garden_pyz(tmp_path / "served" / "garden.pyz"))
+    link_file = tmp_path / "login-link"
+    status_file = tmp_path / "login-status"
+    install_env = {
+        **env,
+        "HOME": str(tmp_path),
+        "GARDEN_API_URL": portal.url,
+        "GARDEN_PYTHON": sys.executable,
+        "GARDEN_BIN_DIR": str(tmp_path / "bin"),
+        "GARDEN_DSH_HOME": str(tmp_path / "dsh"),
+        "GARDEN_LOGIN_LINK_FILE": str(link_file),
+        "GARDEN_LOGIN_STATUS_FILE": str(status_file),
+        "GARDEN_LOGIN_TIMEOUT_SECONDS": "1",
+    }
+
+    installed = subprocess.run(
+        ["bash", str(INSTALLER)], env=install_env, capture_output=True, text=True, timeout=120
+    )
+
+    assert installed.returncode == 0, installed.stdout + installed.stderr
+    assert link_file.read_text().strip().startswith(portal.url + "/api/agent/cli/authorize?")
+    assert status_file.read_text().strip() == "pending"
+    assert "Sign-in URL" not in installed.stdout
+    assert "Approve this login in your browser:" in installed.stdout
+    assert f"  {link_file.read_text().strip()}" in installed.stdout
+    assert "Waiting for approval, up to 1 second." in installed.stdout
+    assert "Everything else is installed." in installed.stderr
+    assert "garden login" in installed.stderr
+    assert "login link is in" not in installed.stdout + installed.stderr
+
+
+def test_interrupted_garden_dsh_folder_is_replaced_on_rerun(
+    portal: FakePortal, env: dict[str, str], tmp_path: Path
+) -> None:
+    _serve_downloads(portal, _build_garden_pyz(tmp_path / "served" / "garden.pyz"))
+    dsh = tmp_path / "home" / "dsh"
+    dsh.mkdir(parents=True)
+    (dsh / ".garden-install-owner").write_text("garden-agent-installer-v1\n")
+    (dsh / "partial-file").write_text("interrupted extraction")
+    install_env = {
+        **env,
+        "HOME": str(tmp_path),
+        "GARDEN_API_URL": portal.url,
+        "GARDEN_PYTHON": sys.executable,
+        "GARDEN_BIN_DIR": str(tmp_path / "bin"),
+        "GARDEN_HOME": str(tmp_path / "home"),
+        "GARDEN_DSH_HOME": str(tmp_path / "user-dsh"),
+        "GARDEN_INSTALL_TEST": "1",
+    }
+
+    installed = subprocess.run(
+        ["bash", str(INSTALLER)], env=install_env, capture_output=True, text=True, timeout=120
+    )
+
+    assert installed.returncode == 0, installed.stdout + installed.stderr
+    assert not (dsh / "partial-file").exists()
+    assert (dsh / "node_modules/@deepseek-ai/dsh/lib/bin.js").exists()
+    assert list((tmp_path / "home").glob("dsh.bak-*"))
+
+
+def test_unmarked_dsh_folder_is_preserved_with_a_precise_recovery_command(
+    portal: FakePortal, env: dict[str, str], tmp_path: Path
+) -> None:
+    _serve_downloads(portal, _build_garden_pyz(tmp_path / "served" / "garden.pyz"))
+    dsh = tmp_path / "home" / "dsh"
+    dsh.mkdir(parents=True)
+    (dsh / "user-file").write_text("keep this folder")
+    install_env = {
+        **env,
+        "HOME": str(tmp_path),
+        "GARDEN_API_URL": portal.url,
+        "GARDEN_PYTHON": sys.executable,
+        "GARDEN_BIN_DIR": str(tmp_path / "bin"),
+        "GARDEN_HOME": str(tmp_path / "home"),
+        "GARDEN_DSH_HOME": str(tmp_path / "user-dsh"),
+    }
+
+    installed = subprocess.run(
+        ["bash", str(INSTALLER)], env=install_env, capture_output=True, text=True, timeout=120
+    )
+
+    assert installed.returncode != 0
+    assert "Refusing to replace the existing unrecorded dsh folder" in installed.stderr
+    assert f"mv '{dsh}' '{dsh}.old'" in installed.stderr
+    assert (dsh / "user-file").read_text() == "keep this folder"
+
+
+def test_sigkill_after_stage_seven_records_state_for_a_successful_rerun(
+    portal: FakePortal, env: dict[str, str], tmp_path: Path
+) -> None:
+    _serve_downloads(portal, _build_garden_pyz(tmp_path / "served" / "garden.pyz"))
+    (tmp_path / "home").mkdir()
+    (tmp_path / "home" / "user-file").write_text("keep this existing home")
+    install_env = {
+        **env,
+        "HOME": str(tmp_path),
+        "GARDEN_API_URL": portal.url,
+        "GARDEN_PYTHON": sys.executable,
+        "GARDEN_BIN_DIR": str(tmp_path / "bin"),
+        "GARDEN_HOME": str(tmp_path / "home"),
+        "GARDEN_DSH_HOME": str(tmp_path / "user-dsh"),
+        "GARDEN_INSTALL_TEST": "1",
+    }
+    interrupted = subprocess.Popen(
+        ["bash", str(INSTALLER)],
+        env=install_env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    assert interrupted.stderr is not None
+    captured = ""
+    deadline = time.monotonic() + 120
+    selector = selectors.DefaultSelector()
+    selector.register(interrupted.stderr, selectors.EVENT_READ)
+    while "[7/8] Done:" not in captured and time.monotonic() < deadline:
+        ready = selector.select(timeout=min(0.25, max(0.0, deadline - time.monotonic())))
+        if ready:
+            captured += os.read(interrupted.stderr.fileno(), 4096).decode("utf-8", errors="replace")
+        if interrupted.poll() is not None:
+            break
+    if "[7/8] Done:" not in captured:
+        with suppress(ProcessLookupError):
+            os.killpg(interrupted.pid, signal.SIGKILL)
+        interrupted.wait(timeout=10)
+        pytest.fail(f"Installer did not reach stage 7 completion: {captured}")
+
+    try:
+        os.killpg(interrupted.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pytest.fail("Installer exited before the SIGKILL could interrupt it")
+    interrupted.wait(timeout=10)
+    selector.close()
+    manifest_path = tmp_path / ".local/share/garden/install-manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    recorded_paths = {item["path"] for item in manifest["artifacts"]}
+    assert str(tmp_path / "home/dsh") in recorded_paths
+    assert str(tmp_path / "bin/garden") in recorded_paths
+
+    rerun = subprocess.run(
+        ["bash", str(INSTALLER)], env=install_env, capture_output=True, text=True, timeout=120
+    )
+    assert rerun.returncode == 0, rerun.stdout + rerun.stderr
+    assert "Ready:" in rerun.stdout
+    assert (tmp_path / "home" / "user-file").read_text() == "keep this existing home"
+
+
 def test_the_shell_installer_prints_the_login_tail_without_the_link(tmp_path: Path) -> None:
     """Runs show_login_output itself: the last eight lines, the approval link left out."""
     shell = INSTALLER.read_text(encoding="utf-8")
     start = shell.index("show_login_output() {")
     function = shell[start : shell.index("\n}\n", start) + 3]
     log = tmp_path / "login.log"
-    lines = ["  https://portal.example/approve/1"] + [f"line {n}" for n in range(12)]
+    lines = [
+        "Approve this login for garden-cli in your browser:",
+        "  https://portal.example/approve/1",
+        *[f"line {n}" for n in range(12)],
+    ]
     log.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     result = subprocess.run(
@@ -316,6 +479,7 @@ def test_the_shell_installer_prints_the_login_tail_without_the_link(tmp_path: Pa
     )
 
     assert "garden login said:" in result.stderr
+    assert "Approve this login" not in result.stderr
     assert "approve" not in result.stderr
     assert "line 11" in result.stderr
     assert "line 3" not in result.stderr

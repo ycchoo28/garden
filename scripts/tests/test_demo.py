@@ -147,6 +147,72 @@ def test_missing_model_fails_without_waiting_for_input(tmp_path):
     assert "--fake-model" in result.stderr
 
 
+@pytest.mark.parametrize("link", ["http://portal.example/login?code=a&state=b", ""])
+def test_pending_signin_keeps_demo_services_running_and_prints_retry_path(
+    tmp_path, monkeypatch, capsys, link
+):
+    class Process:
+        returncode = 0
+
+        def poll(self):
+            return self.returncode
+
+        def wait(self):
+            return self.returncode
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+        def read(self):
+            return b"installer"
+
+    demo = object.__new__(DEMO.Demo)
+    demo.args = types.SimpleNamespace(non_interactive=False, persona=None)
+    demo.work = tmp_path
+    demo.api = "http://127.0.0.1:55000"
+    demo.env = {"GARDEN_BIN_DIR": str(tmp_path / "bin"), "PATH": ""}
+    portal_process = types.SimpleNamespace(poll=lambda: None)
+    demo.procs = [portal_process]
+    demo.manifest_file = tmp_path / "manifest.json"
+    installer_process = Process()
+
+    monkeypatch.setattr(DEMO.urllib.request, "urlopen", lambda *_args, **_kwargs: Response())
+    opened = []
+    monkeypatch.setattr(DEMO, "open_browser_link", lambda link: opened.append(link) or True)
+
+    def start(_command, env):
+        if link:
+            Path(env["GARDEN_LOGIN_LINK_FILE"]).write_text(link)
+        Path(env["GARDEN_LOGIN_STATUS_FILE"]).write_text("pending\n")
+        demo.procs.append(installer_process)
+        return installer_process
+
+    demo.start = start
+    demo.run = lambda *_args, **_kwargs: pytest.fail("login-only checks must wait for sign-in")
+
+    demo.install()
+
+    output = capsys.readouterr().out
+    if link:
+        assert "Sign-in URL:" in output
+        assert link in output
+        assert "Opening the sign-in link in your browser..." in output
+        assert opened == [link]
+    else:
+        assert "Sign-in URL:" not in output
+        assert opened == []
+    assert "Everything else is installed." in output
+    assert "The demo portal is still running." in output
+    assert f"{tmp_path / 'bin' / 'garden'} login" in output
+    assert demo.agent_pending_signin
+    assert len(demo.procs) == 1
+    assert demo.procs[0] is portal_process
+
+
 @pytest.mark.parametrize("fault", ["none", "token", "model", "completion", "unreachable"])
 def test_saved_external_configuration_is_actually_validated(tmp_path, fault):
     class Upstream(DEMO.FakeModel):
@@ -356,17 +422,12 @@ def test_just_demo_model_check_flag_order_does_not_require_docker(tmp_path, argu
 def test_web_only_explicitly_disables_saved_model_settings(tmp_path, monkeypatch):
     path = tmp_path / ".env"
     path.write_text(
-        "\n".join(
-            (
-                "GARDEN_DATABASE_URL=postgresql+psycopg://garden:garden-dev@127.0.0.1:55432/garden_test",
-                "GARDEN_AGENT_MODEL_UPSTREAM_URL=https://model.example/v1",
-                "GARDEN_AGENT_MODEL_API_KEY=saved-token",
-                "GARDEN_AGENT_MODEL_MODELS=saved-model",
-                "GARDEN_AGENT_MODEL_DEFAULT=saved-model",
-                "GARDEN_DEMO_FAKE_MODEL=1",
-            )
-        )
-        + "\n"
+        "GARDEN_DATABASE_URL=postgresql+psycopg://garden:garden-dev@127.0.0.1:55432/garden_test\n"
+        "GARDEN_AGENT_MODEL_UPSTREAM_URL=https://model.example/v1\n"
+        "GARDEN_AGENT_MODEL_API_KEY=saved-token\n"
+        "GARDEN_AGENT_MODEL_MODELS=saved-model\n"
+        "GARDEN_AGENT_MODEL_DEFAULT=saved-model\n"
+        "GARDEN_DEMO_FAKE_MODEL=1\n"
     )
     monkeypatch.setattr(DEMO.tempfile, "mkdtemp", lambda **_kwargs: str(tmp_path / "work"))
     demo = DEMO.Demo(types.SimpleNamespace(env_file=path, web_only=True))

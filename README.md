@@ -117,7 +117,8 @@ Windows bootstrap also locates Git Bash or installs a checksum-verified portable
 POSIX bootstrap must be sourced to update the current shell's PATH.
 Supported bootstrap hosts are Linux and macOS on x64 or ARM64, and Windows on x64.
 Inside WSL 2, `just demo` opens CLI sign-in in the Windows browser automatically.
-Installing `wslu` and setting `BROWSER=wslview` remain optional if you prefer that opener.
+No extra browser package or `BROWSER` setting is required.
+Installing `wslu` and setting `BROWSER=wslview` are optional if you prefer that opener.
 
 `just demo` initializes `.env` and missing dependencies, validates the saved model upstream, publishes the agent downloads, and starts the seeded portal.
 When model settings are missing or unusable, it offers a provider menu (OpenRouter, OpenAI, another OpenAI-compatible URL, or the local fake model), then asks for a hidden API token.
@@ -131,6 +132,8 @@ Neither the installer nor the client configuration receives the upstream key ([A
 The fake model returns a fixed reply and does not reason or call tools.
 
 Once the portal is healthy, the command runs its installer, opens CLI sign-in so you can choose a seeded persona, writes the `dsh` configuration, and verifies `garden tools`, `dsh --version` and a model turn through the portal.
+If sign-in approval takes longer than 30 minutes, the demo stays running with everything else installed.
+Retry from another terminal with the printed `garden login` command, then run `garden dsh-config` to finish dsh setup.
 It installs into `~/.local/bin`, `~/.garden` and `~/.dsh` (under `%USERPROFILE%` on Windows).
 Both installers supply Python and Node when needed.
 Add the printed bin directory to PATH if your shell does not already include it.

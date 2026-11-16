@@ -68,6 +68,7 @@ begin_step() {
     printf '[%s/%s] %s\n' "$step" "$total_steps" "$current_step" >&2
 }
 finish_step() {
+    write_install_manifest || true
     printf '[%s/%s] Done: %s\n' "$step" "$total_steps" "$current_step" >&2
     current_step=""
 }
@@ -147,6 +148,11 @@ write_install_manifest() {
 }
 
 manifest_update() {
+    local interpreter="${python:-}"
+    if [ -z "$interpreter" ] || [ ! -x "$interpreter" ]; then
+        interpreter="$(command -v python3 || true)"
+    fi
+    [ -n "$interpreter" ] || return 0
     "$interpreter" - "$manifest_path" "$@" <<'PY'
 import hashlib
 import json
@@ -402,11 +408,16 @@ PY
     fi
 }
 
-# The last lines garden login printed, without the sign-in link, so the reason reaches the person.
+# The last lines garden login printed, without the link or its heading, so the reason reaches the person.
 show_login_output() {
     [ -s "$1" ] || return 0
     echo "garden login said:" >&2
-    grep -v '^  https\?://' "$1" | tail -n 8 | sed 's/^/  /' >&2 || true
+    grep -Ev '^  https?://|Approve this login for ' "$1" | tail -n 8 | sed 's/^/  /' >&2 || true
+}
+
+write_login_status() {
+    [ -n "${GARDEN_LOGIN_STATUS_FILE:-}" ] || return 0
+    printf '%s\n' "$1" > "$GARDEN_LOGIN_STATUS_FILE"
 }
 
 # Signs the person in with the CLI. Its output is the sign-in link with one line on what to do, not
@@ -415,7 +426,8 @@ show_login_output() {
 sign_in() {
     local log link login_pid
     log="$tmp/login.log"
-    "$bin_dir/garden" login --no-open > "$log" 2>&1 &
+    write_login_status pending
+    "$bin_dir/garden" login --no-open --timeout "${GARDEN_LOGIN_TIMEOUT_SECONDS:-1800}" > "$log" 2>&1 &
     login_pid=$!
     link=""
     for _ in $(seq 1 100); do
@@ -428,16 +440,24 @@ sign_in() {
         show_login_output "$log"
         return 1
     fi
+    echo "Approve this login in your browser:"
+    printf '  %s\n' "$link"
     if [ -n "${GARDEN_LOGIN_LINK_FILE:-}" ]; then
         printf '%s\n' "$link" > "$GARDEN_LOGIN_LINK_FILE"
-        echo "The login link is in $GARDEN_LOGIN_LINK_FILE. Open it to approve the login."
     else
-        echo "Approve the sign-in in your browser: $link"
+        echo "Opening the sign-in link in your browser..."
         if [ -n "${GARDEN_INSTALL_TEST:-}" ]; then
             curl --fail --silent --location --output /dev/null "$link"
         else
             open_link "$link"
         fi
+    fi
+    if [ "${GARDEN_LOGIN_TIMEOUT_SECONDS:-1800}" -ge 60 ]; then
+        timeout_minutes=$(( (${GARDEN_LOGIN_TIMEOUT_SECONDS:-1800} + 59) / 60 ))
+        printf 'Waiting for approval, up to %s minute%s.\n' "$timeout_minutes" "$([ "$timeout_minutes" -eq 1 ] && echo || echo s)"
+    else
+        timeout_seconds="${GARDEN_LOGIN_TIMEOUT_SECONDS:-1800}"
+        printf 'Waiting for approval, up to %s second%s.\n' "$timeout_seconds" "$([ "$timeout_seconds" -eq 1 ] && echo || echo s)"
     fi
     if ! wait "$login_pid"; then
         show_login_output "$log"
@@ -460,8 +480,12 @@ import os
 import sys
 from pathlib import Path
 
-manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")) if Path(sys.argv[1]).exists() else {}
 target = Path(os.path.normcase(os.path.abspath(sys.argv[2])))
+marker = target / ".garden-install-owner"
+if marker.exists() and marker.read_text(encoding="utf-8").strip() == "garden-agent-installer-v1":
+    raise SystemExit(0)
+manifest_path = Path(sys.argv[1])
+manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {}
 for item in manifest.get("artifacts", []):
     recorded = Path(os.path.normcase(os.path.abspath(item["path"])))
     if target == recorded:
@@ -476,6 +500,7 @@ raise SystemExit(1)
 PY
     then
         echo "Refusing to replace the existing unrecorded dsh folder at $garden_home/dsh." >&2
+        printf "Move it aside with: mv '%s' '%s.old', then run the installer again.\n" "$garden_home/dsh" "$garden_home/dsh" >&2
         exit 1
     fi
     backup="$garden_home/dsh.bak-$stamp-$$"
@@ -484,6 +509,7 @@ PY
 fi
 mkdir -p "$garden_home/dsh"
 dsh_replaced=1
+printf '%s\n' "garden-agent-installer-v1" > "$garden_home/dsh/.garden-install-owner"
 tar -xzf "$tmp/dsh-bundle.tar.gz" -C "$garden_home/dsh"
 finish_step
 
@@ -503,10 +529,13 @@ finish_step
 # Sign in last: garden, dsh and the skills are installed before it, so a failed sign-in
 # leaves them in place, and the message names the one command to retry.
 if ! sign_in; then
-    echo "Sign-in did not finish. Everything else is installed. Run garden login to sign in." >&2
-    exit 1
+    echo "Sign-in approval did not finish. Everything else is installed." >&2
+    echo "The demo portal will keep running. Retry from another terminal with: $bin_dir/garden login" >&2
+    echo "After signing in, finish dsh setup with: $bin_dir/garden dsh-config" >&2
+    exit 0
 fi
 login_succeeded=1
+write_login_status signed-in
 
 # The patch names the portal's default model, which needs the sign-in, so garden writes it now.
 "$bin_dir/garden" dsh-config >/dev/null

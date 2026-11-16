@@ -198,6 +198,7 @@ CHILD_STOP_TIMEOUT = 15
 RUNNER_GONE_TIMEOUT = 30
 # A listening loopback socket accepts at once; this only bounds a refusal Windows retries.
 CONTROL_CONNECT_TIMEOUT = 3
+LOGIN_TIMEOUT_SECONDS = 1800
 
 
 def run_bounded(command, *, timeout: float, env=None, cwd=None) -> subprocess.CompletedProcess:
@@ -725,6 +726,7 @@ class Demo:
                 self.env[key] = ""
             self.env[FAKE_FLAG] = "0"
         self.procs = []
+        self.agent_pending_signin = False
         self.servers = []
         self.control_server = None
         self.control_thread = None
@@ -1206,6 +1208,8 @@ class Demo:
         env = self.client_env()
         env["GARDEN_API_URL"] = self.api
         env["GARDEN_LOGIN_LINK_FILE"] = str(self.work / "login-link")
+        env["GARDEN_LOGIN_STATUS_FILE"] = str(self.work / "login-status")
+        env.setdefault("GARDEN_LOGIN_TIMEOUT_SECONDS", str(LOGIN_TIMEOUT_SECONDS))
         unattended = self.args.non_interactive
         if unattended and not self.args.persona:
             raise RuntimeError("--non-interactive requires --persona (for example 'Dev Admin')")
@@ -1229,12 +1233,19 @@ class Demo:
         process = self.start(command, env=env)
         deadline = time.monotonic() + 600
         link = ""
+        status_file = Path(env["GARDEN_LOGIN_STATUS_FILE"])
         while not link:
             if (self.work / "login-link").exists():
                 link = (self.work / "login-link").read_text().strip()
                 if link:
                     break
             if process.poll() is not None:
+                if (
+                    process.returncode == 0
+                    and status_file.exists()
+                    and status_file.read_text(encoding="utf-8").strip() == "pending"
+                ):
+                    break
                 raise RuntimeError("Installer failed before sign-in")
             if time.monotonic() > deadline:
                 raise RuntimeError("Installer timed out before sign-in")
@@ -1267,22 +1278,39 @@ class Demo:
                 ],
                 env=env,
             )
-        else:
+        elif link:
+            print("Sign-in URL:", flush=True)
+            print(f"  {link}", flush=True)
             print(
                 "Choose your seeded persona in the browser to approve CLI sign-in.",
                 flush=True,
             )
+            print("Opening the sign-in link in your browser...", flush=True)
             if not open_browser_link(link):
                 print(
                     "No browser could be opened here. Open this sign-in link yourself:",
                     flush=True,
                 )
                 print(f"  {link}", flush=True)
-        process.wait(timeout=300)
+        process.wait()
         self.procs.remove(process)
         if process.returncode:
             raise RuntimeError("Installer failed")
         bin_dir = Path(env.get("GARDEN_BIN_DIR", str(Path.home() / ".local/bin")))
+        login_status = (
+            status_file.read_text(encoding="utf-8").strip() if status_file.exists() else "signed-in"
+        )
+        if login_status != "signed-in":
+            garden = bin_dir / ("garden.cmd" if os.name == "nt" else "garden")
+            self.agent_pending_signin = True
+            print("Sign-in approval did not finish. Everything else is installed.", flush=True)
+            print(
+                "The demo portal is still running. To retry from another terminal, run:",
+                flush=True,
+            )
+            print(f"  {garden} login", flush=True)
+            print(f"After signing in, finish dsh setup with: {garden} dsh-config", flush=True)
+            return
         manifest = load_manifest(self.manifest_file)
         record_login(
             manifest,
@@ -2332,7 +2360,10 @@ def main():
         demo.stack()
         if not args.web_only:
             demo.install()
-        print("Demo ready. Press Ctrl+C to stop.", flush=True)
+        if demo.agent_pending_signin:
+            print("Demo portal is running. Press Ctrl+C to stop.", flush=True)
+        else:
+            print("Demo ready. Press Ctrl+C to stop.", flush=True)
         if not args.smoke:
             while not demo.stop_event.wait(0.5):
                 demo.check_processes()

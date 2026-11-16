@@ -22,7 +22,7 @@ from garden.shared import GardenError
 AUTHORIZE_PATH = "/api/agent/cli/authorize"
 CREATE_PATH = "/api/agent/cli/approvals"
 CALLBACK_PATH = "/callback"
-DEFAULT_TIMEOUT_SECONDS = 300
+DEFAULT_TIMEOUT_SECONDS = 1800
 
 # The callback page is self-contained: no fonts, scripts or images are fetched. It follows light or
 # dark mode, and its colours match the portal's theme.
