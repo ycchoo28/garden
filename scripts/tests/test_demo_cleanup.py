@@ -520,7 +520,9 @@ def test_unresponsive_demo_runner_is_still_a_failure(capsys) -> None:
     assert "did not respond" in capsys.readouterr().err
 
 
-def test_empty_cleanup_is_idempotent(tmp_path: Path, monkeypatch) -> None:
+def test_empty_cleanup_is_idempotent_and_reports_missing_manifest(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     args = argparse.Namespace(
         dry_run=False,
@@ -531,6 +533,7 @@ def test_empty_cleanup_is_idempotent(tmp_path: Path, monkeypatch) -> None:
 
     assert DEMO.DemoCleanup(args, "clean").run() == 0
     assert DEMO.DemoCleanup(args, "uninstall").run() == 0
+    assert capsys.readouterr().out.count("Garden install manifest already absent:") == 2
 
 
 def test_shared_directory_is_removed_only_when_empty(tmp_path: Path) -> None:
