@@ -158,7 +158,24 @@ def check_demo_port(port: int) -> None:
         try:
             probe.bind(("127.0.0.1", port))
         except OSError as error:
-            raise RuntimeError(f"Demo loopback port {port} is unavailable: {error}") from error
+            raise RuntimeError(
+                f"Demo loopback port {port} is unavailable: {error}. A previous Garden demo may "
+                "still be running; in the checkout that started it, run just demo-clean, then "
+                "rerun just demo here."
+            ) from error
+
+
+def loopback_url(port: int) -> str:
+    return f"http://127.0.0.1:{port}"
+
+
+def demo_oidc_issuer_url(issuer: str, demo_port: int) -> str:
+    parsed = urllib.parse.urlsplit(issuer)
+    if parsed.hostname != "localhost":
+        return issuer
+    port = demo_port if parsed.port == 55081 else parsed.port
+    netloc = f"127.0.0.1:{port}" if port is not None else "127.0.0.1"
+    return urllib.parse.urlunsplit(parsed._replace(netloc=netloc))
 
 
 def with_user_path(env: dict) -> None:
@@ -733,8 +750,8 @@ class Demo:
         self.work = Path(tempfile.mkdtemp(prefix="garden-demo-"))
         self.api_port = int(self.env.get("GARDEN_DEMO_API_PORT", "55000"))
         self.web_port = int(self.env.get("GARDEN_DEMO_WEB_PORT", "55173"))
-        self.api = f"http://127.0.0.1:{self.api_port}"
-        self.web = f"http://localhost:{self.web_port}"
+        self.api = loopback_url(self.api_port)
+        self.web = loopback_url(self.web_port)
         self.manifest_file = manifest_path()
         self.project = demo_project_name(ROOT, Path.home())
         self.postgres_image = self.env.get("GARDEN_DEV_POSTGRES_IMAGE") or demo_image_reference(
@@ -755,6 +772,9 @@ class Demo:
             self.env["GARDEN_OIDC_ISSUER"] = self.env["GARDEN_OIDC_ISSUER"].replace(
                 ":55081/", f":{self.compose_oidc_port}/", 1
             )
+        self.env["GARDEN_OIDC_ISSUER"] = demo_oidc_issuer_url(
+            self.env["GARDEN_OIDC_ISSUER"], self.compose_oidc_port
+        )
         self.env["COMPOSE_PROJECT_NAME"] = self.project
         self.env.pop("VIRTUAL_ENV", None)
         self.stop_event = threading.Event()

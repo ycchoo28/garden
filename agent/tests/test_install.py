@@ -16,6 +16,7 @@ import json
 import os
 import re
 import selectors
+import shlex
 import shutil
 import signal
 import socket
@@ -370,6 +371,58 @@ def test_interrupted_garden_dsh_folder_is_replaced_on_rerun(
     assert list((tmp_path / "home").glob("dsh.bak-*"))
 
 
+def test_older_unrecorded_dsh_install_without_manifest_is_replaced(
+    portal: FakePortal, env: dict[str, str], tmp_path: Path
+) -> None:
+    _serve_downloads(portal, _build_garden_pyz(tmp_path / "served" / "garden.pyz"))
+    dsh = tmp_path / "home" / "dsh"
+    package = dsh / "node_modules" / "@deepseek-ai" / "dsh"
+    (package / "lib").mkdir(parents=True)
+    (dsh / "package.json").write_text(
+        json.dumps(
+            {
+                "name": "garden-dsh-bundle",
+                "version": "0.2.1-rc.5",
+                "dependencies": {"@deepseek-ai/dsh": "0.2.1-rc.5"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (package / "package.json").write_text(
+        json.dumps({"name": "@deepseek-ai/dsh", "version": "0.2.1-rc.5"}),
+        encoding="utf-8",
+    )
+    (package / "lib" / "bin.js").write_text("old Garden dsh", encoding="utf-8")
+    (dsh / "user-data").write_text("keep in the backup", encoding="utf-8")
+    manifest_file = tmp_path / ".local" / "share" / "garden" / "install-manifest.json"
+    assert not manifest_file.exists()
+    install_env = {
+        **env,
+        "HOME": str(tmp_path),
+        "GARDEN_API_URL": portal.url,
+        "GARDEN_PYTHON": sys.executable,
+        "GARDEN_BIN_DIR": str(tmp_path / "bin"),
+        "GARDEN_HOME": str(tmp_path / "home"),
+        "GARDEN_DSH_HOME": str(tmp_path / "user-dsh"),
+        "GARDEN_INSTALL_TEST": "1",
+    }
+
+    installed = subprocess.run(
+        ["bash", str(INSTALLER)], env=install_env, capture_output=True, text=True, timeout=120
+    )
+
+    assert installed.returncode == 0, installed.stdout + installed.stderr
+    assert "Found an earlier Garden dsh installation; replacing it." in installed.stderr
+    assert (dsh / ".garden-install-owner").read_text(encoding="utf-8").strip()
+    assert (dsh / "node_modules/@deepseek-ai/dsh/lib/bin.js").exists()
+    [backup] = (tmp_path / "home").glob("dsh.bak-*")
+    assert (backup / "user-data").read_text(encoding="utf-8") == "keep in the backup"
+    manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+    recorded = {item["path"] for item in manifest["artifacts"]}
+    assert str(dsh) in recorded
+    assert str(backup) in recorded
+
+
 def test_unmarked_dsh_folder_is_preserved_with_a_precise_recovery_command(
     portal: FakePortal, env: dict[str, str], tmp_path: Path
 ) -> None:
@@ -392,8 +445,11 @@ def test_unmarked_dsh_folder_is_preserved_with_a_precise_recovery_command(
     )
 
     assert installed.returncode != 0
-    assert "Refusing to replace the existing unrecorded dsh folder" in installed.stderr
-    assert f"mv '{dsh}' '{dsh}.old'" in installed.stderr
+    recovery_command = f"mv {shlex.quote(str(dsh))} {shlex.quote(str(dsh) + '.old')} && just demo"
+    assert (
+        f"This dsh folder is not a recognized Garden install; run: {recovery_command}"
+        in installed.stderr
+    )
     assert (dsh / "user-file").read_text() == "keep this folder"
 
 

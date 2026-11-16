@@ -60,8 +60,12 @@ def test_demo_port_preflight_rejects_an_active_listener() -> None:
         listener.listen()
         port = listener.getsockname()[1]
 
-        with pytest.raises(RuntimeError, match=f"Demo loopback port {port} is unavailable"):
+        with pytest.raises(RuntimeError) as error:
             DEMO.check_demo_port(port)
+        assert f"Demo loopback port {port} is unavailable" in str(error.value)
+        assert "A previous Garden demo may still be running" in str(error.value)
+        assert "run just demo-clean" in str(error.value)
+        assert "rerun just demo here" in str(error.value)
 
 
 def test_empty_web_only_model_environment_overrides_populated_dotenv(

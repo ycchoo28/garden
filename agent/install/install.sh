@@ -474,7 +474,9 @@ finish_step
 fetch_artifact dsh-bundle.tar.gz
 begin_step "Unpacking dsh..."
 if [ -e "$garden_home/dsh" ]; then
-    if [ -L "$garden_home/dsh" ] || ! "$python" - "$manifest_path" "$garden_home/dsh" <<'PY'
+    dsh_ownership=""
+    if [ ! -L "$garden_home/dsh" ]; then
+        if dsh_ownership="$("$python" - "$manifest_path" "$garden_home/dsh" <<'PY'
 import json
 import os
 import sys
@@ -482,26 +484,75 @@ from pathlib import Path
 
 target = Path(os.path.normcase(os.path.abspath(sys.argv[2])))
 marker = target / ".garden-install-owner"
-if marker.exists() and marker.read_text(encoding="utf-8").strip() == "garden-agent-installer-v1":
-    raise SystemExit(0)
+try:
+    if marker.read_text(encoding="utf-8").strip() == "garden-agent-installer-v1":
+        print("recorded")
+        raise SystemExit(0)
+except (OSError, UnicodeError):
+    pass
 manifest_path = Path(sys.argv[1])
-manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {}
+try:
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {}
+except (OSError, ValueError, UnicodeError):
+    manifest = {}
 for item in manifest.get("artifacts", []):
     recorded = Path(os.path.normcase(os.path.abspath(item["path"])))
     if target == recorded:
+        print("recorded")
         raise SystemExit(0)
     if item.get("kind") == "tree":
         try:
             target.relative_to(recorded)
         except ValueError:
             continue
+        print("recorded")
         raise SystemExit(0)
+try:
+    bundle = json.loads((target / "package.json").read_text(encoding="utf-8"))
+    package_path = target / "node_modules" / "@deepseek-ai" / "dsh"
+    package = json.loads((package_path / "package.json").read_text(encoding="utf-8"))
+except (OSError, ValueError, UnicodeError):
+    raise SystemExit(1)
+dependencies = bundle.get("dependencies", {}) if isinstance(bundle, dict) else {}
+if (
+    isinstance(bundle, dict)
+    and isinstance(package, dict)
+    and bundle.get("name") == "garden-dsh-bundle"
+    and isinstance(dependencies, dict)
+    and dependencies.get("@deepseek-ai/dsh") == package.get("version")
+    and package.get("name") == "@deepseek-ai/dsh"
+    and (package_path / "lib" / "bin.js").is_file()
+):
+    print("legacy")
+    raise SystemExit(0)
 raise SystemExit(1)
 PY
-    then
-        echo "Refusing to replace the existing unrecorded dsh folder at $garden_home/dsh." >&2
-        printf "Move it aside with: mv '%s' '%s.old', then run the installer again.\n" "$garden_home/dsh" "$garden_home/dsh" >&2
+        )"; then
+            :
+        else
+            dsh_ownership=""
+        fi
+    fi
+    if [ "$dsh_ownership" != "recorded" ] && [ "$dsh_ownership" != "legacy" ]; then
+        recovery_command="$("$python" - "$garden_home/dsh" <<'PY'
+import os
+import shlex
+import sys
+
+path = sys.argv[1]
+destination = path + ".old"
+suffix = 1
+while os.path.lexists(destination):
+    destination = f"{path}.old.{suffix}"
+    suffix += 1
+print(f"mv {shlex.quote(path)} {shlex.quote(destination)} && just demo")
+PY
+)"
+        printf 'This dsh folder is not a recognized Garden install; run: %s\n' "$recovery_command" >&2
         exit 1
+    fi
+    if [ "$dsh_ownership" = "legacy" ]; then
+        printf 'Found an earlier Garden dsh installation; replacing it.\n' >&2
     fi
     backup="$garden_home/dsh.bak-$stamp-$$"
     mv "$garden_home/dsh" "$backup"
