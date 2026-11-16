@@ -2,7 +2,7 @@
 
 import json
 import uuid
-from collections.abc import AsyncGenerator, AsyncIterator, Callable
+from collections.abc import AsyncGenerator, AsyncIterator, Callable, Iterator, Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
@@ -10,7 +10,40 @@ import anyio
 import httpx
 import pytest
 from fastapi import FastAPI
+from garden.trace_contract import (
+    AGENT_CONVERSATION_HEADER,
+    GARDEN_AGENT_CONVERSATION_ID,
+    GARDEN_AGENT_LOGIN_ID,
+    GARDEN_CONTENT_CAPTURED,
+    GARDEN_CONVERSATION_TITLE_SIDE_CALL,
+    GARDEN_EVAL_RUN_ID,
+    GARDEN_EVAL_TRIAL_ID,
+    GARDEN_MODEL_SIDE_CALL_TYPE,
+    GARDEN_MODEL_TOTAL_TOKENS,
+    GARDEN_PERSON_ID,
+    GEN_AI_CAPTURE_CONTENT_ENV,
+    GEN_AI_CUSTOM_PROVIDER,
+    GEN_AI_INFERENCE_EVENT,
+    GEN_AI_INPUT_MESSAGES,
+    GEN_AI_OPERATION_NAME,
+    GEN_AI_OUTPUT_MESSAGES,
+    GEN_AI_PROVIDER_NAME,
+    GEN_AI_REQUEST_MODEL,
+    GEN_AI_RESPONSE_MODEL,
+    GEN_AI_RESPONSE_STATUS,
+    GEN_AI_USAGE_INPUT_TOKENS,
+    GEN_AI_USAGE_OUTPUT_TOKENS,
+    MODEL_SIDE_CALL_HEADER,
+)
 from httpx import AsyncClient
+from opentelemetry import _logs, trace
+from opentelemetry._logs import SeverityNumber
+from opentelemetry.sdk._logs import LoggerProvider
+from opentelemetry.sdk._logs.export import InMemoryLogRecordExporter, SimpleLogRecordProcessor
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+from opentelemetry.trace import SpanKind
 from pydantic import SecretStr
 
 from app.config import Settings
@@ -25,6 +58,26 @@ from tests.support import bearer, cli_sign_in, sign_in
 MARCUS = "marcus.lee@fernhill.example"
 UPSTREAM = "http://upstream.test/v1"
 CHAT = {"model": "garden-small", "messages": [{"role": "user", "content": "hello"}]}
+
+
+def _span_attributes(span: Any) -> Mapping[str, Any]:
+    attributes: object = span.attributes
+    assert isinstance(attributes, Mapping)
+    return cast("Mapping[str, Any]", attributes)
+
+
+def _log_event_attributes(
+    exporter: InMemoryLogRecordExporter, name: str
+) -> list[Mapping[str, Any]]:
+    attributes: list[Mapping[str, Any]] = []
+    for record in exporter.get_finished_logs():
+        log_record = record.log_record
+        if log_record.event_name != name:
+            continue
+        event_attributes: object = log_record.attributes
+        assert isinstance(event_attributes, Mapping)
+        attributes.append(cast("Mapping[str, Any]", event_attributes))
+    return attributes
 
 
 class FakeUpstream:
@@ -53,7 +106,17 @@ class FakeUpstream:
             )
         return httpx.Response(
             200,
-            json={"object": "chat.completion", "choices": [], "usage": self.usage},
+            json={
+                "object": "chat.completion",
+                "model": sent["model"],
+                "choices": [
+                    {
+                        "message": {"role": "assistant", "content": "pong"},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": self.usage,
+            },
         )
 
 
@@ -81,6 +144,235 @@ def configure(app: FastAPI, upstream: FakeUpstream) -> Callable[..., None]:
         app.dependency_overrides[get_upstream_transport] = lambda: httpx.MockTransport(upstream)
 
     return configure
+
+
+@pytest.fixture
+def span_exporter(monkeypatch: pytest.MonkeyPatch) -> Iterator[InMemorySpanExporter]:
+    provider = TracerProvider()
+    exporter = InMemorySpanExporter()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    monkeypatch.setattr(trace, "get_tracer", provider.get_tracer)
+    yield exporter
+    provider.shutdown()
+
+
+@pytest.fixture
+def log_exporter(monkeypatch: pytest.MonkeyPatch) -> Iterator[InMemoryLogRecordExporter]:
+    provider = LoggerProvider()
+    exporter = InMemoryLogRecordExporter()
+    provider.add_log_record_processor(SimpleLogRecordProcessor(exporter))
+    monkeypatch.setattr(_logs, "get_logger", provider.get_logger)
+    yield exporter
+    provider.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_model_calls_emit_contract_spans_with_usage_matching_the_usage_rows(
+    client: AsyncClient,
+    identity: FakeIdentity,
+    configure: Callable[..., None],
+    upstream: FakeUpstream,
+    span_exporter: InMemorySpanExporter,
+    log_exporter: InMemoryLogRecordExporter,
+) -> None:
+    configure(eval_run_id="eval-42", eval_trial_id="trial-42")
+    token = await cli_sign_in(client, identity, MARCUS)
+
+    for streaming in (False, True):
+        answered = await client.post(
+            "/api/agent/model/v1/chat/completions",
+            json={**CHAT, "stream": streaming},
+            headers={**bearer(token), AGENT_CONVERSATION_HEADER: "conversation-42"},
+        )
+        assert answered.status_code == 200, answered.text
+
+    usage = (await client.get("/api/agent/model/my-usage", headers=bearer(token))).json()
+    spans = span_exporter.get_finished_spans()
+    attributes = [_span_attributes(span) for span in spans]
+
+    assert len(spans) == 2
+    assert all(span.name == "chat" for span in spans)
+    assert all(span.kind == SpanKind.CLIENT for span in spans)
+    assert {attrs[GEN_AI_OPERATION_NAME] for attrs in attributes} == {"chat"}
+    assert {attrs[GEN_AI_PROVIDER_NAME] for attrs in attributes} == {GEN_AI_CUSTOM_PROVIDER}
+    assert {attrs[GEN_AI_REQUEST_MODEL] for attrs in attributes} == {"garden-small"}
+    assert {attrs[GEN_AI_RESPONSE_MODEL] for attrs in attributes} == {"garden-small"}
+    assert {attrs[GEN_AI_RESPONSE_STATUS] for attrs in attributes} == {"completed"}
+    assert all(attrs[GARDEN_PERSON_ID] for attrs in attributes)
+    assert all(attrs[GARDEN_AGENT_LOGIN_ID] for attrs in attributes)
+    assert {attrs[GARDEN_EVAL_RUN_ID] for attrs in attributes} == {"eval-42"}
+    assert {attrs[GARDEN_EVAL_TRIAL_ID] for attrs in attributes} == {"trial-42"}
+    assert all(attrs[GARDEN_CONTENT_CAPTURED] is False for attrs in attributes)
+    assert {attrs[GARDEN_AGENT_CONVERSATION_ID] for attrs in attributes} == {"conversation-42"}
+    for span in spans:
+        assert span.start_time is not None
+        assert span.end_time is not None
+        assert span.start_time < span.end_time
+    assert sum(attrs[GEN_AI_USAGE_INPUT_TOKENS] for attrs in attributes) == usage["prompt_tokens"]
+    assert (
+        sum(attrs[GEN_AI_USAGE_OUTPUT_TOKENS] for attrs in attributes) == usage["completion_tokens"]
+    )
+    assert sum(attrs[GARDEN_MODEL_TOTAL_TOKENS] for attrs in attributes) == usage["total_tokens"]
+    assert all("hello" not in str(attrs) for attrs in attributes)
+    assert all("pong" not in str(attrs) for attrs in attributes)
+    assert not log_exporter.get_finished_logs()
+
+
+@pytest.mark.asyncio
+async def test_content_capture_records_messages_only_when_enabled_in_dev(
+    client: AsyncClient,
+    identity: FakeIdentity,
+    configure: Callable[..., None],
+    span_exporter: InMemorySpanExporter,
+) -> None:
+    configure(gen_ai_capture_content="SPAN_ONLY")
+    await sign_in(client, identity, MARCUS)
+
+    answered = await client.post("/api/agent/model/v1/chat/completions", json=CHAT)
+
+    assert answered.status_code == 200, answered.text
+    [span] = span_exporter.get_finished_spans()
+    attributes = _span_attributes(span)
+    assert attributes[GARDEN_CONTENT_CAPTURED] is True
+    assert "hello" in attributes[GEN_AI_INPUT_MESSAGES]
+    assert "pong" in attributes[GEN_AI_OUTPUT_MESSAGES]
+
+
+@pytest.mark.parametrize(
+    ("capture_mode", "streaming"), [("EVENT_ONLY", False), ("SPAN_AND_EVENT", True)]
+)
+@pytest.mark.asyncio
+async def test_content_capture_event_modes_follow_the_configured_signal(
+    client: AsyncClient,
+    identity: FakeIdentity,
+    configure: Callable[..., None],
+    span_exporter: InMemorySpanExporter,
+    log_exporter: InMemoryLogRecordExporter,
+    capture_mode: str,
+    streaming: bool,
+) -> None:
+    configure(gen_ai_capture_content=capture_mode)
+    await sign_in(client, identity, MARCUS)
+
+    answered = await client.post(
+        "/api/agent/model/v1/chat/completions", json={**CHAT, "stream": streaming}
+    )
+
+    assert answered.status_code == 200, answered.text
+    [span] = span_exporter.get_finished_spans()
+    attributes = _span_attributes(span)
+    [log_record] = log_exporter.get_finished_logs()
+    assert log_record.log_record.event_name == GEN_AI_INFERENCE_EVENT
+    assert log_record.log_record.severity_number == SeverityNumber.DEBUG
+    [event_attributes] = _log_event_attributes(log_exporter, GEN_AI_INFERENCE_EVENT)
+    assert attributes[GARDEN_CONTENT_CAPTURED] is True
+    assert event_attributes[GEN_AI_OPERATION_NAME] == "chat"
+    assert event_attributes[GEN_AI_PROVIDER_NAME] == GEN_AI_CUSTOM_PROVIDER
+    assert "hello" in json.dumps(event_attributes[GEN_AI_INPUT_MESSAGES])
+    assert "pong" in json.dumps(event_attributes[GEN_AI_OUTPUT_MESSAGES])
+    assert (GEN_AI_INPUT_MESSAGES in attributes) is (capture_mode == "SPAN_AND_EVENT")
+    assert (GEN_AI_OUTPUT_MESSAGES in attributes) is (capture_mode == "SPAN_AND_EVENT")
+
+
+def test_content_capture_is_rejected_outside_dev(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GARDEN_FAKE_OIDC", "false")
+    with pytest.raises(ValueError, match="OTEL_INSTRUMENTATION_GENAI_CAPTURE_CONTENT"):
+        Settings(
+            database_url="postgresql://unused/garden_test",
+            environment="prod",
+            public_url="https://garden.example",
+            gen_ai_capture_content="SPAN_ONLY",
+        )
+
+
+def test_content_capture_reads_the_standard_otel_environment_variable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(GEN_AI_CAPTURE_CONTENT_ENV, "span_only")
+
+    settings = Settings(database_url="postgresql://unused/garden_test")
+
+    assert settings.gen_ai_capture_content == "SPAN_ONLY"
+
+
+@pytest.mark.asyncio
+async def test_gateway_tags_a_recognizable_conversation_title_side_call(
+    client: AsyncClient,
+    identity: FakeIdentity,
+    configure: Callable[..., None],
+    span_exporter: InMemorySpanExporter,
+) -> None:
+    configure()
+    await sign_in(client, identity, MARCUS)
+
+    answered = await client.post(
+        "/api/agent/model/v1/chat/completions",
+        json=CHAT,
+        headers={MODEL_SIDE_CALL_HEADER: "conversation_title"},
+    )
+
+    assert answered.status_code == 200, answered.text
+    [span] = span_exporter.get_finished_spans()
+    assert (
+        _span_attributes(span)[GARDEN_MODEL_SIDE_CALL_TYPE] == GARDEN_CONVERSATION_TITLE_SIDE_CALL
+    )
+
+
+@pytest.mark.asyncio
+async def test_upstream_failure_is_recorded_as_an_error_span(
+    client: AsyncClient,
+    identity: FakeIdentity,
+    configure: Callable[..., None],
+    upstream: FakeUpstream,
+    span_exporter: InMemorySpanExporter,
+) -> None:
+    configure()
+    upstream.status = 500
+    token = await cli_sign_in(client, identity, MARCUS)
+
+    failed = await client.post(
+        "/api/agent/model/v1/chat/completions", json=CHAT, headers=bearer(token)
+    )
+
+    assert failed.status_code == 502
+    [span] = span_exporter.get_finished_spans()
+    attributes = _span_attributes(span)
+    assert attributes[GEN_AI_RESPONSE_STATUS] == "failed"
+    assert span.status.status_code == trace.StatusCode.ERROR
+    assert attributes[GEN_AI_USAGE_INPUT_TOKENS] == 0
+    assert attributes[GEN_AI_USAGE_OUTPUT_TOKENS] == 0
+    assert "hello" not in str(attributes)
+
+
+@pytest.mark.asyncio
+async def test_inferred_agent_conversation_reuses_until_an_idle_gap(
+    client: AsyncClient,
+    identity: FakeIdentity,
+    configure: Callable[..., None],
+    clock: MovableClock,
+    span_exporter: InMemorySpanExporter,
+) -> None:
+    configure()
+    token = await cli_sign_in(client, identity, MARCUS)
+
+    first = await client.post(
+        "/api/agent/model/v1/chat/completions", json=CHAT, headers=bearer(token)
+    )
+    second = await client.post(
+        "/api/agent/model/v1/chat/completions", json=CHAT, headers=bearer(token)
+    )
+    clock.advance(timedelta(minutes=31))
+    third = await client.post(
+        "/api/agent/model/v1/chat/completions", json=CHAT, headers=bearer(token)
+    )
+
+    assert first.status_code == second.status_code == third.status_code == 200
+    [earlier, continuing, later] = span_exporter.get_finished_spans()
+    earlier_id = _span_attributes(earlier)[GARDEN_AGENT_CONVERSATION_ID]
+    continuing_id = _span_attributes(continuing)[GARDEN_AGENT_CONVERSATION_ID]
+    later_id = _span_attributes(later)[GARDEN_AGENT_CONVERSATION_ID]
+    assert earlier_id == continuing_id
+    assert later_id != continuing_id
 
 
 @pytest.mark.asyncio

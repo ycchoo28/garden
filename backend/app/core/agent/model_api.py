@@ -2,8 +2,9 @@
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
+from garden.trace_contract import AGENT_CONVERSATION_HEADER, MODEL_SIDE_CALL_HEADER
 
 from app.core.agent.model_service import ModelService, get_model_service
 from app.core.agent.schemas import ModelListOut, UsageTodayOut
@@ -28,13 +29,28 @@ async def chat_completions(
     body: dict[str, Any],
     person: Annotated[CurrentPerson, require("agent.model.use")],
     service: Annotated[ModelService, Depends(get_model_service)],
+    request: Request,
 ) -> dict[str, Any] | StreamingResponse:
     login = current_request_login.get()
     cli_login_id = login.cli_login_id if login else None
+    conversation_id = request.headers.get(AGENT_CONVERSATION_HEADER)
+    side_call_type = request.headers.get(MODEL_SIDE_CALL_HEADER)
     if body.get("stream") is True:
-        events = await service.stream(person_id=person.id, cli_login_id=cli_login_id, body=body)
+        events = await service.stream(
+            person_id=person.id,
+            cli_login_id=cli_login_id,
+            body=body,
+            agent_conversation_id=conversation_id,
+            model_side_call_type=side_call_type,
+        )
         return StreamingResponse(events, media_type="text/event-stream")
-    return await service.complete(person_id=person.id, cli_login_id=cli_login_id, body=body)
+    return await service.complete(
+        person_id=person.id,
+        cli_login_id=cli_login_id,
+        body=body,
+        agent_conversation_id=conversation_id,
+        model_side_call_type=side_call_type,
+    )
 
 
 @router.get(
