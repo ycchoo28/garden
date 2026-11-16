@@ -236,10 +236,13 @@ def test_cli_runs_every_registered_task_with_the_fake_embedder(
         fake_embeddings.append(fake_embedding)
         return {"passed": True}, Path("summary.json")
 
+    def print_summary(_summary: dict[str, object], _path: Path) -> None:
+        return None
+
     monkeypatch.setattr(sys, "argv", ["agent-eval", "--reference", "--fake-embedding"])
     monkeypatch.setattr(eval_run, "TASKS", tasks)
     monkeypatch.setattr(eval_run, "run_reference", run_reference)
-    monkeypatch.setattr(eval_run, "print_summary", lambda _summary, _path: None)
+    monkeypatch.setattr(eval_run, "print_summary", print_summary)
 
     assert eval_run.main() == 0
     assert started == list(tasks.values())
