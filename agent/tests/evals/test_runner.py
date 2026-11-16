@@ -129,6 +129,9 @@ def test_template_rebuilds_when_recorded_embedder_changes(
     def create_login(_api_url: str, _database: str, _subject: str, _device: str) -> str:
         return "token"
 
+    def create_person_session(_database: str, _subject: str) -> str:
+        return "person-session"
+
     def save_comment(_database: str, command: str) -> str:
         calls.append(("comment", command))
         return ""
@@ -141,6 +144,7 @@ def test_template_rebuilds_when_recorded_embedder_changes(
     monkeypatch.setattr(runner, "_run", run_command)
     monkeypatch.setattr(runner, "start_api", start_api)
     monkeypatch.setattr(runner, "_create_agent_login", create_login)
+    monkeypatch.setattr(runner, "_create_person_session", create_person_session)
     monkeypatch.setattr(runner, "psql", save_comment)
 
     logins = runner.ensure_template({}, tmp_path, DRAFT_ONE_RECEIPT, current_embedder)
@@ -152,6 +156,7 @@ def test_template_rebuilds_when_recorded_embedder_changes(
         "acting_subject": "marcus.lee@fernhill.example",
         "acting": "token",
         "grader": "token",
+        "person_session": "person-session",
     }
 
 
@@ -247,3 +252,35 @@ def test_cli_runs_every_registered_task_with_the_fake_embedder(
     assert eval_run.main() == 0
     assert started == list(tasks.values())
     assert fake_embeddings == [True, True]
+
+
+def test_start_stack_reuses_ready_local_services_without_running_just_up(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    waited: list[tuple[str, float]] = []
+
+    def ready(_host: str | None, _port: int | None) -> bool:
+        return True
+
+    def no_run(
+        _command: list[str], *, cwd: Path, env: dict[str, str], timeout: float = 600
+    ) -> object:
+        pytest.fail("The runner should reuse local services instead of running just up.")
+
+    def record_wait(url: str, timeout: float = 120.0) -> None:
+        waited.append((url, timeout))
+
+    monkeypatch.setattr(runner, "_port_ready", ready)
+    monkeypatch.setattr(runner, "_run", no_run)
+    monkeypatch.setattr(runner, "wait_for", record_wait)
+
+    runner.start_stack(
+        {
+            "GARDEN_DATABASE_URL": "postgresql+psycopg://garden:garden-dev@127.0.0.1:55436/garden",
+            "GARDEN_OIDC_ISSUER": "http://127.0.0.1:55086/default",
+        }
+    )
+
+    assert waited == [
+        ("http://127.0.0.1:55086/default/.well-known/openid-configuration", 120)
+    ]
