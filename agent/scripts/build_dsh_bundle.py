@@ -16,9 +16,11 @@ Usage: python scripts/build_dsh_bundle.py [--target linux-x64|windows-x64] [OUTP
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import subprocess
 import tarfile
+import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
@@ -28,21 +30,27 @@ DIST = ROOT / "dist"
 
 # Each target: the file the portal serves, and the npm flags that pick that platform's packages.
 TARGETS: dict[str, tuple[str, list[str]]] = {
-    "linux-x64": ("dsh-bundle.tar.gz", []),
+    "linux-x64": ("dsh-bundle.tar.gz", ["--os=linux", "--cpu=x64"]),
+    "linux-arm64": ("dsh-bundle.tar.gz", ["--os=linux", "--cpu=arm64"]),
+    "darwin-x64": ("dsh-bundle.tar.gz", ["--os=darwin", "--cpu=x64"]),
+    "darwin-arm64": ("dsh-bundle.tar.gz", ["--os=darwin", "--cpu=arm64"]),
     "windows-x64": ("dsh-bundle-windows-x64.tar.gz", ["--os=win32", "--cpu=x64"]),
 }
 
 
 def build(output: Path, target: str) -> Path:
-    staging = DIST / f"dsh-staging-{target}"
-    shutil.rmtree(staging, ignore_errors=True)
-    staging.mkdir(parents=True)
+    staging = Path(tempfile.mkdtemp(prefix=f"garden-dsh-{target}-"))
     for name in ("package.json", "package-lock.json"):
         shutil.copy2(MANIFEST_DIR / name, staging / name)
     # Lifecycle scripts stay off: the bundle must not run code when the laptop unpacks it.
+    print(
+        f"Installing dsh dependencies for {target} (npm ci). This can take 10-15 minutes on "
+        "first run; npm prints nothing until it finishes. Please wait.",
+        flush=True,
+    )
     subprocess.run(
         [
-            "npm",
+            shutil.which("npm") or "npm",
             "ci",
             "--omit=dev",
             "--ignore-scripts",
@@ -54,10 +62,14 @@ def build(output: Path, target: str) -> Path:
         check=True,
     )
     output.parent.mkdir(parents=True, exist_ok=True)
-    with tarfile.open(output, "w:gz", compresslevel=9) as archive:
+    descriptor, temporary = tempfile.mkstemp(prefix=".dsh-bundle-", dir=output.parent)
+    os.close(descriptor)
+    with tarfile.open(temporary, "w:gz", compresslevel=6) as archive:
         archive.add(staging / "package.json", arcname="package.json")
         archive.add(staging / "node_modules", arcname="node_modules", filter=_portable_only(target))
-    shutil.rmtree(staging)
+    Path(temporary).replace(output)
+    if shutil.which("trash"):
+        subprocess.run(["trash", str(staging)], check=True)
     return output
 
 

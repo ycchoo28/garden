@@ -3,8 +3,14 @@
 from __future__ import annotations
 
 import json
+import socket
+import struct
+import threading
+import time
 import urllib.error
 import urllib.request
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -128,3 +134,127 @@ def test_logout_keeps_other_portals_logins(portal: FakePortal, env: dict[str, st
         assert other.logouts == []
     finally:
         other.stop()
+
+
+@contextmanager
+def reset_server() -> Generator[str]:
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind(("127.0.0.1", 0))
+    server.listen(5)
+    port = server.getsockname()[1]
+    running = True
+
+    def handler() -> None:
+        while running:
+            try:
+                server.settimeout(0.2)
+                conn, _ = server.accept()
+                conn.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+                conn.close()
+            except (TimeoutError, OSError):
+                pass
+
+    thread = threading.Thread(target=handler, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{port}"
+    finally:
+        running = False
+        server.close()
+        thread.join(timeout=1.0)
+
+
+@contextmanager
+def timing_out_server() -> Generator[str]:
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind(("127.0.0.1", 0))
+    server.listen(5)
+    port = server.getsockname()[1]
+    running = True
+
+    def handler() -> None:
+        while running:
+            try:
+                server.settimeout(0.2)
+                conn, _ = server.accept()
+                time.sleep(0.4)
+                conn.close()
+            except (TimeoutError, OSError):
+                pass
+
+    thread = threading.Thread(target=handler, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{port}"
+    finally:
+        running = False
+        server.close()
+        thread.join(timeout=1.0)
+
+
+def test_logout_force_with_portal_timeout_deletes_local_token_and_prints_warning(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    with timing_out_server() as url:
+        test_env = {**env, "GARDEN_API_URL": url, "GARDEN_CLIENT_TIMEOUT": "0.1"}
+        store_token(test_env, url, GOOD_TOKEN)
+        assert GOOD_TOKEN in (tmp_path / "secrets.json").read_text(encoding="utf-8")
+
+        result = run_garden(test_env, "logout", "--force")
+        assert result.returncode == 0, result.stderr
+        assert (
+            "warning: the portal did not confirm the sign-out (The portal cannot be reached). "
+            "The local login was dropped (--force)." in result.stderr
+        )
+        assert GOOD_TOKEN not in (tmp_path / "secrets.json").read_text(encoding="utf-8")
+
+
+def test_logout_force_with_portal_connection_reset_deletes_local_token_and_prints_warning(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    with reset_server() as url:
+        test_env = {**env, "GARDEN_API_URL": url}
+        store_token(test_env, url, GOOD_TOKEN)
+        assert GOOD_TOKEN in (tmp_path / "secrets.json").read_text(encoding="utf-8")
+
+        result = run_garden(test_env, "logout", "--force")
+        assert result.returncode == 0, result.stderr
+        assert (
+            "warning: the portal did not confirm the sign-out (The portal cannot be reached). "
+            "The local login was dropped (--force)." in result.stderr
+        )
+        assert GOOD_TOKEN not in (tmp_path / "secrets.json").read_text(encoding="utf-8")
+
+
+def test_logout_without_force_with_portal_timeout_keeps_token(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    with timing_out_server() as url:
+        test_env = {**env, "GARDEN_API_URL": url, "GARDEN_CLIENT_TIMEOUT": "0.1"}
+        store_token(test_env, url, GOOD_TOKEN)
+        assert GOOD_TOKEN in (tmp_path / "secrets.json").read_text(encoding="utf-8")
+
+        result = run_garden(test_env, "logout")
+        assert result.returncode == 1
+        assert (
+            "warning: the portal did not confirm the sign-out (The portal cannot be reached). "
+            "The login was kept locally so sign-out can be retried." in result.stderr
+        )
+        assert GOOD_TOKEN in (tmp_path / "secrets.json").read_text(encoding="utf-8")
+
+
+def test_logout_without_force_with_portal_connection_reset_keeps_token(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    with reset_server() as url:
+        test_env = {**env, "GARDEN_API_URL": url}
+        store_token(test_env, url, GOOD_TOKEN)
+        assert GOOD_TOKEN in (tmp_path / "secrets.json").read_text(encoding="utf-8")
+
+        result = run_garden(test_env, "logout")
+        assert result.returncode == 1
+        assert (
+            "warning: the portal did not confirm the sign-out (The portal cannot be reached). "
+            "The login was kept locally so sign-out can be retried." in result.stderr
+        )
+        assert GOOD_TOKEN in (tmp_path / "secrets.json").read_text(encoding="utf-8")

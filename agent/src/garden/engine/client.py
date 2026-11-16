@@ -6,7 +6,11 @@ so the engine can refresh the tool list and refuse to run an old `garden`.
 
 from __future__ import annotations
 
+import http.client
 import json
+import math
+import os
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -28,7 +32,37 @@ from garden.shared import (
 
 CONTRACT_HEADER = "x-garden-contract-version"
 MIN_CLI_HEADER = "x-garden-min-cli-version"
-TIMEOUT_SECONDS = 30
+DEFAULT_TIMEOUT_SECONDS = 30.0
+_timeout_warned = False
+
+
+def reset_client_timeout_warning() -> None:
+    global _timeout_warned
+    _timeout_warned = False
+
+
+def parse_client_timeout() -> float:
+    global _timeout_warned
+    raw = os.environ.get("GARDEN_CLIENT_TIMEOUT")
+    if raw is None:
+        return DEFAULT_TIMEOUT_SECONDS
+    try:
+        val = float(raw)
+        if not math.isfinite(val) or val <= 0:
+            raise ValueError("timeout must be a finite positive number")
+        return val
+    except ValueError:
+        if not _timeout_warned:
+            print(
+                f"warning: invalid GARDEN_CLIENT_TIMEOUT value {raw!r}; "
+                f"falling back to {DEFAULT_TIMEOUT_SECONDS:g}s.",
+                file=sys.stderr,
+            )
+            _timeout_warned = True
+        return DEFAULT_TIMEOUT_SECONDS
+
+
+TIMEOUT_SECONDS = parse_client_timeout()
 
 
 @dataclass(frozen=True)
@@ -62,12 +96,18 @@ class UrllibTransport:
             with urllib.request.urlopen(request, timeout=timeout) as reply:
                 return Response(reply.status, _lower_headers(reply.headers), _decode(reply.read()))
         except urllib.error.HTTPError as error:
-            problem = _decode(error.read())
+            try:
+                problem = _decode(error.read())
+            except (OSError, http.client.HTTPException):
+                problem = None
             raise _problem_error(error.code, problem) from None
-        except urllib.error.URLError as error:
+        except (urllib.error.URLError, OSError, http.client.HTTPException) as error:
+            reason = (
+                getattr(error, "reason", None) or str(error) or type(error).__name__ or "timed out"
+            )
             raise GardenError(
                 title="The portal cannot be reached",
-                detail=str(error.reason),
+                detail=str(reason),
                 fix="Check the network, and that the portal address is right, then try again.",
             ) from error
 
@@ -104,11 +144,13 @@ class PortalClient:
         self,
         portal_url: str,
         token: str | None = None,
+        timeout: float | None = None,
         *,
         transport: HTTPTransport | None = None,
     ) -> None:
         self.portal_url = portal_url.rstrip("/")
         self.token = token
+        self.timeout = parse_client_timeout() if timeout is None else timeout
         self._transport = transport or UrllibTransport()
 
     def url(self, path: str, query: dict[str, Any] | None = None) -> str:
@@ -147,7 +189,7 @@ class PortalClient:
         request = urllib.request.Request(
             self.url(path, query), data=data, method=method, headers=request_headers
         )
-        response = self._transport.send(request, TIMEOUT_SECONDS)
+        response = self._transport.send(request, self.timeout)
         check_min_version(response.headers)
         return response
 

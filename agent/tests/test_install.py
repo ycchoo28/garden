@@ -22,6 +22,7 @@ import tarfile
 import zipapp
 from pathlib import Path
 
+import pytest
 import yaml
 from conftest import ROOT, as_json, run_garden
 from fake_portal import GOOD_TOKEN, FakePortal
@@ -122,6 +123,8 @@ def test_installer_runs_unattended_and_the_launchers_and_dsh_patch_work(
     dsh_home = tmp_path / "dsh"
     install_env = {
         **env,
+        "HOME": str(tmp_path),
+        "USERPROFILE": str(tmp_path),
         "GARDEN_API_URL": portal.url,
         "GARDEN_PYTHON": sys.executable,
         "GARDEN_BIN_DIR": str(bin_dir),
@@ -137,6 +140,14 @@ def test_installer_runs_unattended_and_the_launchers_and_dsh_patch_work(
         check=False,
     )
     assert installed.returncode == 0, installed.stdout + installed.stderr
+    manifest = json.loads(
+        (tmp_path / ".local" / "share" / "garden" / "install-manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    recorded_paths = {item["path"] for item in manifest["artifacts"]}
+    assert str(bin_dir / "garden") in recorded_paths
+    assert str(bin_dir / "dsh") in recorded_paths
     # The installer reports the smoke check and emits no uv warning or force suggestion.
     assert "Ready:" in installed.stdout
     assert "Approve the sign-in in your browser: http" in installed.stdout
@@ -276,6 +287,40 @@ def test_sign_in_is_the_last_step_so_a_failed_sign_in_leaves_everything_installe
     assert script.index("'skills', 'install'") < script.index("Invoke-SignIn $python $pyz")
 
 
+def test_a_failed_sign_in_shows_what_garden_login_printed() -> None:
+    """The error that stops the install carries garden login's own last lines, never the link."""
+    shell = INSTALLER.read_text(encoding="utf-8")
+    assert "show_login_output" in shell
+    # Both ways a sign-in can fail: no link ever printed, and garden login exiting non-zero.
+    assert shell.count('show_login_output "$log"') == 2
+    script = INSTALLER_WINDOWS.read_text(encoding="utf-8")
+    assert "function Get-LoginOutputTail" in script
+    assert "throw ('garden login exited with an error.' + (Get-LoginOutputTail))" in script
+    assert "throw ('the login link did not appear.' + (Get-LoginOutputTail))" in script
+
+
+def test_the_shell_installer_prints_the_login_tail_without_the_link(tmp_path: Path) -> None:
+    """Runs show_login_output itself: the last eight lines, the approval link left out."""
+    shell = INSTALLER.read_text(encoding="utf-8")
+    start = shell.index("show_login_output() {")
+    function = shell[start : shell.index("\n}\n", start) + 3]
+    log = tmp_path / "login.log"
+    lines = ["  https://portal.example/approve/1"] + [f"line {n}" for n in range(12)]
+    log.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    result = subprocess.run(
+        ["bash", "-c", function + '\nshow_login_output "$1"', "bash", str(log)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "garden login said:" in result.stderr
+    assert "approve" not in result.stderr
+    assert "line 11" in result.stderr
+    assert "line 3" not in result.stderr
+
+
 def test_the_windows_installer_fetches_its_bundle_and_the_patch_has_no_placeholder_left() -> None:
     """A text check, because CI has no PowerShell. It keeps install.ps1 in step with install.sh.
 
@@ -324,3 +369,116 @@ def test_the_windows_installer_fetches_its_bundle_and_the_patch_has_no_placehold
         model="model-id",
     )
     assert not re.findall(r"\{\{[A-Z_]+\}\}", rendered), "a placeholder is left in the patch"
+
+
+@pytest.fixture(autouse=True)
+def node_runtime(env: dict[str, str], tmp_path: Path) -> None:
+    """The fake-portal installer tests use a stand-in Node, just as they use a stand-in dsh."""
+    import os
+
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    node = tools / "node"
+    node.write_text("#!/bin/sh\necho 'stand-in Node 26'\nexit 0\n")
+    node.chmod(0o755)
+    env["PATH"] = str(tools) + os.pathsep + env["PATH"]
+
+
+@pytest.mark.parametrize("existing", ["missing", "old", "new"])
+@pytest.mark.parametrize("valid", [True, False])
+def test_node_bootstrap_checks_downloads_and_preserves_the_runtime_path(
+    portal: FakePortal, env: dict[str, str], tmp_path: Path, existing: str, valid: bool
+) -> None:
+    import hashlib
+    import os
+
+    _serve_downloads(portal, _build_garden_pyz(tmp_path / "served" / "garden.pyz"))
+    tools = tmp_path / "isolated-tools"
+    tools.mkdir()
+    # Keep the installer's Unix utilities while excluding every system Node.
+    for folder in env["PATH"].split(os.pathsep):
+        if not Path(folder).is_dir():
+            continue
+        for source in Path(folder).iterdir():
+            if source.name not in ("node", "nodejs") and not (tools / source.name).exists():
+                (tools / source.name).symlink_to(source)
+    if existing != "missing":
+        node = tools / "node"
+        node.write_text(f"#!/bin/sh\nexit {0 if existing == 'new' else 1}\n")
+        node.chmod(0o755)
+    payload = tmp_path / "node.tar.gz"
+    content = b"#!/bin/sh\necho node-from-garden-home\nexit 0\n"
+    with tarfile.open(payload, "w:gz") as archive:
+        info = tarfile.TarInfo("node-v26.13.0-linux-x64/bin/node")
+        info.size = len(content)
+        info.mode = 0o755
+        archive.addfile(info, io.BytesIO(content))
+    real_curl = shutil.which("curl")
+    curl = tools / "curl"
+    curl.rename(tools / "curl-original")
+    curl.write_text(
+        '#!/bin/sh\ncase "$*" in\n'
+        f'  *nodejs.org*) while [ "$1" != "--output" ]; do shift; done; cp "{payload}" "$2" ;;\n'
+        f'  *) exec "{real_curl}" "$@" ;;\nesac\n'
+    )
+    curl.chmod(0o755)
+    script = tmp_path / "install.sh"
+    text = INSTALLER.read_text()
+    digest = hashlib.sha256(payload.read_bytes()).hexdigest() if valid else "0" * 64
+    text = re.sub(
+        r"(node_asset=node-v26.13.0-linux-x64; node_sha=)[a-f0-9]+", rf"\g<1>{digest}", text
+    )
+    script.write_text(text)
+    result = subprocess.run(
+        ["bash", str(script)],
+        env={
+            **env,
+            "PATH": str(tools),
+            "GARDEN_PYTHON": sys.executable,
+            "GARDEN_BIN_DIR": str(tmp_path / "bin"),
+            "GARDEN_DSH_HOME": str(tmp_path / "dsh"),
+            "GARDEN_INSTALL_TEST": "1",
+        },
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    success = valid or existing == "new"
+    assert (result.returncode == 0) == success, result.stdout + result.stderr
+    if not success:
+        assert "Node.js checksum mismatch" in result.stderr
+        assert not (tmp_path / "home/garden.pyz").exists()
+    elif existing != "new":
+        assert "[10/10] Done:" in result.stderr
+        launcher = (tmp_path / "bin/garden").read_text()
+        assert str(tmp_path / "home/tools/node-v26.13.0-linux-x64/bin") in launcher
+
+
+def test_node_pins_and_windows_runtime_handling_match_the_bootstrap() -> None:
+    pins = json.loads((ROOT.parent / "scripts/bootstrap-tools.json").read_text())
+    shell = INSTALLER.read_text()
+    windows = INSTALLER_WINDOWS.read_text()
+    version = re.search(r"\$nodeVersion = '([^']+)'", windows)
+    assert version
+    assert f"node-v{version[1]}-linux-x64" in shell
+    for target in ("linux-x64", "linux-arm64", "darwin-x64", "darwin-arm64"):
+        assert pins[target]["node"]["sha256"] in shell
+    assert pins["windows-x64"]["node"]["sha256"] in windows
+    assert "if ($major -ge 24)" in windows
+    assert '$env:Path = "$folder;$env:Path"' in windows
+    assert "PATH=$nodeRuntime;%PATH%" in windows
+    assert "if ($env:GARDEN_INSTALL_TEST) { return }" in windows
+
+
+def test_the_windows_installer_records_its_files_after_every_stage() -> None:
+    """A text check, because CI has no PowerShell.
+
+    A demo that stops sends the installer Ctrl+Break, which PowerShell answers by entering its
+    debugger, and then ends it by force, so its `finally` never runs. Recording after each stage
+    keeps everything it installed so far in the manifest, and uninstall can remove it.
+    """
+    script = INSTALLER_WINDOWS.read_text(encoding="utf-8")
+    complete_step = script[script.index("function Complete-Step") :]
+    complete_step = complete_step[: complete_step.index("\n}\n")]
+    assert "Write-InstallManifest" in complete_step

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import http.client
 import json
 import socket
 import urllib.error
@@ -124,17 +125,21 @@ def _default_exchange_code(
             parsed: object = json.loads(resp_text)
             return as_object(parsed)
     except urllib.error.HTTPError as error:
-        detail = error.read().decode("utf-8", errors="replace")
+        try:
+            detail = error.read().decode("utf-8", errors="replace")
+        except (OSError, http.client.HTTPException):
+            detail = ""
         raise GardenError(
             title="Code exchange failed",
             detail=detail,
             status=error.code,
             fix="Run garden login again.",
         ) from error
-    except urllib.error.URLError as error:
+    except (urllib.error.URLError, OSError, http.client.HTTPException) as error:
+        reason = getattr(error, "reason", None) or str(error) or type(error).__name__ or "timed out"
         raise GardenError(
             title="Could not connect to portal",
-            detail=str(error),
+            detail=str(reason),
             fix="Check your network connection and portal address.",
         ) from error
 
@@ -206,6 +211,7 @@ def logout(
     settings: Settings | None = None,
     store: SecretStore | None = None,
     revoke_remote: Callable[[str], None] | None = None,
+    force: bool = False,
 ) -> tuple[Login | None, str | None]:
     active_settings = settings or load_settings()
     active_store = store or default_store(active_settings.home)
@@ -216,5 +222,8 @@ def logout(
             revoke_remote(current.token)
         except GardenError as error:
             warning = error.title
-    active_store.delete(active_settings.portal_url)
+        except (OSError, http.client.HTTPException):
+            warning = "The portal cannot be reached"
+    if warning is None or force:
+        active_store.delete(active_settings.portal_url)
     return (current, warning)
