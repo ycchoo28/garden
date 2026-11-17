@@ -270,6 +270,9 @@ Run `just` with no arguments to list them.
 | `just agent-install-test` | Runs the installer unattended against the fake portal. It needs no network. |
 | `just agent-dsh-bundle` | Builds the dsh bundles for Linux and Windows. It needs network access to the npm registry. |
 | `just agent-publish` | Copies the installer files, the zipapp and the dsh bundles into `GARDEN_AGENT_DOWNLOADS_DIR`. |
+| `just agent-eval --reference [--task <id>]` | Runs scripted trials without a model and starts or reuses OpenObserve for trace export. |
+| `just eval-ui` | Starts or reuses local OpenObserve and opens its UI. Log in as `root@example.com`; its generated password is kept in the ignored `var/openobserve.env` file. |
+| `just eval-down` | Stops OpenObserve while keeping its named data volume. |
 | `just secrets-check` | Scans the git history and the working tree with gitleaks. |
 | `just docs-check` | Checks that the relative links in the Markdown files point at real files and headings. |
 | `just deny-check` | Fails when a file names a term on the deny-list. |
@@ -289,6 +292,9 @@ All of these bind to 127.0.0.1.
 | 55432 | Postgres 17 with pgvector. |
 | 55081 | The fake OpenID Connect provider. |
 | 55083 | The llama.cpp embedding server, when you run `just embedding-up`. |
+| 55086 | OpenObserve for eval traces and agent telemetry, when you run `just eval-ui` or `just agent-eval`. |
+
+Set `GARDEN_EVAL_OPENOBSERVE_PORT` to use another free loopback port when 55086 is occupied.
 
 The fake sign-in provider shows a button for each seeded person, from `dev/oidc/login.html`, and the backend refuses it outside the `dev` environment.
 Add a button there when you add a person to the seed.
