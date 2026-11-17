@@ -9,6 +9,9 @@ from typing import Literal, Protocol, cast
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from opentelemetry import propagate
+
+from garden.trace_contract import MODEL_SIDE_CALL_HEADER
 from tests.evals.grading import GraderResult
 from tests.evals.task_types import EvalTask
 
@@ -52,13 +55,16 @@ class OpenAICompatibleJudge:
                 "temperature": 0,
             }
         ).encode()
+        headers = {
+            "Authorization": f"Bearer {self._api_key}",
+            "Content-Type": "application/json",
+            MODEL_SIDE_CALL_HEADER: "eval_grader",
+        }
+        propagate.inject(headers)
         request = Request(
             f"{self._base_url}/chat/completions",
             data=payload,
-            headers={
-                "Authorization": f"Bearer {self._api_key}",
-                "Content-Type": "application/json",
-            },
+            headers=headers,
             method="POST",
         )
         try:

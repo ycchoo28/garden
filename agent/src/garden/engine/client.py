@@ -7,6 +7,7 @@ so the engine can refresh the tool list and refuse to run an old `garden`.
 from __future__ import annotations
 
 import json
+import os
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -31,6 +32,7 @@ from garden.trace_contract import (
     GARDEN_AGENT_FLAG,
     GARDEN_AGENT_LOGIN_ID,
     GARDEN_AGENT_LOGIN_ID_HEADER,
+    GARDEN_EVAL_TRACEPARENT_ENV,
     GARDEN_PERSON_ID,
     GARDEN_PERSON_ID_HEADER,
 )
@@ -156,6 +158,10 @@ class PortalClient:
         if self.token:
             request_headers["Authorization"] = f"Bearer {self.token}"
         propagate.inject(request_headers)
+        if not request_headers.get("traceparent"):
+            traceparent = os.environ.get(GARDEN_EVAL_TRACEPARENT_ENV)
+            if traceparent:
+                request_headers["traceparent"] = traceparent
         request = urllib.request.Request(
             self.url(path, query), data=data, method=method, headers=request_headers
         )

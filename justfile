@@ -250,13 +250,20 @@ eval-down:
     fi
 
 # Run one task's scripted positive and negative reference trials without a model.
-agent-eval *args: eval-up
+agent-eval *args:
     #!/usr/bin/env bash
     set -euo pipefail
-    IFS='=' read -r _ GARDEN_OPENOBSERVE_ROOT_PASSWORD < var/openobserve.env
-    auth="$(printf 'root@example.com:%s' "$GARDEN_OPENOBSERVE_ROOT_PASSWORD" | base64 | tr -d '\n')"
-    export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="http://127.0.0.1:${GARDEN_EVAL_OPENOBSERVE_PORT:-55086}/api/default/v1/traces"
-    export OTEL_EXPORTER_OTLP_TRACES_HEADERS="Authorization=Basic $auth"
+    if just eval-up; then
+        IFS='=' read -r _ GARDEN_OPENOBSERVE_ROOT_PASSWORD < var/openobserve.env
+        auth="$(printf 'root@example.com:%s' "$GARDEN_OPENOBSERVE_ROOT_PASSWORD" | base64 | tr -d '\n')"
+        endpoint="http://127.0.0.1:${GARDEN_EVAL_OPENOBSERVE_PORT:-55086}/api/default/v1"
+        export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="$endpoint/traces"
+        export OTEL_EXPORTER_OTLP_TRACES_HEADERS="Authorization=Basic $auth,stream-name=garden-eval-traces"
+        export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT="$endpoint/logs"
+        export OTEL_EXPORTER_OTLP_LOGS_HEADERS="Authorization=Basic $auth,stream-name=garden-eval-trials"
+    else
+        echo "OpenObserve could not start; continuing without its local OTLP endpoint. Trial records remain in the JSON summary." >&2
+    fi
     cd agent && uv run python -m tests.evals.run {{args}}
 
 # Backend tests against the real Postgres in Compose, in a separate *_test database.

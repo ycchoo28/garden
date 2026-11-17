@@ -22,6 +22,7 @@ import yaml
 
 from garden.dsh.launcher import entry_point
 from garden.dsh.patch import TOKEN_ENV, render_patch
+from garden.trace_contract import GARDEN_EVAL_TRACEPARENT_ENV
 from tests.evals.task_types import EvalTask
 from tests.shared.garden_cli import store_token
 from tests.shared.paths import AGENT_ROOT
@@ -163,6 +164,7 @@ def prepare_dsh(
     home: Path,
     workspace: Path,
     environ: dict[str, str],
+    traceparent: str | None = None,
 ) -> tuple[list[str], dict[str, str]]:
     """Build dsh's sealed home, Garden MCP overlay and gateway credentials for one trial."""
     entry = installed_dsh_entry(environ)
@@ -227,12 +229,23 @@ def prepare_dsh(
             if row is not None and row.get("id") == "mcp-garden":
                 config = _object(row.get("config"))
                 if config is not None:
-                    config["env"] = {
+                    mcp_env = {
                         "GARDEN_API_URL": portal_url,
                         "GARDEN_SECRET_STORE": f"file:{secret_file}",
                         "GARDEN_HOME": str(home / ".garden"),
                         "PYTHONPATH": str(AGENT_ROOT / "src"),
                     }
+                    if traceparent:
+                        mcp_env[GARDEN_EVAL_TRACEPARENT_ENV] = traceparent
+                    config["env"] = mcp_env
+            if row is not None and row.get("id") == "llm-pi-ai" and traceparent:
+                config = _object(row.get("config"))
+                providers = _object(config.get("providers")) if config is not None else None
+                provider = (
+                    _object(providers.get("garden-portal")) if providers is not None else None
+                )
+                if provider is not None:
+                    provider["headers"] = {"traceparent": traceparent}
     (dsh_home / "cordis.patch.yml").write_text(
         yaml.safe_dump(patch, sort_keys=False), encoding="utf-8"
     )

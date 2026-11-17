@@ -376,6 +376,8 @@ class ModelService:
             GARDEN_CONVERSATION_TITLE_SIDE_CALL,
         }:
             attributes[GARDEN_MODEL_SIDE_CALL_TYPE] = GARDEN_CONVERSATION_TITLE_SIDE_CALL
+        elif isinstance(side_call_type, str) and side_call_type.strip():
+            attributes[GARDEN_MODEL_SIDE_CALL_TYPE] = side_call_type.strip()
 
         span = trace.get_tracer("garden.model_gateway").start_span(
             "chat", kind=SpanKind.CLIENT, attributes=attributes

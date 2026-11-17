@@ -98,6 +98,34 @@ def test_three_budget_failures_abort_only_that_cell_and_summary_uses_medians(
     assert json.loads(path.read_text(encoding="utf-8"))["cells"] == cells
 
 
+def test_trial_records_have_trace_ids_and_export_failure_keeps_json_summary(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+
+    def failed_flush(_self: model_trials.EvalTelemetry) -> bool:
+        return False
+
+    def trial(**values: object) -> dict[str, object]:
+        return _trial(**values, passed=True)
+
+    monkeypatch.setattr(model_trials.EvalTelemetry, "flush", failed_flush)
+    summary, path = run_model_trials(
+        [DRAFT_ONE_RECEIPT],
+        ["fake-model"],
+        repeat=1,
+        jobs=1,
+        trial_runner=trial,
+        run_id="run-trace-test",
+        output=tmp_path,
+    )
+
+    record = cast(list[dict[str, object]], summary["trials"])[0]
+    trace_id = cast(str, record["trace_id"])
+    assert len(trace_id) == 32
+    assert int(trace_id, 16) != 0
+    assert json.loads(path.read_text(encoding="utf-8"))["trials"][0]["trace_id"] == trace_id
+
+
 def test_jobs_run_repeats_concurrently_within_one_cell(tmp_path: Path) -> None:
     active = 0
     maximum_active = 0
@@ -230,6 +258,7 @@ def test_upstream_key_is_redacted_from_api_process_logs(
     ) -> str:
         assert model_env is not None
         assert model_env["GARDEN_AGENT_MODEL_API_KEY"] == key
+        assert model_env["OTEL_INSTRUMENTATION_GENAI_CAPTURE_CONTENT"] == "SPAN_ONLY"
         assert run_id == "12345678-run"
         assert trial_id == "draft-one-receipt/fake-model/1"
         log_path.write_text(f"upstream diagnostic: {key}\n", encoding="utf-8")

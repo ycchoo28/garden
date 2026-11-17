@@ -34,6 +34,28 @@ def test_trial_backend_environment_uses_the_shared_trace_contract(tmp_path: Path
     assert env["GARDEN_AGENT_MODEL_UPSTREAM_URL"] == "http://127.0.0.1:9090"
 
 
+def test_gateway_usage_total_reads_the_trial_api_and_accepts_only_nonnegative_integers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, str, str, str]] = []
+
+    def api_json(base_url: str, path: str, token: str, *, side_call: str) -> object:
+        calls.append((base_url, path, token, side_call))
+        return {"total_tokens": 42}
+
+    monkeypatch.setattr(runner, "api_json", api_json)
+
+    assert runner.gateway_usage_total("http://127.0.0.1:1", "acting-token") == 42
+    assert calls == [
+        (
+            "http://127.0.0.1:1",
+            "/api/agent/model/my-usage",
+            "acting-token",
+            "trial_metrics",
+        )
+    ]
+
+
 def test_trial_runner_error_is_recorded_and_does_not_stop_later_trials(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

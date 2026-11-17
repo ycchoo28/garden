@@ -9,6 +9,7 @@ import re
 import secrets
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 import uuid
@@ -21,11 +22,12 @@ from urllib.request import Request, urlopen
 
 from garden.trace_contract import GARDEN_EVAL_RUN_ID_ENV, GARDEN_EVAL_TRIAL_ID_ENV
 from tests.evals.embedding import ensure_embedding_server
-from tests.evals.grading import DraftClaimGrader, GraderResult, trial_passed
+from tests.evals.grading import DraftClaimGrader, GraderResult, api_json, trial_passed
 from tests.evals.harness import DshHarnessAdapter
 from tests.evals.knowledge_grading import JudgeModel, KnowledgeAnswerGrader
 from tests.evals.task_types import EvalTask, ReferenceSolution
 from tests.evals.tasks import ClaimDraftTask
+from tests.evals.telemetry import EvalTelemetry
 from tests.shared.paths import AGENT_ROOT, REPO
 from tests.shared.stack import Services, free_port, psql, wait_for
 from tests.shared.transcript import StepFailed
@@ -425,6 +427,22 @@ def grade_task(
     return results
 
 
+def gateway_usage_total(api_url: str, agent_token: str) -> int | None:
+    """Read the current trial's authoritative gateway token count."""
+    usage = _as_object(
+        api_json(
+            api_url,
+            "/api/agent/model/my-usage",
+            agent_token,
+            side_call="trial_metrics",
+        )
+    )
+    total = usage.get("total_tokens") if usage is not None else None
+    if isinstance(total, int) and not isinstance(total, bool) and total >= 0:
+        return total
+    return None
+
+
 def _trial_record(
     *,
     run_id: str,
@@ -465,6 +483,7 @@ def _trial_record(
         "findings": [],
         "tool_calls": tool_calls,
         "tokens": 0,
+        "gateway_tokens": 0,
         "duration_seconds": round(time.monotonic() - started, 3),
         "dsh_exit_code": exit_code,
         "final_answer": answer,
@@ -616,6 +635,7 @@ def run_reference(
             env["GARDEN_EMBEDDING_URL"] = selected_embedder.url
         logins = ensure_template(env, OUTPUT, task, embedder)
         run_id = str(uuid.uuid4())
+        telemetry = EvalTelemetry(env)
         records: list[dict[str, object]] = []
         for variant, expected_pass, solution in (
             ("perfect", True, task.perfect),
@@ -623,39 +643,55 @@ def run_reference(
         ):
             if solution is None:
                 raise StepFailed(f"Task {task.id!r} has no {variant} reference solution.")
-            try:
-                record = run_trial(
-                    run_id=run_id,
-                    task=task,
-                    embedder=embedder,
-                    variant=variant,
-                    expected_pass=expected_pass,
-                    solution=solution,
-                    logins=logins,
-                    env=env,
-                    output=OUTPUT,
-                    keep_failed=keep_failed,
-                )
-            except Exception as failure:
-                record = _trial_record(
-                    run_id=run_id,
-                    task=task,
-                    embedder=embedder,
-                    variant=variant,
-                    expected_pass=expected_pass,
-                    started=time.monotonic(),
-                    database=f"garden_agent_eval_{run_id[:8]}-{variant}",
-                    db_kept=False,
-                    reference_solution=variant,
-                    answer="",
-                    exit_code=1,
-                    tool_calls=0,
-                    graders=[
-                        GraderResult(grader.id, "fail", f"The trial runner failed: {failure}")
-                        for grader in task.graders
-                    ],
-                    error=f"Trial runner failed: {failure}",
-                )
+            trial_id = f"{run_id[:8]}-{variant}"
+            with telemetry.trial_span(
+                run_id=run_id,
+                trial_id=trial_id,
+                task_id=task.id,
+                suite=task.suite,
+                area=task.area,
+                model="reference",
+                repeat=1,
+            ) as span:
+                try:
+                    record = run_trial(
+                        run_id=run_id,
+                        task=task,
+                        embedder=embedder,
+                        variant=variant,
+                        expected_pass=expected_pass,
+                        solution=solution,
+                        logins=logins,
+                        env=env,
+                        output=OUTPUT,
+                        keep_failed=keep_failed,
+                    )
+                except Exception as failure:
+                    record = _trial_record(
+                        run_id=run_id,
+                        task=task,
+                        embedder=embedder,
+                        variant=variant,
+                        expected_pass=expected_pass,
+                        started=time.monotonic(),
+                        database=f"garden_agent_eval_{run_id[:8]}-{variant}",
+                        db_kept=False,
+                        reference_solution=variant,
+                        answer="",
+                        exit_code=1,
+                        tool_calls=0,
+                        graders=[
+                            GraderResult(grader.id, "fail", f"The trial runner failed: {failure}")
+                            for grader in task.graders
+                        ],
+                        error=f"Trial runner failed: {failure}",
+                    )
+                record["trace_id"] = telemetry.trace_id(span)
+                span.set_attribute("garden.eval.passed", record.get("passed") is True)
+                failure_reason = record.get("failure_reason")
+                if isinstance(failure_reason, str):
+                    span.set_attribute("garden.eval.failure_reason", failure_reason)
+                telemetry.record_trial(record)
             records.append(record)
         passed = all(
             record["passed"] is record["expected_pass"] and record["error"] is None
@@ -686,6 +722,11 @@ def run_reference(
         }
         path = RUNS / f"{run_id}.json"
         path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+        if not telemetry.flush():
+            print(
+                f"OpenObserve export did not complete; the JSON summary remains at {path}.",
+                file=sys.stderr,
+            )
         return summary, path
     finally:
         embedder_services.stop_all()

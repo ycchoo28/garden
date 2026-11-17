@@ -10,6 +10,10 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Literal, cast
 
+from opentelemetry import propagate
+
+from garden.trace_contract import GARDEN_EVAL_SIDE_CALL_HEADER
+
 if TYPE_CHECKING:
     from tests.evals.tasks import ClaimDraftTask
 
@@ -30,10 +34,13 @@ class GraderResult:
     reason: str
 
 
-def api_json(base_url: str, path: str, token: str) -> object:
+def api_json(base_url: str, path: str, token: str, *, side_call: str = "grader") -> object:
+    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+    propagate.inject(headers)
+    headers[GARDEN_EVAL_SIDE_CALL_HEADER] = side_call
     request = urllib.request.Request(
         f"{base_url.rstrip('/')}{path}",
-        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+        headers=headers,
     )
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
