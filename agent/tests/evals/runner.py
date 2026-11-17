@@ -8,6 +8,7 @@ import os
 import re
 import secrets
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -110,17 +111,34 @@ def _run(
 
 
 def start_stack(env: dict[str, str]) -> None:
-    try:
-        result = _run(["just", "up"], cwd=REPO, env=env, timeout=1200)
-    except (OSError, subprocess.TimeoutExpired) as error:
-        raise StepFailed(
-            f"Could not start the Garden dev stack with 'just up': {error}."
-        ) from error
-    if result.returncode != 0:
-        output = (result.stdout + result.stderr).strip()
-        raise StepFailed(f"Could not start the Garden dev stack with 'just up':\n{output[-4000:]}")
+    database = urlsplit(env.get("GARDEN_DATABASE_URL", ""))
+    issuer = urlsplit(env.get("GARDEN_OIDC_ISSUER", "http://127.0.0.1:55081/default"))
+    if not _port_ready(database.hostname, database.port) or not _port_ready(
+        issuer.hostname, issuer.port
+    ):
+        try:
+            result = _run(["just", "up"], cwd=REPO, env=env, timeout=1200)
+        except (OSError, subprocess.TimeoutExpired) as error:
+            raise StepFailed(
+                f"Could not start the Garden dev stack with 'just up': {error}."
+            ) from error
+        if result.returncode != 0:
+            output = (result.stdout + result.stderr).strip()
+            raise StepFailed(
+                f"Could not start the Garden dev stack with 'just up':\n{output[-4000:]}"
+            )
     issuer = env.get("GARDEN_OIDC_ISSUER", "http://127.0.0.1:55081/default").rstrip("/")
     wait_for(f"{issuer}/.well-known/openid-configuration", timeout=120)
+
+
+def _port_ready(host: str | None, port: int | None) -> bool:
+    if host is None or port is None:
+        return False
+    try:
+        with socket.create_connection((host, port), timeout=2):
+            return True
+    except OSError:
+        return False
 
 
 def _database_url(database: str, env: dict[str, str]) -> str:
@@ -181,6 +199,7 @@ def _backend_env(
     base_env: dict[str, str],
     model_env: dict[str, str] | None = None,
     *,
+    public_url: str | None = None,
     run_id: str | None = None,
     trial_id: str | None = None,
 ) -> dict[str, str]:
@@ -197,7 +216,8 @@ def _backend_env(
             "GARDEN_OIDC_CLIENT_SECRET": base_env.get(
                 "GARDEN_OIDC_CLIENT_SECRET", "garden-dev-secret"
             ),
-            "GARDEN_PUBLIC_URL": base_env.get("GARDEN_PUBLIC_URL", "http://localhost:55173"),
+            "GARDEN_PUBLIC_URL": public_url
+            or base_env.get("GARDEN_PUBLIC_URL", "http://localhost:55173"),
             "GARDEN_FILES_ROOT": str(files_root),
         }
     )
@@ -220,10 +240,12 @@ def start_api(
     services: Services,
     model_env: dict[str, str] | None = None,
     *,
+    public_url: str | None = None,
+    port: int | None = None,
     run_id: str | None = None,
     trial_id: str | None = None,
 ) -> str:
-    port = free_port()
+    port = port or free_port()
     files_root.mkdir(parents=True, exist_ok=True)
     process = services.start(
         ["uv", "run", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", str(port)],
@@ -233,6 +255,7 @@ def start_api(
             files_root,
             base_env,
             model_env,
+            public_url=public_url,
             run_id=run_id,
             trial_id=trial_id,
         ),
@@ -243,6 +266,29 @@ def start_api(
     if process.poll() is not None:
         raise StepFailed(f"The trial API exited during startup. See {log}.")
     return url
+
+
+def _start_web(
+    api_url: str,
+    web_url: str,
+    base_env: dict[str, str],
+    log: Path,
+    services: Services,
+) -> None:
+    web_env = {key: value for key, value in base_env.items() if not key.startswith("GARDEN_")}
+    web_env["GARDEN_E2E_API_URL"] = api_url
+    port = urlsplit(web_url).port
+    if port is None:
+        raise StepFailed("The trial web URL has no port.")
+    process = services.start(
+        ["bun", "run", "dev", "--strictPort", "--host", "127.0.0.1", "--port", str(port)],
+        cwd=REPO / "frontend",
+        env=web_env,
+        log=log,
+    )
+    wait_for(web_url, timeout=120)
+    if process.poll() is not None:
+        raise StepFailed(f"The trial web app exited during startup. See {log}.")
 
 
 def _request_json(
@@ -307,6 +353,27 @@ def _create_agent_login(api_url: str, database: str, subject: str, device: str) 
     return token
 
 
+def _create_person_session(database: str, subject: str) -> str:
+    browser_token = secrets.token_urlsafe(32)
+    hashed = hashlib.sha256(browser_token.encode()).hexdigest()
+    escaped_subject = subject.replace("'", "''")
+    psql(
+        database,
+        "insert into users.web_session (token_hash, person_id, created_at, last_seen_at) "
+        f"select '{hashed}', id, now(), now() from users.person "
+        f"where subject = '{escaped_subject}'",
+    )
+    if (
+        psql(
+            database,
+            f"select count(*) from users.web_session where token_hash = '{hashed}'",
+        )
+        != "1"
+    ):
+        raise StepFailed(f"The seeded person {subject!r} was not found for the browser session.")
+    return browser_token
+
+
 def ensure_template(
     env: dict[str, str], output: Path, task: EvalTask, embedder: str
 ) -> dict[str, str]:
@@ -321,11 +388,20 @@ def ensure_template(
                 and logins.get("acting_subject") == task.asking_person
                 and isinstance(logins.get("acting"), str)
                 and isinstance(logins.get("grader"), str)
+                and (
+                    not isinstance(task, ClaimDraftTask)
+                    or isinstance(logins.get("person_session"), str)
+                )
             ):
                 acting = logins["acting"]
                 grader = logins["grader"]
                 assert isinstance(acting, str) and isinstance(grader, str)
-                return {"acting": acting, "grader": grader}
+                cached_logins = {"acting": acting, "grader": grader}
+                if isinstance(task, ClaimDraftTask):
+                    person_session = logins["person_session"]
+                    assert isinstance(person_session, str)
+                    cached_logins["person_session"] = person_session
+                return cached_logins
         except (OSError, json.JSONDecodeError):
             pass
 
@@ -380,6 +456,10 @@ def ensure_template(
                         "garden-eval-grader",
                     ),
                 }
+                if isinstance(task, ClaimDraftTask):
+                    logins["person_session"] = _create_person_session(
+                        TEMPLATE_DB, task.asking_person
+                    )
             finally:
                 services.stop_all()
 
@@ -431,6 +511,9 @@ def grade_task(
                     answer=answer,
                 )
             )
+    if isinstance(task, ClaimDraftTask):
+        for grader in task.trajectory_graders:
+            results.append(grader.grade(answer, task))
     return results
 
 
@@ -531,26 +614,69 @@ def run_trial(
         db_created = True
         with tempfile.TemporaryDirectory(prefix=f"garden-eval-{trial_id}-") as temp_name:
             temp = Path(temp_name)
-            api_url = start_api(
-                database,
-                temp / "files",
-                output / "logs" / f"{trial_id}.log",
-                env,
-                services,
-                run_id=run_id,
-                trial_id=trial_id,
-            )
+            web_url: str | None = None
+            if isinstance(task, ClaimDraftTask):
+                api_port = free_port()
+                web_port = free_port()
+                web_url = f"http://127.0.0.1:{web_port}"
+                api_url = start_api(
+                    database,
+                    temp / "files",
+                    output / "logs" / f"{trial_id}.log",
+                    env,
+                    services,
+                    public_url=web_url,
+                    port=api_port,
+                    run_id=run_id,
+                    trial_id=trial_id,
+                )
+            else:
+                api_url = start_api(
+                    database,
+                    temp / "files",
+                    output / "logs" / f"{trial_id}.log",
+                    env,
+                    services,
+                    run_id=run_id,
+                    trial_id=trial_id,
+                )
+            if web_url is not None:
+                _start_web(
+                    api_url,
+                    web_url,
+                    env,
+                    output / "logs" / f"{trial_id}-web.log",
+                    services,
+                )
             adapter: DshHarnessAdapter | None = None
             try:
-                adapter = DshHarnessAdapter(
-                    task,
-                    portal_url=api_url,
-                    home=temp / "home",
-                    workspace=temp / "workspace",
-                    acting_token=logins["acting"],
-                    database=database,
-                )
+                if isinstance(task, ClaimDraftTask):
+                    if web_url is None:
+                        raise StepFailed("The confirmation trial has no web URL.")
+                    adapter = DshHarnessAdapter(
+                        task,
+                        portal_url=api_url,
+                        database=database,
+                        public_url=web_url,
+                        oidc_url=env.get("GARDEN_OIDC_ISSUER", "http://127.0.0.1:55081/default"),
+                        home=temp / "home",
+                        workspace=temp / "workspace",
+                        media=temp / "media",
+                        acting_token=logins["acting"],
+                        person_session=logins["person_session"],
+                    )
+                else:
+                    adapter = DshHarnessAdapter(
+                        task,
+                        portal_url=api_url,
+                        database=database,
+                        home=temp / "home",
+                        workspace=temp / "workspace",
+                        acting_token=logins["acting"],
+                    )
                 answer = adapter.run_reference(solution)
+                if isinstance(task, ClaimDraftTask):
+                    adapter.verify_confirmations()
                 exit_code = 0
             except Exception as failure:
                 error = f"Reference solution failed: {failure}"
@@ -575,6 +701,11 @@ def run_trial(
             GraderResult(grader.id, "fail", f"The trial could not run: {failure}")
             for grader in task.graders
         ]
+        if isinstance(task, ClaimDraftTask):
+            graders.extend(
+                GraderResult(grader.id, "fail", f"The trial could not run: {failure}")
+                for grader in task.trajectory_graders
+            )
     finally:
         try:
             services.stop_all()
@@ -690,7 +821,14 @@ def run_reference(
                         tool_calls=0,
                         graders=[
                             GraderResult(grader.id, "fail", f"The trial runner failed: {failure}")
-                            for grader in task.graders
+                            for grader in (
+                                *task.graders,
+                                *(
+                                    task.trajectory_graders
+                                    if isinstance(task, ClaimDraftTask)
+                                    else ()
+                                ),
+                            )
                         ],
                         error=f"Trial runner failed: {failure}",
                     )
@@ -717,7 +855,13 @@ def run_reference(
                 "confirmation": task.confirmation,
                 "suite": task.suite,
                 "area": task.area,
-                "graders": [grader.id for grader in task.graders],
+                "graders": [
+                    grader.id
+                    for grader in (
+                        *task.graders,
+                        *(task.trajectory_graders if isinstance(task, ClaimDraftTask) else ()),
+                    )
+                ],
                 "budget_tool_calls": task.budget_tool_calls,
                 "budget_seconds": task.budget_seconds,
                 "budget_tokens": task.budget_tokens,
