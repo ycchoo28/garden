@@ -245,10 +245,12 @@ agent-e2e-serve: up
     cd agent && uv run python -m tests.e2e.run --serve
 
 # Start or reuse OpenObserve on 127.0.0.1:55086 and open its UI.
+[unix]
 eval-ui: eval-up
     python3 -m webbrowser -t "http://127.0.0.1:${GARDEN_EVAL_OPENOBSERVE_PORT:-55086}"
 
 # Apply the checked-in OpenObserve dashboards and alert.
+[unix]
 eval-dashboards: eval-up
     #!/usr/bin/env bash
     set -euo pipefail
@@ -258,6 +260,7 @@ eval-dashboards: eval-up
     uv run --no-project --python 3.12 python scripts/apply_openobserve.py
 
 # Generate the local root password once and start or reuse OpenObserve.
+[unix]
 eval-up:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -278,6 +281,7 @@ eval-up:
         "http://127.0.0.1:${GARDEN_EVAL_OPENOBSERVE_PORT:-55086}/healthz" >/dev/null
 
 # Stop the eval service while keeping its named data volume and generated password.
+[unix]
 eval-down:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -288,6 +292,7 @@ eval-down:
     fi
 
 # Run one task's scripted positive and negative reference trials without a model.
+[unix]
 agent-eval *args:
     #!/usr/bin/env bash
     set -euo pipefail

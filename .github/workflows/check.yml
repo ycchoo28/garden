@@ -54,6 +54,8 @@ jobs:
       - uses: extractions/setup-just@v3
       - name: Set up
         run: just setup
+      - name: Install Chromium for the scripted browser evals
+        run: cd frontend && bunx playwright install --with-deps chromium
       - name: Run scripted reference evals
         run: just agent-eval --reference --fake-embedding --junitxml dist/evals/junit.xml
       - name: Publish JUnit results
