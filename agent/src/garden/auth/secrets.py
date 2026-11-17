@@ -17,7 +17,7 @@ from typing import Protocol
 
 import keyring
 from keyring.backends import fail
-from keyring.errors import KeyringError, PasswordDeleteError
+from keyring.errors import PasswordDeleteError
 
 from garden.shared import GardenError, home_dir
 
@@ -34,19 +34,21 @@ class SecretStore(Protocol):
 
 
 class KeyringStore:
+    # Backends raise their own types: Windows raises pywintypes.error, which is not a KeyringError,
+    # so every failure of the keychain call is caught and explained, never shown as a traceback.
     def __init__(self) -> None:
         _hide_cffi_from_windows_keyring()
 
     def get(self, account: str) -> str | None:
         try:
             return keyring.get_password(SERVICE, account)
-        except KeyringError as error:
+        except Exception as error:
             raise _no_keychain(error) from error
 
     def set(self, account: str, value: str) -> None:
         try:
             keyring.set_password(SERVICE, account, value)
-        except KeyringError as error:
+        except Exception as error:
             raise _no_keychain(error) from error
 
     def delete(self, account: str) -> None:
@@ -54,7 +56,7 @@ class KeyringStore:
             keyring.delete_password(SERVICE, account)
         except PasswordDeleteError:
             return
-        except KeyringError as error:
+        except Exception as error:
             raise _no_keychain(error) from error
 
 
@@ -101,27 +103,84 @@ def _hide_cffi_from_windows_keyring() -> None:
 
 
 def _no_keychain(error: Exception) -> GardenError:
+    """Explain a keychain this session cannot use. The login is never kept in a file instead."""
+    if sys.platform == "win32":
+        name = "Windows Credential Manager"
+        fix = (
+            "Sign in from a normal desktop session: run garden login at the PC itself, not over "
+            "ssh, WMI or a service, then try again."
+        )
+    elif sys.platform == "darwin":
+        name = "The macOS keychain"
+        fix = "Unlock your login keychain in a normal desktop session, then run garden login again."
+    else:
+        name = "The Secret Service keyring"
+        fix = (
+            "Start a Secret Service provider such as GNOME Keyring in your desktop session, then "
+            "run garden login from that session."
+        )
     return GardenError(
-        title="No keychain available",
-        detail=str(error),
-        fix="On Linux, start a Secret Service provider (such as GNOME Keyring) and try again.",
+        title=f"{name} is not available in this session",
+        detail=(
+            f"{_reason(error)}. This happens in a remote or background session, such as ssh, a "
+            "scheduled task, WMI or a service, which has no desktop logon for the keychain."
+        ),
+        fix=fix,
     )
 
 
+def _reason(error: Exception) -> str:
+    """The keychain's own message, with the Windows call and error number when it has them."""
+    winerror = getattr(error, "winerror", None)
+    if winerror is not None:
+        call = getattr(error, "funcname", None) or "the keychain call"
+        text = getattr(error, "strerror", None) or str(error)
+        return f"{call} failed with Windows error {winerror}: {text.rstrip('.')}"
+    return (str(error) or type(error).__name__).rstrip(".")
+
+
 def _keychain_missing() -> bool:
-    return isinstance(keyring.get_keyring(), fail.Keyring)
+    try:
+        return isinstance(keyring.get_keyring(), fail.Keyring)
+    except Exception as error:
+        raise _no_keychain(error) from error
+
+
+SECRET_STORE_FIX = (
+    "Leave GARDEN_SECRET_STORE unset to use the OS keychain. The accepted file form is "
+    "GARDEN_SECRET_STORE=file:<path>, for example file:/tmp/garden-test/credentials.json, "
+    "and it is for tests only."
+)
+
+
+def _explicit_store(spec: str) -> SecretStore:
+    """The store GARDEN_SECRET_STORE asks for. Any other value is an error, never ignored."""
+    kind, _, path = spec.partition(":")
+    if kind != "file":
+        raise GardenError(
+            title="GARDEN_SECRET_STORE has an unknown value",
+            detail=f"GARDEN_SECRET_STORE={spec} is not a form this CLI accepts.",
+            fix=SECRET_STORE_FIX,
+        )
+    if not path.strip():
+        raise GardenError(
+            title="GARDEN_SECRET_STORE needs a file path",
+            detail="GARDEN_SECRET_STORE=file has no path, so it cannot pick a file for the login.",
+            fix=SECRET_STORE_FIX,
+        )
+    print(
+        "warning: GARDEN_SECRET_STORE=file: keeps the Agent login in plain text. Tests only.",
+        file=sys.stderr,
+    )
+    return FileStore(Path(path))
 
 
 def default_store(home: Path | None = None) -> SecretStore:
     # Before keyring is asked for its backend: the choice itself imports pywin32-ctypes.
     _hide_cffi_from_windows_keyring()
-    spec = os.environ.get("GARDEN_SECRET_STORE", "")
-    if spec.startswith("file:"):
-        print(
-            "warning: GARDEN_SECRET_STORE=file: keeps the Agent login in plain text. Tests only.",
-            file=sys.stderr,
-        )
-        return FileStore(Path(spec.removeprefix("file:")))
+    spec = os.environ.get("GARDEN_SECRET_STORE", "").strip()
+    if spec:
+        return _explicit_store(spec)
     if _keychain_missing():
         print(
             "warning: no keychain on this system, so the Agent login is kept in a private file "
