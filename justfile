@@ -267,9 +267,9 @@ agent-eval *args:
         auth="$(printf 'root@example.com:%s' "$GARDEN_OPENOBSERVE_ROOT_PASSWORD" | base64 | tr -d '\n')"
         endpoint="http://127.0.0.1:${GARDEN_EVAL_OPENOBSERVE_PORT:-55086}/api/default/v1"
         export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="$endpoint/traces"
-        export OTEL_EXPORTER_OTLP_TRACES_HEADERS="Authorization=Basic $auth,stream-name=garden-eval-traces"
+        export OTEL_EXPORTER_OTLP_TRACES_HEADERS="Authorization=Basic $auth,stream-name=garden_eval_traces"
         export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT="$endpoint/logs"
-        export OTEL_EXPORTER_OTLP_LOGS_HEADERS="Authorization=Basic $auth,stream-name=garden-eval-trials"
+        export OTEL_EXPORTER_OTLP_LOGS_HEADERS="Authorization=Basic $auth,stream-name=garden_eval_trials"
     else
         echo "OpenObserve could not start; continuing without its local OTLP endpoint. Trial records remain in the JSON summary." >&2
     fi

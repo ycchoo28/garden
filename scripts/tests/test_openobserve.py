@@ -58,6 +58,8 @@ def test_checked_in_definitions_cover_eval_and_portal_workflows() -> None:
     for panel in panels:
         for query in cast(list[dict[str, object]], panel["queries"]):
             sql = str(query["query"])
+            fields = cast(dict[str, object], query["fields"])
+            assert fields["stream"] == "garden_eval_trials"
             assert "{{run:singlequote}}" in sql
             assert "{{task:singlequote}}" in sql
             assert "{{model:singlequote}}" in sql
@@ -69,14 +71,17 @@ def test_checked_in_definitions_cover_eval_and_portal_workflows() -> None:
     )
     assert "trace_id" in trial_query
     assert "trace_link" in trial_query
+    assert "stream=garden_eval_traces" in trial_query
     assert "tool_calls" in trial_query
     assert "graders" in trial_query
     assert "Garden agent monitoring" in by_title
     assert len(alerts) == 1
     assert alerts[0]["name"] == "garden_regression_task_failed"
+    assert alerts[0]["stream_name"] == "garden_eval_trials"
     alert_query = cast(dict[str, object], alerts[0]["query_condition"])["sql"]
     assert "suite = 'regression'" in str(alert_query)
     assert "model <> 'reference'" in str(alert_query)
+    assert "GROUP BY task_id" in str(alert_query)
     assert alerts[0]["destinations"] == []
 
 
@@ -102,7 +107,9 @@ def test_apply_creates_missing_definitions_and_updates_existing_ones(tmp_path: P
 
         def dashboards(self) -> list[dict[str, object]]:
             if self.existing:
-                return [{"dashboard_id": "dashboard-id", "title": "Garden evals"}]
+                return [
+                    {"dashboard_id": "dashboard-id", "title": "Garden evals", "hash": "old-hash"}
+                ]
             return []
 
         def alerts(self) -> list[dict[str, object]]:
@@ -117,7 +124,9 @@ def test_apply_creates_missing_definitions_and_updates_existing_ones(tmp_path: P
     client = FakeClient(existing=False)
     with pytest.raises(RuntimeError, match="GARDEN_OPENOBSERVE_ALERT_DESTINATION"):
         apply_openobserve.apply_definitions(client, dashboards, alerts)
-    assert client.calls == []
+    assert [(method, path) for method, path, _body in client.calls] == [
+        ("POST", "/api/default/dashboards")
+    ]
 
     client = FakeClient(existing=False)
     assert apply_openobserve.apply_definitions(client, dashboards, alerts, "garden-alerts") == (
@@ -135,7 +144,7 @@ def test_apply_creates_missing_definitions_and_updates_existing_ones(tmp_path: P
         existing_client, dashboards, alerts, "garden-alerts"
     ) == (1, 1)
     assert [(method, path) for method, path, _body in existing_client.calls] == [
-        ("PUT", "/api/default/dashboards/dashboard-id"),
+        ("PUT", "/api/default/dashboards/dashboard-id?hash=old-hash"),
         ("PUT", "/api/v2/default/alerts/alert-id"),
     ]
     assert cast(dict[str, object], existing_client.calls[0][2])["dashboardId"] == "dashboard-id"

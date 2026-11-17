@@ -10,6 +10,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import cast
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -105,16 +106,14 @@ def apply_definitions(
     alerts: Sequence[dict[str, object]],
     alert_destination: str | None = None,
 ) -> tuple[int, int]:
-    if any(not definition.get("destinations") for definition in alerts) and not alert_destination:
-        raise RuntimeError(
-            "Set GARDEN_OPENOBSERVE_ALERT_DESTINATION to an existing alert destination."
-        )
-
     existing_dashboards = client.dashboards()
     for definition in dashboards:
         title = definition.get("title")
         if not isinstance(title, str):
             raise RuntimeError("Each dashboard definition must have a title.")
+        existing_dashboard = next(
+            (value for value in existing_dashboards if value.get("title") == title), None
+        )
         dashboard_id = _find_by_name(
             existing_dashboards, title, ("dashboard_id", "dashboardId", "id")
         )
@@ -122,13 +121,20 @@ def apply_definitions(
         method = "POST"
         body = dict(definition)
         if dashboard_id is not None:
+            dashboard_hash = existing_dashboard.get("hash") if existing_dashboard else None
+            if not isinstance(dashboard_hash, str) or not dashboard_hash:
+                raise RuntimeError(f"OpenObserve returned {title!r} without a dashboard hash.")
             method = "PUT"
-            path += f"/{dashboard_id}"
+            path += f"/{dashboard_id}?{urlencode({'hash': dashboard_hash})}"
             body["dashboardId"] = dashboard_id
         client.request(method, path, body)
 
     existing_alerts = client.alerts() if alerts else []
     for definition in alerts:
+        if not definition.get("destinations") and not alert_destination:
+            raise RuntimeError(
+                "Set GARDEN_OPENOBSERVE_ALERT_DESTINATION to an existing alert destination."
+            )
         name = definition.get("name")
         if not isinstance(name, str):
             raise RuntimeError("Each alert definition must have a name.")
@@ -174,9 +180,12 @@ def main() -> int:
         )
     client = OpenObserveClient(args.url, args.org, args.username, args.password)
     dashboards, alerts = load_definitions()
-    dashboard_count, alert_count = apply_definitions(
-        client, dashboards, alerts, args.alert_destination
-    )
+    try:
+        dashboard_count, alert_count = apply_definitions(
+            client, dashboards, alerts, args.alert_destination
+        )
+    except RuntimeError as error:
+        raise SystemExit(str(error)) from None
     print(f"Applied {dashboard_count} dashboards and {alert_count} alerts to {args.url}.")
     return 0
 

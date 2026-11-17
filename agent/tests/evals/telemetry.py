@@ -75,7 +75,7 @@ class EvalTelemetry:
         if logs_endpoint:
             try:
                 headers = _headers(environ, "LOGS")
-                headers.setdefault("stream-name", "garden-eval-trials")
+                headers.setdefault("stream-name", "garden_eval_trials")
                 exporter = OTLPLogExporter(
                     endpoint=logs_endpoint,
                     headers=headers,
