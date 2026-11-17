@@ -28,7 +28,7 @@ import yaml
 from garden.dsh import render_patch
 from tests.shared.fake_portal import GOOD_TOKEN, FakePortal
 from tests.shared.garden_cli import as_json, run_garden
-from tests.shared.paths import AGENT_ROOT
+from tests.shared.paths import AGENT_ROOT, REPO
 
 INSTALLER = AGENT_ROOT / "install" / "install.sh"
 INSTALLER_WINDOWS = AGENT_ROOT / "install" / "install.ps1"
@@ -459,7 +459,7 @@ def test_node_bootstrap_checks_downloads_and_preserves_the_runtime_path(
 
 
 def test_node_pins_and_windows_runtime_handling_match_the_bootstrap() -> None:
-    pins = json.loads((ROOT.parent / "scripts/bootstrap-tools.json").read_text())
+    pins = json.loads((REPO / "scripts/bootstrap-tools.json").read_text())
     shell = INSTALLER.read_text()
     windows = INSTALLER_WINDOWS.read_text()
     version = re.search(r"\$nodeVersion = '([^']+)'", windows)
