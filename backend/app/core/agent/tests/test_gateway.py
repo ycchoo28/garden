@@ -17,6 +17,8 @@ from garden.trace_contract import (
     GARDEN_CONTENT_CAPTURED,
     GARDEN_CONVERSATION_TITLE_SIDE_CALL,
     GARDEN_EVAL_RUN_ID,
+    GARDEN_EVAL_SIDE_CALL,
+    GARDEN_EVAL_SIDE_CALL_HEADER,
     GARDEN_EVAL_TRIAL_ID,
     GARDEN_MODEL_SIDE_CALL_TYPE,
     GARDEN_MODEL_TOTAL_TOKENS,
@@ -324,6 +326,36 @@ async def test_gateway_tags_a_recognizable_conversation_title_side_call(
     assert (
         _span_attributes(span)[GARDEN_MODEL_SIDE_CALL_TYPE] == GARDEN_CONVERSATION_TITLE_SIDE_CALL
     )
+
+
+@pytest.mark.asyncio
+async def test_gateway_and_api_trace_tag_eval_harness_side_calls(
+    client: AsyncClient,
+    identity: FakeIdentity,
+    configure: Callable[..., None],
+    span_exporter: InMemorySpanExporter,
+) -> None:
+    configure()
+    await sign_in(client, identity, MARCUS)
+
+    answered = await client.post(
+        "/api/agent/model/v1/chat/completions",
+        json=CHAT,
+        headers={
+            MODEL_SIDE_CALL_HEADER: "eval_grader",
+            GARDEN_EVAL_SIDE_CALL_HEADER: "trial_metrics",
+        },
+    )
+
+    assert answered.status_code == 200, answered.text
+    [chat_span] = _model_gateway_spans(span_exporter)
+    assert _span_attributes(chat_span)[GARDEN_MODEL_SIDE_CALL_TYPE] == "eval_grader"
+    [api_span] = [
+        span
+        for span in span_exporter.get_finished_spans()
+        if span.name == "agent.model.chat_completion"
+    ]
+    assert _span_attributes(api_span)[GARDEN_EVAL_SIDE_CALL] == "trial_metrics"
 
 
 @pytest.mark.asyncio

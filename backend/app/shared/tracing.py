@@ -13,6 +13,8 @@ from garden.trace_contract import (
     GARDEN_CONTENT_CAPTURED,
     GARDEN_EVAL_RUN_ID,
     GARDEN_EVAL_RUN_ID_ENV,
+    GARDEN_EVAL_SIDE_CALL,
+    GARDEN_EVAL_SIDE_CALL_HEADER,
     GARDEN_EVAL_TRIAL_ID,
     GARDEN_EVAL_TRIAL_ID_ENV,
     GARDEN_PERSON_ID,
@@ -78,6 +80,16 @@ class TraceAPIOperations:
             value = os.environ.get(environ)
             if value:
                 span.set_attribute(attribute, value)
+        side_call = next(
+            (
+                value.decode("latin-1")
+                for name, value in scope.get("headers", [])
+                if name.decode("latin-1").lower() == GARDEN_EVAL_SIDE_CALL_HEADER
+            ),
+            None,
+        )
+        if side_call:
+            span.set_attribute(GARDEN_EVAL_SIDE_CALL, side_call)
 
     @staticmethod
     def _finish_attributes(span: Span, scope: Scope, status_code: int | None) -> None:

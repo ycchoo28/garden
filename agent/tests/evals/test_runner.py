@@ -37,6 +37,69 @@ def test_trial_backend_environment_uses_the_shared_trace_contract(tmp_path: Path
     assert env["GARDEN_AGENT_MODEL_UPSTREAM_URL"] == "http://127.0.0.1:9090"
 
 
+def test_gateway_usage_total_reads_the_trial_api_and_accepts_only_nonnegative_integers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, str, str, str]] = []
+
+    def api_json(base_url: str, path: str, token: str, *, side_call: str) -> object:
+        calls.append((base_url, path, token, side_call))
+        return {"total_tokens": 42}
+
+    monkeypatch.setattr(runner, "api_json", api_json)
+
+    assert runner.gateway_usage_total("http://127.0.0.1:1", "acting-token") == 42
+    assert calls == [
+        (
+            "http://127.0.0.1:1",
+            "/api/agent/model/my-usage",
+            "acting-token",
+            "trial_metrics",
+        )
+    ]
+
+
+def test_trial_runner_error_is_recorded_and_does_not_stop_later_trials(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    def no_missing(_env: dict[str, str]) -> list[str]:
+        return []
+
+    def start_stack(_env: dict[str, str]) -> None:
+        return None
+
+    def ensure_template(
+        _env: dict[str, str], _output: Path, _task: ClaimDraftTask, _embedder: str
+    ) -> dict[str, str]:
+        return {"acting": "token", "grader": "token"}
+
+    monkeypatch.setattr(runner, "prereqs_missing", no_missing)
+    monkeypatch.setattr(runner, "start_stack", start_stack)
+    monkeypatch.setattr(runner, "ensure_template", ensure_template)
+    output = tmp_path / "evals"
+    monkeypatch.setattr(runner, "OUTPUT", output)
+    monkeypatch.setattr(runner, "RUNS", output / "runs")
+
+    def run_trial(**kwargs: object) -> dict[str, object]:
+        variant = kwargs["variant"]
+        if variant == "perfect":
+            return {"passed": True, "expected_pass": True, "error": None}
+        raise RuntimeError("wrong trial setup failed")
+
+    monkeypatch.setattr(runner, "run_trial", run_trial)
+    summary, path = runner.run_reference(DRAFT_ONE_RECEIPT, environ={})
+
+    assert summary["passed"] is False
+    trials_value = summary["trials"]
+    assert isinstance(trials_value, list)
+    trials = cast(list[dict[str, object]], trials_value)
+    assert len(trials) == 2
+    assert trials[0]["passed"] is True
+    assert trials[1]["passed"] is False
+    assert trials[1]["error"] == "Trial runner failed: wrong trial setup failed"
+    assert json.loads(path.read_text(encoding="utf-8"))["trials"] == trials
+
+
 def test_reference_trials_use_the_fake_embedder(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

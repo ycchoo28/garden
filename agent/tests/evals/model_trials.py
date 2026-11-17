@@ -8,6 +8,7 @@ import os
 import re
 import shutil
 import statistics
+import sys
 import tempfile
 import time
 import uuid
@@ -18,11 +19,13 @@ from pathlib import Path
 from typing import cast
 from urllib.parse import urlsplit
 
+from garden.trace_contract import GEN_AI_CAPTURE_CONTENT_ENV
 from tests.evals import runner
 from tests.evals.embedding import ensure_embedding_server
 from tests.evals.grading import GraderResult
 from tests.evals.model_harness import installed_dsh_entry, prepare_dsh, run_dsh
 from tests.evals.task_types import EvalTask
+from tests.evals.telemetry import EvalTelemetry
 from tests.shared.stack import Services
 from tests.shared.transcript import StepFailed
 
@@ -120,6 +123,7 @@ def _aborted_trial(
         "findings": [],
         "tool_calls": 0,
         "tokens": 0,
+        "gateway_tokens": None,
         "duration_seconds": 0,
         "dsh_exit_code": None,
         "final_answer": "",
@@ -205,61 +209,82 @@ def run_model_trials(
     active_runner = trial_runner or run_model_trial
     active_logins = {} if logins is None else logins
     active_env = {} if environ is None else environ
+    telemetry = EvalTelemetry(active_env)
     cells = [(task, model) for task in tasks for model in models]
 
     def run_one_trial(task: EvalTask, model: str, repeat_number: int) -> dict[str, object]:
-        raw: dict[str, object]
-        try:
-            raw = active_runner(
-                run_id=active_run_id,
-                trial_id=f"{task.id}/{model}/{repeat_number}",
-                task=task,
-                model=model,
-                repeat=repeat_number,
-                logins=active_logins,
-                environ=active_env,
-                gateway_url=gateway_url,
-                upstream_key=upstream_key,
-                embedder=embedder,
-                output=output,
-                keep_failed=keep_failed,
-            )
-        except Exception as error:
-            raw = {
+        trial_id = f"{task.id}/{model}/{repeat_number}"
+        with telemetry.trial_span(
+            run_id=active_run_id,
+            trial_id=trial_id,
+            task_id=task.id,
+            suite=task.suite,
+            area=task.area,
+            model=model,
+            repeat=repeat_number,
+        ) as span:
+            raw: dict[str, object]
+            try:
+                raw = active_runner(
+                    run_id=active_run_id,
+                    trial_id=trial_id,
+                    task=task,
+                    model=model,
+                    repeat=repeat_number,
+                    logins=active_logins,
+                    environ=active_env,
+                    gateway_url=gateway_url,
+                    upstream_key=upstream_key,
+                    embedder=embedder,
+                    output=output,
+                    keep_failed=keep_failed,
+                )
+            except Exception as error:
+                raw = {
+                    "passed": False,
+                    "error": f"Trial runner failed: {error}",
+                    "failure_reason": f"Trial runner failed: {error}",
+                    "budget_exceeded": None,
+                    "tool_calls": 0,
+                    "tokens": 0,
+                    "duration_seconds": 0,
+                    "findings": [],
+                    "graders": [],
+                    "final_answer": "",
+                }
+            record: dict[str, object] = {
+                "run_id": active_run_id,
+                "trial_id": trial_id,
+                "task_id": task.id,
+                "suite": task.suite,
+                "area": task.area,
+                "model": model,
+                "repeat": repeat_number,
                 "passed": False,
-                "error": f"Trial runner failed: {error}",
-                "failure_reason": f"Trial runner failed: {error}",
-                "budget_exceeded": None,
+                "error": None,
+                "failure_reason": None,
+                "graders": [],
+                "findings": [],
                 "tool_calls": 0,
                 "tokens": 0,
+                "gateway_tokens": None,
                 "duration_seconds": 0,
-                "findings": [],
-                "graders": [],
+                "dsh_exit_code": None,
                 "final_answer": "",
+                "trace_id": telemetry.trace_id(span),
+                "budget_exceeded": None,
+                "aborted": False,
+                **raw,
             }
-        record: dict[str, object] = {
-            "run_id": active_run_id,
-            "trial_id": f"{task.id}/{model}/{repeat_number}",
-            "task_id": task.id,
-            "suite": task.suite,
-            "area": task.area,
-            "model": model,
-            "repeat": repeat_number,
-            "passed": False,
-            "error": None,
-            "failure_reason": None,
-            "graders": [],
-            "findings": [],
-            "tool_calls": 0,
-            "tokens": 0,
-            "duration_seconds": 0,
-            "dsh_exit_code": None,
-            "final_answer": "",
-            "budget_exceeded": None,
-            "aborted": False,
-            **raw,
-        }
-        return cast(dict[str, object], _redact(record, upstream_key))
+            record["trace_id"] = telemetry.trace_id(span)
+            safe_record = cast(dict[str, object], _redact(record, upstream_key))
+            passed = safe_record.get("passed") is True
+            span.set_attribute("garden.eval.passed", passed)
+            failure_reason = safe_record.get("failure_reason")
+            if isinstance(failure_reason, str):
+                span.set_attribute("garden.eval.failure_reason", failure_reason)
+            telemetry.record_trial(safe_record)
+            return safe_record
 
     next_repeat = [1] * len(cells)
     budget_failures = [0] * len(cells)
@@ -317,6 +342,25 @@ def run_model_trials(
                         repeat_number=repeat_number,
                     ),
                 )
+                if records[repeat_number].get("aborted") is True:
+                    record = records[repeat_number]
+                    trial_id = cast(str, record["trial_id"])
+                    with telemetry.trial_span(
+                        run_id=active_run_id,
+                        trial_id=trial_id,
+                        task_id=task.id,
+                        suite=task.suite,
+                        area=task.area,
+                        model=model,
+                        repeat=repeat_number,
+                    ) as span:
+                        record["trace_id"] = telemetry.trace_id(span)
+                        span.set_attribute("garden.eval.passed", False)
+                        span.set_attribute(
+                            "garden.eval.failure_reason",
+                            "aborted_after_three_budget_failures",
+                        )
+                        telemetry.record_trial(record)
         cell_records.append([records[repeat_number] for repeat_number in range(1, repeat + 1)])
 
     records = [record for group in cell_records for record in group]
@@ -358,6 +402,11 @@ def run_model_trials(
     runs.mkdir(parents=True, exist_ok=True)
     path = runs / f"{active_run_id}.json"
     path.write_text(json.dumps(safe_summary, indent=2) + "\n", encoding="utf-8")
+    if not telemetry.flush():
+        print(
+            f"OpenObserve export did not complete; the JSON summary remains at {path}.",
+            file=sys.stderr,
+        )
     return safe_summary, path
 
 
@@ -447,6 +496,8 @@ def run_model_trial(
     exit_code: int | None = None
     tool_calls = 0
     tokens = 0
+    gateway_tokens: int | None = None
+    gateway_usage_error: str | None = None
     findings: list[dict[str, object]] = []
     budget_exceeded: str | None = None
     error: str | None = None
@@ -462,6 +513,7 @@ def run_model_trial(
                 task.budget_tokens if task.budget_tokens is not None else DEFAULT_BUDGET_TOKENS
             ),
         )
+        model_env[GEN_AI_CAPTURE_CONTENT_ENV] = "SPAN_ONLY"
         with tempfile.TemporaryDirectory(prefix=f"garden-eval-{db_suffix}-") as temp_name:
             temp = Path(temp_name)
             api_url = runner.start_api(
@@ -482,6 +534,7 @@ def run_model_trial(
                 home=temp / "home",
                 workspace=temp / "workspace",
                 environ=environ,
+                traceparent=EvalTelemetry.traceparent(),
             )
             result = run_dsh(
                 command,
@@ -512,6 +565,10 @@ def run_model_trial(
                 with log_path.open("a", encoding="utf-8") as log:
                     log.write("dsh stderr:\n")
                     log.write(result.stderr)
+            try:
+                gateway_tokens = runner.gateway_usage_total(api_url, logins["acting"])
+            except Exception as failure:
+                gateway_usage_error = str(failure)
             graders = runner.grade_task(
                 task,
                 api_url,
@@ -581,6 +638,8 @@ def run_model_trial(
         "findings": findings,
         "tool_calls": tool_calls,
         "tokens": tokens,
+        "gateway_tokens": gateway_tokens,
+        "gateway_usage_error": gateway_usage_error,
         "duration_seconds": round(time.monotonic() - started, 3),
         "dsh_exit_code": exit_code,
         "final_answer": answer,

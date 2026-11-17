@@ -1,11 +1,47 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from typing import cast
+from urllib import request as urllib_request
 
 import pytest
+from opentelemetry.sdk.trace import TracerProvider
 
-from tests.evals.grading import DraftClaimGrader, GraderResult, trial_passed
+from garden.trace_contract import GARDEN_EVAL_SIDE_CALL_HEADER
+from tests.evals.grading import DraftClaimGrader, GraderResult, api_json, trial_passed
 from tests.evals.tasks import DRAFT_ONE_RECEIPT
+
+
+def test_grader_api_calls_keep_the_trial_context_and_are_tagged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, str] = {}
+
+    class FakeResponse:
+        def __enter__(self) -> FakeResponse:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b"{}"
+
+    def fake_urlopen(request: object, *, timeout: float) -> FakeResponse:
+        del timeout
+        headers = cast(urllib_request.Request, request).headers
+        captured.update({key.lower(): value for key, value in headers.items()})
+        return FakeResponse()
+
+    monkeypatch.setattr("tests.evals.grading.urllib.request.urlopen", fake_urlopen)
+    provider = TracerProvider()
+    tracer = provider.get_tracer("test")
+    with tracer.start_as_current_span("trial"):
+        api_json("http://127.0.0.1", "/api/claims", "grader-token")
+    provider.shutdown()
+
+    assert captured[GARDEN_EVAL_SIDE_CALL_HEADER] == "grader"
+    assert "traceparent" in captured
 
 
 def test_draft_claim_grader_passes_one_draft_line_with_a_receipt(

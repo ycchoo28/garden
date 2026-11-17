@@ -534,6 +534,7 @@ requires-dist = [
 dev = [
     { name = "import-linter", specifier = "==2.15" },
     { name = "mcp", specifier = "==1.30.0" },
+    { name = "opentelemetry-exporter-otlp-proto-http", specifier = "==1.45.2" },
     { name = "opentelemetry-sdk", specifier = "==1.45.2" },
     { name = "pyright", specifier = "==1.1.414" },
     { name = "pytest", specifier = "==9.1.1" },

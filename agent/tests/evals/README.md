@@ -10,6 +10,7 @@ Without `--fake-embedding`, a knowledge run reuses the configured embedding serv
 Use `--no-embedding` to skip every selected knowledge task; the command prints the skipped task ids.
 Use `--task <id>` to select one task, or repeat `--task <id>` to select several.
 The runner writes a full trial record for each solution to `agent/dist/evals/runs/<run-id>.json`.
+Each trial is also exported as a trace and a queryable log to OpenObserve when it is available; gateway token usage is read from the trial API and the JSON summary is written even when export fails.
 Use `--keep-failed` to retain failed trial databases.
 
 Tasks are typed data under `agent/tests/evals/`.

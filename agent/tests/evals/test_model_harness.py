@@ -1,13 +1,74 @@
 from __future__ import annotations
 
 import json
+import secrets
 import sys
 from pathlib import Path
 from typing import cast
 
 import pytest
+import yaml
 
-from tests.evals.model_harness import run_dsh
+from tests.evals import model_harness
+from tests.evals.model_harness import prepare_dsh, run_dsh
+from tests.evals.tasks import DRAFT_ONE_RECEIPT
+
+
+def test_prepare_dsh_propagates_the_trial_parent_to_model_and_mcp_calls(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    traceparent = f"00-{secrets.token_hex(16)}-{secrets.token_hex(8)}-01"
+
+    def fake_entry(_environ: dict[str, str]) -> Path:
+        return tmp_path / "dsh"
+
+    def fake_which(_command: str, _mode: int = 0, *, path: str | None = None) -> str:
+        del _mode, path
+        return "/usr/bin/node"
+
+    monkeypatch.setattr(model_harness, "installed_dsh_entry", fake_entry)
+    monkeypatch.setattr(model_harness.shutil, "which", fake_which)
+
+    _, environ = prepare_dsh(
+        DRAFT_ONE_RECEIPT,
+        portal_url="http://127.0.0.1:58000",
+        model="fake-model",
+        acting_token="acting-token",
+        home=tmp_path / "home",
+        workspace=tmp_path / "workspace",
+        environ={"PATH": "/usr/bin"},
+        traceparent=traceparent,
+    )
+
+    patch_value = yaml.safe_load((tmp_path / "home" / ".dsh" / "cordis.patch.yml").read_text())
+    patch = cast(list[object], patch_value)
+
+    def row_by_id(row_id: str) -> dict[str, object]:
+        for layer_value in patch:
+            if not isinstance(layer_value, dict):
+                continue
+            layer = cast(dict[str, object], layer_value)
+            rows_value = layer.get("insert")
+            if not isinstance(rows_value, list):
+                continue
+            for row_value in cast(list[object], rows_value):
+                if isinstance(row_value, dict):
+                    row = cast(dict[str, object], row_value)
+                    if row.get("id") == row_id:
+                        return row
+        raise AssertionError(f"Patch row {row_id!r} was missing.")
+
+    provider = row_by_id("llm-pi-ai")
+    garden_mcp = row_by_id("mcp-garden")
+    provider_config = cast(dict[str, object], provider["config"])
+    providers = cast(dict[str, object], provider_config["providers"])
+    garden_provider = cast(dict[str, object], providers["garden-portal"])
+    headers = cast(dict[str, object], garden_provider["headers"])
+    mcp_config = cast(dict[str, object], garden_mcp["config"])
+    mcp_env = cast(dict[str, object], mcp_config["env"])
+    assert headers["traceparent"] == traceparent
+    assert mcp_env["GARDEN_EVAL_TRACEPARENT"] == traceparent
+    assert "GARDEN_EVAL_TRACEPARENT" not in environ
 
 
 def test_tool_call_budget_kills_the_harness_process_group_and_next_run_continues(
