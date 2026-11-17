@@ -106,7 +106,12 @@ def test_no_embedding_skips_knowledge_tasks_and_reports_them(
     assert run.main() == 0
 
     output = capsys.readouterr().out
-    assert called == ["draft-one-receipt"]
+    assert called == [
+        "draft-one-receipt",
+        "draft-two-receipts-hotel-over-cap",
+        "which-budget-line-is-over",
+        "recover-claim-version-conflict",
+    ]
     assert "Skipping knowledge tasks (--no-embedding):" in output
     assert "knowledge-hotel-limit" in output
     assert "knowledge-month-close-procedure-unknown" in output
