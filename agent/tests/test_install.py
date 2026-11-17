@@ -68,6 +68,22 @@ def _build_garden_pyz(target: Path) -> Path:
     return target
 
 
+def _fake_uv(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"#!{sys.executable}\n"
+        "import sys\n"
+        "if sys.argv[1:3] == ['python', 'install']:\n"
+        "    raise SystemExit(0)\n"
+        "if sys.argv[1:3] == ['python', 'find']:\n"
+        f"    print({sys.executable!r})\n"
+        "    raise SystemExit(0)\n"
+        "raise SystemExit(2)\n",
+        encoding="utf-8",
+    )
+    path.chmod(0o755)
+
+
 def _serve_downloads(portal: FakePortal, pyz: Path) -> None:
     portal.downloads["garden.pyz"] = pyz.read_bytes()
     portal.downloads["dsh-bundle.tar.gz"] = _stand_in_dsh_bundle()
@@ -77,7 +93,9 @@ def _serve_downloads(portal: FakePortal, pyz: Path) -> None:
 _STAGE_LINE = re.compile(r"^\[(\d+)/(\d+)\] (.+)$", re.MULTILINE)
 
 
-def _assert_numbered_stages(stderr: str, *, total: int) -> None:
+def _assert_numbered_stages(
+    stderr: str, *, total: int, first_stage: str = "Fetching download manifest..."
+) -> None:
     """Every stage starts as [n/total], the numbers run in order from 1, and each one is Done."""
     lines = _STAGE_LINE.findall(stderr)
     starts = [
@@ -87,7 +105,7 @@ def _assert_numbered_stages(stderr: str, *, total: int) -> None:
     ]
     assert [number for number, _, _ in starts] == list(range(1, total + 1)), stderr
     assert {of for _, of, _ in starts} == {total}, stderr
-    assert starts[0][2] == "Fetching download manifest..."
+    assert starts[0][2] == first_stage
     done = [int(number) for number, _, text in lines if text.startswith("Done: ")]
     assert done == list(range(1, total + 1)), stderr
     assert not [text for _, _, text in lines if text.startswith("Failed: ")], stderr
@@ -375,7 +393,9 @@ def test_older_unrecorded_dsh_install_without_manifest_is_replaced(
     portal: FakePortal, env: dict[str, str], tmp_path: Path
 ) -> None:
     _serve_downloads(portal, _build_garden_pyz(tmp_path / "served" / "garden.pyz"))
-    dsh = tmp_path / "home" / "dsh"
+    garden_home = tmp_path / "home"
+    _fake_uv(garden_home / "tools" / "uv-0.13.1" / "uv")
+    dsh = garden_home / "dsh"
     package = dsh / "node_modules" / "@deepseek-ai" / "dsh"
     (package / "lib").mkdir(parents=True)
     (dsh / "package.json").write_text(
@@ -396,22 +416,32 @@ def test_older_unrecorded_dsh_install_without_manifest_is_replaced(
     (dsh / "user-data").write_text("keep in the backup", encoding="utf-8")
     manifest_file = tmp_path / ".local" / "share" / "garden" / "install-manifest.json"
     assert not manifest_file.exists()
+    fake_node_dir = tmp_path / "tools"
+    fake_node_dir.mkdir(exist_ok=True)
+    fake_node = fake_node_dir / "node"
+    fake_node.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    fake_node.chmod(0o755)
     install_env = {
         **env,
         "HOME": str(tmp_path),
+        "USERPROFILE": str(tmp_path),
+        "PATH": os.pathsep.join((str(fake_node_dir), env["PATH"])),
         "GARDEN_API_URL": portal.url,
-        "GARDEN_PYTHON": sys.executable,
         "GARDEN_BIN_DIR": str(tmp_path / "bin"),
-        "GARDEN_HOME": str(tmp_path / "home"),
+        "GARDEN_HOME": str(garden_home),
         "GARDEN_DSH_HOME": str(tmp_path / "user-dsh"),
         "GARDEN_INSTALL_TEST": "1",
     }
+    install_env.pop("GARDEN_PYTHON", None)
 
     installed = subprocess.run(
         ["bash", str(INSTALLER)], env=install_env, capture_output=True, text=True, timeout=120
     )
 
     assert installed.returncode == 0, installed.stdout + installed.stderr
+    assert "interpreter: unbound variable" not in installed.stderr
+    assert "[7/9] Done: Unpacking dsh..." in installed.stderr
+    _assert_numbered_stages(installed.stderr, total=9, first_stage="Installing Python 3.12.15...")
     assert "Found an earlier Garden dsh installation; replacing it." in installed.stderr
     assert (dsh / ".garden-install-owner").read_text(encoding="utf-8").strip()
     assert (dsh / "node_modules/@deepseek-ai/dsh/lib/bin.js").exists()

@@ -93,11 +93,6 @@ on_exit() {
 }
 
 write_install_manifest() {
-    local interpreter="${python:-}"
-    if [ -z "$interpreter" ] || [ ! -x "$interpreter" ]; then
-        interpreter="$(command -v python3 || true)"
-    fi
-    [ -n "$interpreter" ] || return 0
     local record_tree
     record_tree() {
         local path="$1" existed="$2" root="$3"
@@ -147,13 +142,18 @@ write_install_manifest() {
     fi
 }
 
-manifest_update() {
-    local interpreter="${python:-}"
-    if [ -z "$interpreter" ] || [ ! -x "$interpreter" ]; then
-        interpreter="$(command -v python3 || true)"
+run_manifest_python() {
+    if [ -n "${python:-}" ] && [ -x "$python" ]; then
+        "$python" "$@"
+    elif command -v python3 >/dev/null 2>&1; then
+        python3 "$@"
+    else
+        return 0
     fi
-    [ -n "$interpreter" ] || return 0
-    "$interpreter" - "$manifest_path" "$@" <<'PY'
+}
+
+manifest_update() {
+    run_manifest_python - "$manifest_path" "$@" <<'PY'
 import hashlib
 import json
 import os
