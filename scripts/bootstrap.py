@@ -128,6 +128,14 @@ def docker_guidance(system):
     }.get(system, "Install Docker Engine with Docker Compose and start the Docker daemon.")
 
 
+def report_missing_node_library(name, result):
+    if name == "node" and result.returncode and "libatomic.so.1" in result.stderr:
+        raise SystemExit(
+            "Node cannot start because libatomic.so.1 is missing. On Ubuntu or WSL, run: "
+            "sudo apt install libatomic1, then source scripts/bootstrap.sh again."
+        )
+
+
 def main():
     system = platform.system().lower()
     machine = platform.machine().lower()
@@ -162,6 +170,7 @@ def main():
             version = subprocess.run(
                 [existing, "--version"], capture_output=True, text=True, check=False
             )
+            report_missing_node_library(name, version)
             if version.returncode == 0 and (
                 name != "node" or int(version.stdout.strip().lstrip("v").split(".")[0]) >= 24
             ):
@@ -233,7 +242,12 @@ def main():
             )
         save_manifest(manifest_file, manifest)
         remember_path(folder, tools, system, manifest, manifest_file)
-        subprocess.run([str(executable), "--version"], check=True)
+        version = subprocess.run(
+            [str(executable), "--version"], capture_output=True, text=True, check=False
+        )
+        report_missing_node_library(name, version)
+        version.check_returncode()
+        print(version.stdout, end="")
     bunx = shutil.which("bunx")
     if not bunx:
         bun = shutil.which("bun")
