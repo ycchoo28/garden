@@ -1,0 +1,242 @@
+{
+  "title": "Garden agent evals",
+  "description": "Compare model trials, grader results, and traces. Set Run ID, Task, or Model to a value, or use * for all.",
+  "dashboardId": "",
+  "owner": "",
+  "role": "",
+  "version": 8,
+  "variables": {
+    "showDynamicFilters": false,
+    "list": [
+      {"name": "run", "label": "Run ID (* for all)", "type": "textbox", "value": "*", "escapeSingleQuotes": true},
+      {"name": "task", "label": "Task (* for all)", "type": "textbox", "value": "*", "escapeSingleQuotes": true},
+      {"name": "model", "label": "Model (* for all)", "type": "textbox", "value": "*", "escapeSingleQuotes": true}
+    ]
+  },
+  "tabs": [
+    {
+      "tabId": "default",
+      "name": "Evals",
+      "panels": [
+        {
+          "id": "eval-pass-rate",
+          "type": "heatmap",
+          "title": "Pass rate by task and model",
+          "description": "Zero is a red, visible failure. Both heatmaps use ascending model order.",
+          "queryType": "sql",
+          "layout": {"x": 0, "y": 0, "w": 48, "h": 18, "i": 1},
+          "config": {"show_legends": true, "heatmap_color_min": 0, "heatmap_color_max": 1, "heatmap_hide_below": 0, "heatmap_palette": "RdYlGn", "no_data_text": "No trials for these filters"},
+          "queries": [
+            {
+              "query": "SELECT model AS x, task_id AS y, CAST(SUM(CASE WHEN passed THEN 1 ELSE 0 END) AS DOUBLE) / COUNT(*) AS z FROM \"garden_eval_trials\" WHERE ({{run:singlequote}} = '*' OR run_id = {{run:singlequote}}) AND ({{task:singlequote}} = '*' OR task_id = {{task:singlequote}}) AND ({{model:singlequote}} = '*' OR model = {{model:singlequote}}) AND model <> 'reference' GROUP BY model, task_id ORDER BY model ASC, task_id ASC",
+              "customQuery": true,
+              "fields": {"stream": "garden_eval_trials", "stream_type": "logs", "x": [], "y": [], "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}},
+              "config": {"promql_legend": ""}
+            }
+          ]
+        },
+        {
+          "id": "eval-pass-k",
+          "type": "heatmap",
+          "title": "Pass^k by task and model",
+          "description": "PASS means every requested repeat passed. Zero is a red, visible failure.",
+          "queryType": "sql",
+          "layout": {"x": 48, "y": 0, "w": 48, "h": 18, "i": 2},
+          "config": {"show_legends": true, "heatmap_color_min": 0, "heatmap_color_max": 1, "heatmap_hide_below": 0, "heatmap_palette": "RdYlGn", "no_data_text": "No trials for these filters"},
+          "queries": [
+            {
+              "query": "SELECT model AS x, task_id AS y, CASE WHEN COUNT(*) = MAX(requested_repeats) AND SUM(CASE WHEN passed THEN 1 ELSE 0 END) = MAX(requested_repeats) AND SUM(CASE WHEN aborted THEN 1 ELSE 0 END) = 0 THEN 1 ELSE 0 END AS z FROM \"garden_eval_trials\" WHERE ({{run:singlequote}} = '*' OR run_id = {{run:singlequote}}) AND ({{task:singlequote}} = '*' OR task_id = {{task:singlequote}}) AND ({{model:singlequote}} = '*' OR model = {{model:singlequote}}) AND model <> 'reference' GROUP BY model, task_id ORDER BY model ASC, task_id ASC",
+              "customQuery": true,
+              "fields": {"stream": "garden_eval_trials", "stream_type": "logs", "x": [], "y": [], "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}},
+              "config": {"promql_legend": ""}
+            }
+          ]
+        },
+        {
+          "id": "eval-task-model-grid",
+          "type": "table",
+          "title": "Task by model grid",
+          "description": "FAIL is explicit for a zero pass rate or an incomplete pass^k cell.",
+          "queryType": "sql",
+          "layout": {"x": 0, "y": 18, "w": 96, "h": 18, "i": 3},
+          "config": {"show_legends": false, "table_pagination": true, "table_pagination_rows_per_page": 25, "wrap_table_cells": true},
+          "queries": [
+            {
+              "query": "SELECT task_id, model, COUNT(*) AS trials, SUM(CASE WHEN passed THEN 1 ELSE 0 END) AS passes, ROUND(100.0 * SUM(CASE WHEN passed THEN 1 ELSE 0 END) / COUNT(*), 1) AS pass_rate_percent, CASE WHEN COUNT(*) = MAX(requested_repeats) AND SUM(CASE WHEN passed THEN 1 ELSE 0 END) = MAX(requested_repeats) AND SUM(CASE WHEN aborted THEN 1 ELSE 0 END) = 0 THEN 'PASS' ELSE 'FAIL' END AS pass_k FROM \"garden_eval_trials\" WHERE ({{run:singlequote}} = '*' OR run_id = {{run:singlequote}}) AND ({{task:singlequote}} = '*' OR task_id = {{task:singlequote}}) AND ({{model:singlequote}} = '*' OR model = {{model:singlequote}}) AND model <> 'reference' GROUP BY task_id, model ORDER BY task_id ASC, model ASC",
+              "customQuery": true,
+              "fields": {"stream": "garden_eval_trials", "stream_type": "logs", "x": [], "y": [], "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}},
+              "config": {"promql_legend": ""}
+            }
+          ]
+        },
+        {
+          "id": "eval-trial-costs",
+          "type": "bar",
+          "title": "Tool calls, tokens, and duration",
+          "description": "Grouped by task and model. Values keep their native units: calls, tokens, and seconds.",
+          "queryType": "sql",
+          "layout": {"x": 0, "y": 36, "w": 96, "h": 20, "i": 4},
+          "config": {"show_legends": true, "stack_mode": "group"},
+          "queries": [
+            {
+              "query": "SELECT CONCAT(task_id, ' / ', model) AS x, 'Tool calls' AS series, AVG(tool_calls) AS y FROM \"garden_eval_trials\" WHERE ({{run:singlequote}} = '*' OR run_id = {{run:singlequote}}) AND ({{task:singlequote}} = '*' OR task_id = {{task:singlequote}}) AND ({{model:singlequote}} = '*' OR model = {{model:singlequote}}) AND model <> 'reference' GROUP BY task_id, model UNION ALL SELECT CONCAT(task_id, ' / ', model) AS x, 'Tokens' AS series, AVG(tokens) AS y FROM \"garden_eval_trials\" WHERE ({{run:singlequote}} = '*' OR run_id = {{run:singlequote}}) AND ({{task:singlequote}} = '*' OR task_id = {{task:singlequote}}) AND ({{model:singlequote}} = '*' OR model = {{model:singlequote}}) AND model <> 'reference' GROUP BY task_id, model UNION ALL SELECT CONCAT(task_id, ' / ', model) AS x, 'Duration seconds' AS series, AVG(duration_seconds) AS y FROM \"garden_eval_trials\" WHERE ({{run:singlequote}} = '*' OR run_id = {{run:singlequote}}) AND ({{task:singlequote}} = '*' OR task_id = {{task:singlequote}}) AND ({{model:singlequote}} = '*' OR model = {{model:singlequote}}) AND model <> 'reference' GROUP BY task_id, model ORDER BY x, series",
+              "customQuery": true,
+              "fields": {"stream": "garden_eval_trials", "stream_type": "logs", "x": [], "y": [], "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}},
+              "config": {"promql_legend": ""}
+            }
+          ]
+        },
+        {
+          "id": "eval-run-trend",
+          "type": "line",
+          "title": "Pass rate trend by run",
+          "description": "Each point is one run and model for the selected task and model filters.",
+          "queryType": "sql",
+          "layout": {"x": 0, "y": 56, "w": 96, "h": 18, "i": 5},
+          "config": {"show_legends": true},
+          "queries": [
+            {
+              "query": "SELECT MIN(_timestamp) AS x, AVG(CASE WHEN passed THEN 100.0 ELSE 0.0 END) AS y, CONCAT(run_id, ' / ', model) AS series FROM \"garden_eval_trials\" WHERE ({{run:singlequote}} = '*' OR run_id = {{run:singlequote}}) AND ({{task:singlequote}} = '*' OR task_id = {{task:singlequote}}) AND ({{model:singlequote}} = '*' OR model = {{model:singlequote}}) AND model <> 'reference' GROUP BY run_id, model ORDER BY x ASC",
+              "customQuery": true,
+              "fields": {"stream": "garden_eval_trials", "stream_type": "logs", "x": [], "y": [], "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}},
+              "config": {"promql_legend": ""}
+            }
+          ]
+        },
+        {
+          "id": "eval-run-stats",
+          "type": "metric",
+          "title": "Selected run summary",
+          "description": "These values respond to the Run ID, Task, and Model filters above.",
+          "queryType": "sql",
+          "layout": {"x": 0, "y": 74, "w": 96, "h": 12, "i": 6},
+          "config": {"show_legends": false, "unit": "percent"},
+          "queries": [
+            {
+              "query": "SELECT ROUND(100.0 * AVG(CASE WHEN passed THEN 1.0 ELSE 0.0 END), 1) AS y FROM \"garden_eval_trials\" WHERE ({{run:singlequote}} = '*' OR run_id = {{run:singlequote}}) AND ({{task:singlequote}} = '*' OR task_id = {{task:singlequote}}) AND ({{model:singlequote}} = '*' OR model = {{model:singlequote}}) AND model <> 'reference'",
+              "customQuery": true,
+              "fields": {"stream": "garden_eval_trials", "stream_type": "logs", "x": [], "y": [], "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}},
+              "config": {"promql_legend": "Pass rate"}
+            }
+          ]
+        },
+        {
+          "id": "eval-run-passes",
+          "type": "metric",
+          "title": "Passing trials",
+          "description": "Count of passing trials in the selected run and filters.",
+          "queryType": "sql",
+          "layout": {"x": 0, "y": 86, "w": 24, "h": 12, "i": 7},
+          "config": {"show_legends": false},
+          "queries": [
+            {
+              "query": "SELECT SUM(CASE WHEN passed THEN 1 ELSE 0 END) AS y FROM \"garden_eval_trials\" WHERE ({{run:singlequote}} = '*' OR run_id = {{run:singlequote}}) AND ({{task:singlequote}} = '*' OR task_id = {{task:singlequote}}) AND ({{model:singlequote}} = '*' OR model = {{model:singlequote}}) AND model <> 'reference'",
+              "customQuery": true,
+              "fields": {"stream": "garden_eval_trials", "stream_type": "logs", "x": [], "y": [], "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}},
+              "config": {"promql_legend": "Passing trials"}
+            }
+          ]
+        },
+        {
+          "id": "eval-run-calls",
+          "type": "metric",
+          "title": "Tool calls",
+          "description": "Tool calls in the selected run and filters.",
+          "queryType": "sql",
+          "layout": {"x": 24, "y": 86, "w": 24, "h": 12, "i": 8},
+          "config": {"show_legends": false},
+          "queries": [
+            {
+              "query": "SELECT SUM(tool_calls) AS y FROM \"garden_eval_trials\" WHERE ({{run:singlequote}} = '*' OR run_id = {{run:singlequote}}) AND ({{task:singlequote}} = '*' OR task_id = {{task:singlequote}}) AND ({{model:singlequote}} = '*' OR model = {{model:singlequote}}) AND model <> 'reference'",
+              "customQuery": true,
+              "fields": {"stream": "garden_eval_trials", "stream_type": "logs", "x": [], "y": [], "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}},
+              "config": {"promql_legend": "Tool calls"}
+            }
+          ]
+        },
+        {
+          "id": "eval-run-tokens",
+          "type": "metric",
+          "title": "Tokens",
+          "description": "Tokens in the selected run and filters.",
+          "queryType": "sql",
+          "layout": {"x": 48, "y": 86, "w": 24, "h": 12, "i": 9},
+          "config": {"show_legends": false},
+          "queries": [
+            {
+              "query": "SELECT SUM(tokens) AS y FROM \"garden_eval_trials\" WHERE ({{run:singlequote}} = '*' OR run_id = {{run:singlequote}}) AND ({{task:singlequote}} = '*' OR task_id = {{task:singlequote}}) AND ({{model:singlequote}} = '*' OR model = {{model:singlequote}}) AND model <> 'reference'",
+              "customQuery": true,
+              "fields": {"stream": "garden_eval_trials", "stream_type": "logs", "x": [], "y": [], "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}},
+              "config": {"promql_legend": "Tokens"}
+            }
+          ]
+        },
+        {
+          "id": "eval-run-duration",
+          "type": "metric",
+          "title": "Duration seconds",
+          "description": "Total duration in the selected run and filters.",
+          "queryType": "sql",
+          "layout": {"x": 72, "y": 86, "w": 24, "h": 12, "i": 10},
+          "config": {"show_legends": false, "unit": "seconds"},
+          "queries": [
+            {
+              "query": "SELECT ROUND(SUM(duration_seconds), 3) AS y FROM \"garden_eval_trials\" WHERE ({{run:singlequote}} = '*' OR run_id = {{run:singlequote}}) AND ({{task:singlequote}} = '*' OR task_id = {{task:singlequote}}) AND ({{model:singlequote}} = '*' OR model = {{model:singlequote}}) AND model <> 'reference'",
+              "customQuery": true,
+              "fields": {"stream": "garden_eval_trials", "stream_type": "logs", "x": [], "y": [], "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}},
+              "config": {"promql_legend": "Duration seconds"}
+            }
+          ]
+        },
+        {
+          "id": "eval-grader-verdicts",
+          "type": "table",
+          "title": "Grader verdicts",
+          "description": "Each row includes serialized grader verdicts and reasons from the trial record.",
+          "queryType": "sql",
+          "layout": {"x": 0, "y": 98, "w": 48, "h": 20, "i": 11},
+          "config": {"show_legends": false, "table_pagination": true, "table_pagination_rows_per_page": 25, "wrap_table_cells": true},
+          "queries": [
+            {
+              "query": "SELECT _timestamp, run_id, task_id, model, repeat, passed, graders, failure_reason FROM \"garden_eval_trials\" WHERE ({{run:singlequote}} = '*' OR run_id = {{run:singlequote}}) AND ({{task:singlequote}} = '*' OR task_id = {{task:singlequote}}) AND ({{model:singlequote}} = '*' OR model = {{model:singlequote}}) AND model <> 'reference' ORDER BY _timestamp DESC LIMIT 200",
+              "customQuery": true,
+              "fields": {"stream": "garden_eval_trials", "stream_type": "logs", "x": [], "y": [], "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}},
+              "config": {"promql_legend": ""}
+            }
+          ]
+        },
+        {
+          "id": "eval-trial-drilldown",
+          "type": "table",
+          "title": "Trials and traces",
+          "description": "Open trace_link from a row, or use the trace_id field to find the trial trace.",
+          "queryType": "sql",
+          "layout": {"x": 48, "y": 98, "w": 48, "h": 20, "i": 12},
+          "config": {
+            "show_legends": false,
+            "table_pagination": true,
+            "table_pagination_rows_per_page": 25,
+            "wrap_table_cells": true,
+            "drilldown": [
+              {
+                "name": "Open trace",
+                "type": "url",
+                "findBy": "trace_id",
+                "targetBlank": true,
+                "data": {"url": "/web/traces/trace-details?stream=garden_eval_traces&trace_id=${trace_id}&org_identifier=default"}
+              }
+            ]
+          },
+          "queries": [
+            {
+              "query": "SELECT _timestamp, run_id, task_id, model, repeat, passed, tool_calls, tokens, duration_seconds, graders, failure_reason, trace_id, CONCAT('/web/traces/trace-details?stream=garden_eval_traces&trace_id=', trace_id, '&from=', CAST(_timestamp - 60000000 AS VARCHAR), '&to=', CAST(_timestamp + 60000000 AS VARCHAR), '&org_identifier=default') AS trace_link FROM \"garden_eval_trials\" WHERE ({{run:singlequote}} = '*' OR run_id = {{run:singlequote}}) AND ({{task:singlequote}} = '*' OR task_id = {{task:singlequote}}) AND ({{model:singlequote}} = '*' OR model = {{model:singlequote}}) AND model <> 'reference' ORDER BY _timestamp DESC LIMIT 200",
+              "customQuery": true,
+              "fields": {"stream": "garden_eval_trials", "stream_type": "logs", "x": [], "y": [], "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}},
+              "config": {"promql_legend": ""}
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

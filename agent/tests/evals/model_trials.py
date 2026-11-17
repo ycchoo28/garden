@@ -106,7 +106,7 @@ def _budget_reason(record: dict[str, object]) -> str | None:
 
 
 def _aborted_trial(
-    *, run_id: str, task: EvalTask, model: str, repeat_number: int
+    *, run_id: str, task: EvalTask, model: str, repeat_number: int, requested_repeats: int
 ) -> dict[str, object]:
     return {
         "run_id": run_id,
@@ -116,6 +116,7 @@ def _aborted_trial(
         "area": task.area,
         "model": model,
         "repeat": repeat_number,
+        "requested_repeats": requested_repeats,
         "passed": False,
         "failure_reason": "aborted_after_three_budget_failures",
         "error": None,
@@ -260,6 +261,7 @@ def run_model_trials(
                 "area": task.area,
                 "model": model,
                 "repeat": repeat_number,
+                "requested_repeats": repeat,
                 "passed": False,
                 "error": None,
                 "failure_reason": None,
@@ -340,6 +342,7 @@ def run_model_trials(
                         task=task,
                         model=model,
                         repeat_number=repeat_number,
+                        requested_repeats=repeat,
                     ),
                 )
                 if records[repeat_number].get("aborted") is True:
