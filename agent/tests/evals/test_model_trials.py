@@ -82,6 +82,7 @@ def test_three_budget_failures_abort_only_that_cell_and_summary_uses_medians(
     assert [repeat for model, repeat in calls if model == "stuck-model"] == [1, 2, 3]
     assert [repeat for model, repeat in calls if model == "working-model"] == [1, 2, 3, 4]
     trials = cast(list[dict[str, object]], summary["trials"])
+    assert all(record["requested_repeats"] == 4 for record in trials)
     skipped = next(
         record for record in trials if record["model"] == "stuck-model" and record["repeat"] == 4
     )

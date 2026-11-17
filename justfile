@@ -219,6 +219,15 @@ agent-e2e-serve: up
 eval-ui: eval-up
     python3 -m webbrowser -t "http://127.0.0.1:${GARDEN_EVAL_OPENOBSERVE_PORT:-55086}"
 
+# Apply the checked-in OpenObserve dashboards and alert.
+eval-dashboards: eval-up
+    #!/usr/bin/env bash
+    set -euo pipefail
+    IFS='=' read -r _ password < var/openobserve.env
+    export GARDEN_OPENOBSERVE_URL="http://127.0.0.1:${GARDEN_EVAL_OPENOBSERVE_PORT:-55086}"
+    export GARDEN_OPENOBSERVE_PASSWORD="$password"
+    uv run --no-project --python 3.12 python scripts/apply_openobserve.py
+
 # Generate the local root password once and start or reuse OpenObserve.
 eval-up:
     #!/usr/bin/env bash

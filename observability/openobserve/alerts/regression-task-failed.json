@@ -1,0 +1,21 @@
+{
+  "name": "garden_regression_task_failed",
+  "description": "Fires when a real model trial fails for a regression task. Reference runs are excluded because their wrong solution is expected to fail.",
+  "stream_type": "logs",
+  "stream_name": "garden-eval-trials",
+  "is_real_time": false,
+  "query_condition": {
+    "type": "sql",
+    "sql": "SELECT COUNT(*) AS count FROM \"garden-eval-trials\" WHERE suite = 'regression' AND passed = false AND aborted = false AND model <> 'reference'"
+  },
+  "trigger_condition": {
+    "period": 5,
+    "operator": ">",
+    "threshold": 0,
+    "frequency": 1,
+    "frequency_type": "minutes",
+    "silence": 10
+  },
+  "destinations": [],
+  "enabled": true
+}

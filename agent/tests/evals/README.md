@@ -1,5 +1,10 @@
 # Agent evals
 
+Apply the checked-in OpenObserve dashboards and regression alert with `just eval-dashboards`.
+The command starts the local OpenObserve service if needed, then creates or updates the definitions from `observability/openobserve/`.
+Before applying the alert, configure an existing OpenObserve notification destination with `GARDEN_OPENOBSERVE_ALERT_DESTINATION`.
+OpenObserve requires a destination for scheduled alerts.
+
 Run all scripted reference trials with `just agent-eval --reference --fake-embedding`.
 Reference mode exercises the Garden MCP tools against the real trial API and runs both the perfect and deliberately wrong solutions without a model.
 Each solution gets a fresh clone of the seeded template database, its own API process, and a sealed dsh home and workspace.

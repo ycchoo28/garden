@@ -1,0 +1,102 @@
+{
+  "title": "Garden agent monitoring",
+  "description": "Everyday Garden agent API operations, model calls, tokens, and response outcomes.",
+  "dashboardId": "",
+  "owner": "",
+  "role": "",
+  "version": 8,
+  "variables": {"showDynamicFilters": true, "list": []},
+  "tabs": [
+    {
+      "tabId": "default",
+      "name": "Agent use",
+      "panels": [
+        {
+          "id": "portal-agent-requests",
+          "type": "line",
+          "title": "Agent API operations over time",
+          "description": "Garden API requests identified as agent calls.",
+          "queryType": "sql",
+          "layout": {"x": 0, "y": 0, "w": 64, "h": 18, "i": 1},
+          "config": {"show_legends": true},
+          "queries": [
+            {
+              "query": "SELECT histogram(_timestamp) AS x, COUNT(*) AS y, \"http.route\" AS series FROM \"default\" WHERE \"garden.agent.flag\" = true GROUP BY x, \"http.route\" ORDER BY x ASC",
+              "customQuery": true,
+              "fields": {"stream": "default", "stream_type": "traces", "x": [], "y": [], "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}},
+              "config": {"promql_legend": "{{series}}"}
+            }
+          ]
+        },
+        {
+          "id": "portal-agent-summary",
+          "type": "metric",
+          "title": "Agent API requests",
+          "description": "Total API requests made with an Agent login in the selected time range.",
+          "queryType": "sql",
+          "layout": {"x": 64, "y": 0, "w": 32, "h": 18, "i": 2},
+          "config": {"show_legends": false},
+          "queries": [
+            {
+              "query": "SELECT COUNT(*) AS y FROM \"default\" WHERE \"garden.agent.flag\" = true",
+              "customQuery": true,
+              "fields": {"stream": "default", "stream_type": "traces", "x": [], "y": [], "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}},
+              "config": {"promql_legend": "Requests"}
+            }
+          ]
+        },
+        {
+          "id": "portal-tool-routes",
+          "type": "bar",
+          "title": "Agent operations by route",
+          "description": "Counts and response status for Garden API operations called by agents.",
+          "queryType": "sql",
+          "layout": {"x": 0, "y": 18, "w": 48, "h": 18, "i": 3},
+          "config": {"show_legends": true},
+          "queries": [
+            {
+              "query": "SELECT \"http.route\" AS x, COUNT(*) AS y, CAST(\"http.response.status_code\" AS VARCHAR) AS series FROM \"default\" WHERE \"garden.agent.flag\" = true GROUP BY \"http.route\", \"http.response.status_code\" ORDER BY x ASC",
+              "customQuery": true,
+              "fields": {"stream": "default", "stream_type": "traces", "x": [], "y": [], "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}},
+              "config": {"promql_legend": "{{series}}"}
+            }
+          ]
+        },
+        {
+          "id": "portal-model-usage",
+          "type": "bar",
+          "title": "Model calls and tokens",
+          "description": "Garden model gateway calls and reported token usage by model.",
+          "queryType": "sql",
+          "layout": {"x": 48, "y": 18, "w": 48, "h": 18, "i": 4},
+          "config": {"show_legends": true},
+          "queries": [
+            {
+              "query": "SELECT \"gen_ai.request.model\" AS x, COUNT(*) AS y, 'Model calls' AS series FROM \"default\" WHERE \"gen_ai.operation.name\" = 'chat' GROUP BY \"gen_ai.request.model\" UNION ALL SELECT \"gen_ai.request.model\" AS x, SUM(\"garden.model.usage.total_tokens\") AS y, 'Tokens' AS series FROM \"default\" WHERE \"gen_ai.operation.name\" = 'chat' GROUP BY \"gen_ai.request.model\" ORDER BY x ASC, series ASC",
+              "customQuery": true,
+              "fields": {"stream": "default", "stream_type": "traces", "x": [], "y": [], "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}},
+              "config": {"promql_legend": "{{series}}"}
+            }
+          ]
+        },
+        {
+          "id": "portal-agent-outcomes",
+          "type": "table",
+          "title": "Recent agent operations",
+          "description": "Recent agent API operations, response codes, and trace identifiers.",
+          "queryType": "sql",
+          "layout": {"x": 0, "y": 36, "w": 96, "h": 18, "i": 5},
+          "config": {"show_legends": false, "table_pagination": true, "table_pagination_rows_per_page": 25},
+          "queries": [
+            {
+              "query": "SELECT _timestamp, \"http.request.method\", \"http.route\", \"http.response.status_code\", \"garden.person.id\", trace_id, duration FROM \"default\" WHERE \"garden.agent.flag\" = true ORDER BY _timestamp DESC LIMIT 200",
+              "customQuery": true,
+              "fields": {"stream": "default", "stream_type": "traces", "x": [], "y": [], "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}},
+              "config": {"promql_legend": ""}
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
