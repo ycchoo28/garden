@@ -623,39 +623,18 @@ def run_reference(
         ):
             if solution is None:
                 raise StepFailed(f"Task {task.id!r} has no {variant} reference solution.")
-            try:
-                record = run_trial(
-                    run_id=run_id,
-                    task=task,
-                    embedder=embedder,
-                    variant=variant,
-                    expected_pass=expected_pass,
-                    solution=solution,
-                    logins=logins,
-                    env=env,
-                    output=OUTPUT,
-                    keep_failed=keep_failed,
-                )
-            except Exception as failure:
-                record = _trial_record(
-                    run_id=run_id,
-                    task=task,
-                    embedder=embedder,
-                    variant=variant,
-                    expected_pass=expected_pass,
-                    started=time.monotonic(),
-                    database=f"garden_agent_eval_{run_id[:8]}-{variant}",
-                    db_kept=False,
-                    reference_solution=variant,
-                    answer="",
-                    exit_code=1,
-                    tool_calls=0,
-                    graders=[
-                        GraderResult(grader.id, "fail", f"The trial runner failed: {failure}")
-                        for grader in task.graders
-                    ],
-                    error=f"Trial runner failed: {failure}",
-                )
+            record = run_trial(
+                run_id=run_id,
+                task=task,
+                embedder=embedder,
+                variant=variant,
+                expected_pass=expected_pass,
+                solution=solution,
+                logins=logins,
+                env=env,
+                output=OUTPUT,
+                keep_failed=keep_failed,
+            )
             records.append(record)
         passed = all(
             record["passed"] is record["expected_pass"] and record["error"] is None
