@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
+from typing import Literal
 
 from tests.shared.stack import PERSON_NAME, PERSON_SUBJECT
 from tests.shared.transcript import Run, StepFailed
@@ -15,6 +17,31 @@ def approve(script: str, link: str, media: Path) -> subprocess.CompletedProcess[
     """Approves a login or an action in a headless browser, through its own script."""
     args = ["node", str(HERE / script), link, str(media), PERSON_NAME, PERSON_SUBJECT]
     return subprocess.run(args, capture_output=True, text=True, timeout=240, check=False)
+
+
+def decide_confirmation(
+    link: str,
+    media: Path,
+    person_subject: str,
+    decision: Literal["approve", "deny"],
+    *,
+    oidc_url: str | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Signs in as the asking person and approves or declines one action in the browser."""
+    args = [
+        "node",
+        str(HERE / "approve-confirmation.cjs"),
+        link,
+        str(media),
+        "",
+        person_subject,
+        decision,
+    ]
+    env = None
+    if oidc_url is not None:
+        env = dict(os.environ)
+        env["GARDEN_E2E_OIDC_URL"] = oidc_url
+    return subprocess.run(args, capture_output=True, text=True, env=env, timeout=240, check=False)
 
 
 def sign_in_headless(

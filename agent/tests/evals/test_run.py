@@ -108,6 +108,9 @@ def test_no_embedding_skips_knowledge_tasks_and_reports_them(
     output = capsys.readouterr().out
     assert called == [
         "draft-one-receipt",
+        "submit-my-claim",
+        "withdraw-claim-approved",
+        "withdraw-claim-denied",
         "draft-two-receipts-hotel-over-cap",
         "which-budget-line-is-over",
         "recover-claim-version-conflict",

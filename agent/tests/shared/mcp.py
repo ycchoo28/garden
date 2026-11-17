@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from collections.abc import Callable
 from contextlib import suppress
 from pathlib import Path
 from typing import Any
@@ -43,8 +44,14 @@ class Mcp:
     def notify(self, method: str) -> None:
         self._write({"jsonrpc": "2.0", "method": method})
 
-    def request(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        return self.reply(self.start(method, params))
+    def request(
+        self,
+        method: str,
+        params: dict[str, Any] | None = None,
+        *,
+        on_notification: Callable[[dict[str, Any]], None] | None = None,
+    ) -> dict[str, Any]:
+        return self.reply(self.start(method, params), on_notification=on_notification)
 
     def start(self, method: str, params: dict[str, Any] | None = None) -> int:
         """Send a request and return its id, without waiting for the reply."""
@@ -56,12 +63,20 @@ class Mcp:
         self._write(message)
         return request_id
 
-    def reply(self, request_id: int) -> dict[str, Any]:
+    def reply(
+        self,
+        request_id: int,
+        *,
+        on_notification: Callable[[dict[str, Any]], None] | None = None,
+    ) -> dict[str, Any]:
         """The reply to one request. Notifications read on the way are kept in `notices`."""
         while True:
             message = self._read()
             if message.get("id") == request_id:
                 return message
+            if on_notification is not None and message.get("method") == "notifications/message":
+                on_notification(message)
+                continue
             self.notices.append(message)
 
     def notice(self) -> dict[str, Any]:
