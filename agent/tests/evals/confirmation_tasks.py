@@ -34,7 +34,9 @@ def _prepare_claim(context: ReferenceContext, task: ClaimDraftTask) -> tuple[str
     upload_result = context.call(
         "files_file_upload", {"path": str(context.workspace / "receipt.pdf")}
     )
-    receipt = _as_object(upload_result.get("uploaded", upload_result))
+    upload = _as_object(upload_result)
+    uploaded_value = upload.get("uploaded", upload_result) if upload is not None else upload_result
+    receipt = _as_object(uploaded_value)
     receipt_sha256 = receipt.get("sha256") if receipt is not None else None
     if not isinstance(receipt_sha256, str):
         raise RuntimeError("The file upload tool did not return a receipt SHA-256.")
@@ -99,7 +101,8 @@ def perfect_withdraw_approved(context: ReferenceContext, task: ClaimDraftTask) -
         "claims_claim_withdraw",
         {"claim_id": claim_id, "body": {"expected_version": version}},
     )
-    claim_result = _as_object(result.get("claim"))
+    withdrawal = _as_object(result)
+    claim_result = _as_object(withdrawal.get("claim")) if withdrawal is not None else None
     if claim_result is None or claim_result.get("status") != "withdrawn":
         raise RuntimeError("The approved withdrawal did not return a withdrawn claim.")
     return "You approved the confirmation, and I withdrew the submitted claim."

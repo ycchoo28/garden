@@ -10,6 +10,7 @@ from pathlib import Path
 from pkgutil import iter_modules
 from typing import Literal, Protocol, cast
 
+from tests.evals.confirmation_grading import AnswerContainsGrader
 from tests.evals.grading import DraftClaimGrader
 from tests.evals.task_types import EvalGrader
 

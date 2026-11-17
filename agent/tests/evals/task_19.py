@@ -73,6 +73,5 @@ WITHDRAW_CLAIM_DENIED = ClaimDraftTask(
 )
 
 TASKS: dict[str, ClaimDraftTask] = {
-    task.id: task
-    for task in (SUBMIT_MY_CLAIM, WITHDRAW_CLAIM_APPROVED, WITHDRAW_CLAIM_DENIED)
+    task.id: task for task in (SUBMIT_MY_CLAIM, WITHDRAW_CLAIM_APPROVED, WITHDRAW_CLAIM_DENIED)
 }
