@@ -423,7 +423,14 @@ def grade_task(
             )
         else:
             claim_grader = cast(DraftClaimGrader, grader)
-            results.append(claim_grader.grade(api_url, grader_token, cast(ClaimDraftTask, task)))
+            results.append(
+                claim_grader.grade(
+                    api_url,
+                    grader_token,
+                    cast(ClaimDraftTask, task),
+                    answer=answer,
+                )
+            )
     return results
 
 
@@ -541,6 +548,7 @@ def run_trial(
                     home=temp / "home",
                     workspace=temp / "workspace",
                     acting_token=logins["acting"],
+                    database=database,
                 )
                 answer = adapter.run_reference(solution)
                 exit_code = 0

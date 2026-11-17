@@ -36,8 +36,12 @@ class DshHarnessAdapter:
         home: Path,
         workspace: Path,
         acting_token: str,
+        database: str,
     ) -> None:
         self.task = task
+        self.portal_url = portal_url
+        self.acting_token = acting_token
+        self.database = database
         self.home = home
         self.workspace = workspace
         self.tool_calls = 0
@@ -96,9 +100,12 @@ class DshHarnessAdapter:
             yaml.safe_dump(patch, sort_keys=False), encoding="utf-8"
         )
         (self.workspace / "receipt.pdf").write_bytes(b"%PDF-1.4\nGarden reference receipt\n%%EOF\n")
+        (self.workspace / "second-receipt.pdf").write_bytes(
+            b"%PDF-1.4\nGarden second reference receipt\n%%EOF\n"
+        )
         self.client = Mcp(launcher, env, cwd=self.workspace)
 
-    def call(self, name: str, arguments: dict[str, object]) -> dict[str, object]:
+    def call(self, name: str, arguments: dict[str, object]) -> object:
         if self.client is None:
             raise RuntimeError("The Garden MCP client is not ready.")
         self.tool_calls += 1
@@ -117,6 +124,9 @@ class DshHarnessAdapter:
         structured = _as_object(result.get("structuredContent"))
         if structured is not None:
             return structured
+        structured_value = result.get("structuredContent")
+        if isinstance(structured_value, list):
+            return cast(object, structured_value)
         content_value = result.get("content")
         if isinstance(content_value, list):
             content = cast(list[object], content_value)
@@ -131,6 +141,8 @@ class DshHarnessAdapter:
                     decoded_object = _as_object(decoded)
                     if decoded_object is not None:
                         return decoded_object
+                    if isinstance(decoded, list):
+                        return cast(list[object], decoded)
         raise RuntimeError(f"Garden MCP returned no structured result for {name}.")
 
     def run_reference(self, solution: ReferenceSolution) -> str:
