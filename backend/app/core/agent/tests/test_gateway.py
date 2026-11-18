@@ -24,6 +24,7 @@ from garden.trace_contract import (
     GARDEN_MODEL_TOTAL_TOKENS,
     GARDEN_PERSON_ID,
     GEN_AI_CAPTURE_CONTENT_ENV,
+    GEN_AI_CONVERSATION_ID,
     GEN_AI_CUSTOM_PROVIDER,
     GEN_AI_INFERENCE_EVENT,
     GEN_AI_INPUT_MESSAGES,
@@ -799,3 +800,51 @@ async def test_stream_usage_is_counted_when_it_rides_with_content_or_arrives_in_
         async for _ in await service.stream(person_id=person, cli_login_id=None, body=body):
             pass
     assert await rows(person) == (1, 11, 5, 16)
+
+
+@pytest.mark.parametrize("role", ["system", "developer"])
+@pytest.mark.parametrize("parts", [False, True])
+@pytest.mark.asyncio
+async def test_dsh_title_request_has_its_own_thread_without_changing_upstream_prompt(
+    upstream: FakeUpstream,
+    client: AsyncClient,
+    identity: FakeIdentity,
+    configure: Callable[..., None],
+    span_exporter: InMemorySpanExporter,
+    role: str,
+    parts: bool,
+) -> None:
+    configure()
+    await sign_in(client, identity, MARCUS)
+    title_body: dict[str, Any] = {
+        **CHAT,
+        "messages": [
+            {
+                "role": role,
+                "content": (
+                    "Create a concise title for an AI coding-assistant session "
+                    "from the supplied human messages."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    "Generate the session title from this JSON array of human messages:\n"
+                    '[{"seq":8,"text":"Draft a claim."}]'
+                ),
+            },
+        ],
+    }
+    if parts:
+        for message in cast(list[dict[str, Any]], title_body["messages"]):
+            message["content"] = [{"type": "text", "text": message["content"]}]
+    response = await client.post("/api/agent/model/v1/chat/completions", json=title_body)
+    assert response.status_code == 200
+    [span] = _model_gateway_spans(span_exporter)
+    attributes = _span_attributes(span)
+    assert json.loads(upstream.requests[-1].content)["messages"] == title_body["messages"]
+    assert span.name == "chat conversation_title"
+    assert attributes[GARDEN_MODEL_SIDE_CALL_TYPE] == GARDEN_CONVERSATION_TITLE_SIDE_CALL
+    assert attributes[GEN_AI_CONVERSATION_ID] == (
+        str(attributes[GARDEN_AGENT_CONVERSATION_ID]) + ":title"
+    )

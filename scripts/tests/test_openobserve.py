@@ -64,6 +64,7 @@ def test_checked_in_definitions_cover_eval_and_portal_workflows() -> None:
             assert "{{task:singlequote}}" in sql
             assert "{{model:singlequote}}" in sql
             assert "model <> 'reference'" in sql
+            assert "NULLIF('{{run:singlequote}}'," in sql
     trial_query = str(
         cast(dict[str, object], cast(list[object], by_id["eval-trial-drilldown"]["queries"])[0])[
             "query"
@@ -100,6 +101,7 @@ def test_apply_creates_missing_definitions_and_updates_existing_ones(tmp_path: P
 
     class FakeClient:
         org = "default"
+        base_url = "http://127.0.0.1:55086"
 
         def __init__(self, *, existing: bool) -> None:
             self.existing = existing
@@ -179,3 +181,59 @@ def test_client_sends_json_with_basic_auth(monkeypatch: pytest.MonkeyPatch) -> N
     assert request.get_method() == "POST"
     assert request.get_header("Authorization") == "Basic cm9vdEBleGFtcGxlLmNvbTpwYXNzd29yZA=="
     assert json.loads(request.data) == {"title": "Example"}
+
+
+def test_catalog_tab_displays_questions_without_a_telemetry_query() -> None:
+    tab = apply_openobserve.task_catalog_tab(
+        [
+            {
+                "id": "example",
+                "prompt": "Draft a claim. <script>unsafe</script>",
+                "suite": "capability",
+                "area": "claims",
+                "confirmation": "none",
+                "budget_tool_calls": 10,
+                "budget_seconds": None,
+                "budget_tokens": 1000,
+                "graders": [{"id": "draft", "description": "Checks draft state."}],
+            }
+        ]
+    )
+    panel = tab["panels"][0]
+    assert "Draft a claim." in panel["markdownContent"]
+    assert "Checks draft state." in panel["markdownContent"]
+    assert "<script>" not in panel["markdownContent"]
+    assert panel["queries"] == []
+
+
+def test_schema_initialization_creates_streams_and_only_adds_missing_fields() -> None:
+    class SchemaClient:
+        org = "default"
+
+        def __init__(self, exists: bool) -> None:
+            self.exists = exists
+            self.writes: list[tuple[str, str, dict[str, object]]] = []
+
+        def request(self, method: str, path: str, body: dict[str, object] | None = None) -> object:
+            if method == "GET":
+                if "/schema" in path:
+                    return {"schema": [{"name": "_timestamp", "type": "Int64"}]}
+                return {
+                    "list": [{"name": "garden_eval_traces"}, {"name": "garden_eval_trials"}]
+                    if self.exists
+                    else []
+                }
+            assert body is not None
+            self.writes.append((method, path, body))
+            return {}
+
+    for exists in [False, True]:
+        client = SchemaClient(exists)
+        apply_openobserve.ensure_stream_schemas(client)
+        assert len(client.writes) == 2
+        for method, path, body in client.writes:
+            assert method == ("PUT" if exists else "POST")
+            assert "type=" in path
+            assert body["fields"]
+            if exists:
+                assert all(field["name"] != "_timestamp" for field in body["fields"])

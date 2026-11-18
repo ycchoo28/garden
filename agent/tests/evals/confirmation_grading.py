@@ -90,6 +90,8 @@ class ConfirmationClaimGrader(DraftClaimGrader):
 
 @dataclass(frozen=True)
 class AnswerContainsGrader:
+    """Checks that the final answer contains every required phrase."""
+
     id: str
     required_phrases: tuple[str, ...]
 

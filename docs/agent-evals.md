@@ -91,3 +91,22 @@ Trial log rows include the same trace id, task id, model, repeat and grader reas
 
 The dashboard definition is versioned in [`observability/openobserve/dashboards/evals.json`](../observability/openobserve/dashboards/evals.json) and applied by [`scripts/apply_openobserve.py`](../scripts/apply_openobserve.py).
 OpenObserve owns the exact layout of its trace and thread views, while the spans, attributes, dashboard panels and queries are defined in this repository.
+
+## Task catalog and title calls
+
+The `Garden agent evals` dashboard has a `Task catalog` tab with every registered question, its suite, confirmation policy, budgets and automated checks.
+`just eval-dashboards` reads the same registry as the eval runner and refreshes the catalog without running any trials.
+It declares missing stream fields without creating fake observations, so empty or reference-only streams show no data instead of schema errors.
+The catalog is independent of the dashboard time range.
+The Evals tab uses the selected time range; its default is seven days so setup runs remain visible the next day.
+
+DSH can send a separate request to create a short session title.
+That request wraps the human message in a JSON array and asks the model to generate a title.
+The task execution uses its own model request with the original task prompt and agent context.
+Recognized title calls have the span name `chat conversation_title` and `garden.model.side_call.type=conversation_title`.
+They retain the Garden conversation ID and trial trace, but use a separate `gen_ai.conversation.id` ending in `:title` so OpenObserve does not prepend title instructions to the task thread.
+Their usage remains included in gateway model usage.
+Previously stored traces keep their original attributes.
+
+Local app and eval exporters use the `garden_eval_traces` stream.
+If you configure an exporter yourself, include `stream-name=garden_eval_traces` in its OTLP trace headers for the monitoring dashboard.

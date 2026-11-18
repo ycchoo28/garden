@@ -89,7 +89,7 @@ dev: seed
         IFS='=' read -r _ GARDEN_OPENOBSERVE_ROOT_PASSWORD < var/openobserve.env
         auth="$(printf 'root@example.com:%s' "$GARDEN_OPENOBSERVE_ROOT_PASSWORD" | base64 | tr -d '\n')"
         export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="http://127.0.0.1:${GARDEN_EVAL_OPENOBSERVE_PORT:-55086}/api/default/v1/traces"
-        export OTEL_EXPORTER_OTLP_TRACES_HEADERS="Authorization=Basic $auth"
+        export OTEL_EXPORTER_OTLP_TRACES_HEADERS="Authorization=Basic $auth,stream-name=garden_eval_traces"
     fi
     (cd backend && uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 55000) &
     (cd backend && uv run python -m app.worker) &

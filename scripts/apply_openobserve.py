@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import argparse
 import base64
+import html
 import json
 import os
+import subprocess
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import cast
@@ -87,6 +89,92 @@ def _load_directory(directory: Path) -> list[dict[str, object]]:
     return definitions
 
 
+def ensure_stream_schemas(client: OpenObserveClient) -> None:
+    """Declare query fields without adding fake trials or changing existing field types."""
+    schemas = cast(
+        list[dict[str, object]],
+        json.loads((DEFINITIONS / "streams.json").read_text(encoding="utf-8")),
+    )
+    for schema in schemas:
+        stream_type = str(schema["type"])
+        path = f"/api/{client.org}/streams/{schema['name']}"
+        query = f"?type={stream_type}"
+        streams = _items(client.request("GET", f"/api/{client.org}/streams{query}"), "list")
+        fields = cast(list[dict[str, str]], schema["fields"])
+        if not any(stream.get("name") == schema["name"] for stream in streams):
+            client.request("POST", path + query, {"fields": fields, "settings": {}})
+            continue
+        existing = cast(dict[str, object], client.request("GET", path + "/schema" + query))
+        names = {field["name"] for field in cast(list[dict[str, str]], existing["schema"])}
+        missing = [
+            {"name": field["name"], "data_type": field["type"]}
+            for field in fields
+            if field["name"] not in names
+        ]
+        if missing:
+            client.request("PUT", path + "/update_fields" + query, {"fields": missing})
+
+
+def task_catalog_tab(tasks: Sequence[dict[str, object]]) -> dict[str, object]:
+    """Render source-controlled questions without depending on a telemetry time range."""
+    panels: list[dict[str, object]] = []
+    for index, task in enumerate(tasks):
+        graders = cast(list[dict[str, object]], task["graders"])
+        checks = "\n".join(
+            f"- **{html.escape(str(grader['id']))}**: "
+            f"{html.escape(str(grader['description']).strip())}"
+            for grader in graders
+        )
+        criteria = task.get("judge_criteria")
+        if criteria:
+            checks += "\n\n**Judge criteria:** " + html.escape(str(criteria))
+        prompt = "\n".join("> " + html.escape(line) for line in str(task["prompt"]).splitlines())
+        budgets = ", ".join(
+            f"{label}: {task[key] if task[key] is not None else 'runner default'}"
+            for key, label in [
+                ("budget_tool_calls", "tool calls"),
+                ("budget_seconds", "seconds"),
+                ("budget_tokens", "tokens"),
+            ]
+        )
+        content = (
+            f"**Suite:** {task['suite']} | **Area:** {task['area']} | "
+            f"**Confirmation:** {task['confirmation']} | "
+            f"**Embedding required:** {'yes' if task.get('requires_embedding') else 'no'}\n\n"
+            f"### Question\n\n{prompt}\n\n### Automated checks\n\n{checks}\n\n"
+            f"**Budgets:** {budgets}.\n\n"
+            "Select this task ID in the Evals tab to see its runs and traces."
+        )
+        panels.append(
+            {
+                "id": f"task-catalog-{task['id']}",
+                "type": "markdown",
+                "title": str(task["id"]),
+                "description": "Registered eval task definition.",
+                "markdownContent": content,
+                "queries": [],
+                "queryType": "sql",
+                "config": {"show_legends": False},
+                "layout": {"x": 0, "y": index * 28, "w": 192, "h": 28, "i": index + 1},
+            }
+        )
+    return {"tabId": "task-catalog", "name": "Task catalog", "panels": panels}
+
+
+def load_task_catalog() -> list[dict[str, object]]:
+    result = subprocess.run(
+        ["uv", "run", "--directory", str(ROOT / "agent"), "python", "-m", "tests.evals.catalog"],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=60,
+    )
+    values = json.loads(result.stdout)
+    if not isinstance(values, list):
+        raise RuntimeError("The eval task catalog must be a list.")
+    return cast(list[dict[str, object]], values)
+
+
 def _find_by_name(
     values: Sequence[dict[str, object]], name: str, id_keys: tuple[str, ...]
 ) -> str | None:
@@ -105,6 +193,7 @@ def apply_definitions(
     dashboards: Sequence[dict[str, object]],
     alerts: Sequence[dict[str, object]],
     alert_destination: str | None = None,
+    task_catalog: Sequence[dict[str, object]] | None = None,
 ) -> tuple[int, int]:
     existing_dashboards = client.dashboards()
     for definition in dashboards:
@@ -119,7 +208,9 @@ def apply_definitions(
         )
         path = f"/api/{client.org}/dashboards"
         method = "POST"
-        body = dict(definition)
+        body = json.loads(json.dumps(definition).replace("{{openobserve_url}}", client.base_url))
+        if title == "Garden agent evals" and task_catalog is not None:
+            body["tabs"].append(task_catalog_tab(task_catalog))
         if dashboard_id is not None:
             dashboard_hash = existing_dashboard.get("hash") if existing_dashboard else None
             if not isinstance(dashboard_hash, str) or not dashboard_hash:
@@ -141,7 +232,9 @@ def apply_definitions(
         alert_id = _find_by_name(existing_alerts, name, ("alert_id", "id"))
         path = f"/api/v2/{client.org}/alerts"
         method = "POST"
-        body = dict(definition)
+        body = json.loads(json.dumps(definition).replace("{{openobserve_url}}", client.base_url))
+        if title == "Garden agent evals" and task_catalog is not None:
+            body["tabs"].append(task_catalog_tab(task_catalog))
         if alert_destination:
             body["destinations"] = [alert_destination]
         if alert_id is not None:
@@ -181,8 +274,9 @@ def main() -> int:
     client = OpenObserveClient(args.url, args.org, args.username, args.password)
     dashboards, alerts = load_definitions()
     try:
+        ensure_stream_schemas(client)
         dashboard_count, alert_count = apply_definitions(
-            client, dashboards, alerts, args.alert_destination
+            client, dashboards, alerts, args.alert_destination, load_task_catalog()
         )
     except RuntimeError as error:
         raise SystemExit(str(error)) from None

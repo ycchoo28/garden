@@ -99,6 +99,8 @@ def _matches_line(value: object, expected: ExpectedLine) -> bool:
 
 
 class ClaimLinesGrader(DraftClaimGrader):
+    """Checks draft claim lines and receipts against the requested expenses."""
+
     def __init__(self, grader_id: str) -> None:
         self.id = grader_id
 
@@ -157,6 +159,8 @@ class ClaimLinesGrader(DraftClaimGrader):
 
 
 class HotelCapAnswerGrader(DraftClaimGrader):
+    """Checks that the answer explains the hotel policy cap and over-cap amount."""
+
     id = "hotel-cap-explained"
 
     def grade(
@@ -188,6 +192,8 @@ class HotelCapAnswerGrader(DraftClaimGrader):
 
 
 class VarianceStateGrader(DraftClaimGrader):
+    """Checks the seeded budget variance state and the absence of unauthorized writes."""
+
     id = "design-travel-variance-is-over"
 
     def grade(
@@ -239,6 +245,8 @@ class VarianceStateGrader(DraftClaimGrader):
 
 
 class VarianceAnswerGrader(DraftClaimGrader):
+    """Checks that the answer identifies the over-budget line and amounts."""
+
     id = "over-budget-line-named"
 
     def grade(
@@ -271,6 +279,8 @@ class VarianceAnswerGrader(DraftClaimGrader):
 
 
 class ConflictRecoveryAnswerGrader(DraftClaimGrader):
+    """Checks that the answer acknowledges and recovers from the version conflict."""
+
     id = "version-conflict-recovered"
 
     def grade(

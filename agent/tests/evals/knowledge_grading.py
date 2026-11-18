@@ -121,6 +121,8 @@ def parse_judge_reply(reply: str) -> tuple[JudgeOutcome, str]:
 
 
 class KnowledgeAnswerGrader:
+    """Judges the final answer against the task-specific knowledge criteria."""
+
     id = "knowledge-answer-judge"
 
     def __init__(self, *, reference_judge: JudgeModel | None = None) -> None:

@@ -1,11 +1,10 @@
 {
-  "title": "Garden agent monitoring",
-  "description": "Everyday Garden agent API operations, model calls, tokens, and response outcomes.",
-  "dashboardId": "",
-  "owner": "",
-  "role": "",
   "version": 8,
-  "variables": {"showDynamicFilters": true, "list": []},
+  "dashboardId": "",
+  "title": "Garden agent monitoring",
+  "description": "Garden app and eval agent API operations and gateway model usage from garden_eval_traces.",
+  "role": "",
+  "owner": "",
   "tabs": [
     {
       "tabId": "default",
@@ -16,87 +15,391 @@
           "type": "line",
           "title": "Agent API operations over time",
           "description": "Garden API requests identified as agent calls.",
+          "config": {
+            "show_legends": true,
+            "legends_position": null,
+            "base_map": null,
+            "map_view": null
+          },
           "queryType": "sql",
-          "layout": {"x": 0, "y": 0, "w": 64, "h": 18, "i": 1},
-          "config": {"show_legends": true},
           "queries": [
             {
-              "query": "SELECT histogram(_timestamp) AS x, COUNT(*) AS y, \"http.route\" AS series FROM \"default\" WHERE \"garden.agent.flag\" = true GROUP BY x, \"http.route\" ORDER BY x ASC",
+              "query": "SELECT histogram(_timestamp) AS x, COUNT(*) AS y, \"http_route\" AS series FROM (SELECT DISTINCT trace_id, span_id, _timestamp, operation_name, garden_agent_flag, http_route, http_request_method, http_response_status_code, garden_person_id, duration, gen_ai_request_model, gen_ai_operation_name, garden_model_usage_total_tokens FROM \"garden_eval_traces\") WHERE \"garden_agent_flag\" = 'true' AND http_route IS NOT NULL GROUP BY x, \"http_route\" ORDER BY x ASC",
+              "vrlFunctionQuery": null,
               "customQuery": true,
-              "fields": {"stream": "default", "stream_type": "traces", "x": [], "y": [], "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}},
-              "config": {"promql_legend": "{{series}}"}
+              "fields": {
+                "stream": "garden_eval_traces",
+                "stream_type": "traces",
+                "x": [
+                  {
+                    "label": "x",
+                    "alias": "x",
+                    "column": "x",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": false
+                  }
+                ],
+                "y": [
+                  {
+                    "label": "y",
+                    "alias": "y",
+                    "column": "y",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  }
+                ],
+                "z": [],
+                "breakdown": [
+                  {
+                    "label": "series",
+                    "alias": "series",
+                    "column": "series",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  }
+                ],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": "{{series}}"
+              }
             }
-          ]
+          ],
+          "layout": {
+            "x": 0,
+            "y": 0,
+            "w": 128,
+            "h": 18,
+            "i": 1
+          }
         },
         {
           "id": "portal-agent-summary",
           "type": "metric",
           "title": "Agent API requests",
           "description": "Total API requests made with an Agent login in the selected time range.",
+          "config": {
+            "show_legends": false,
+            "legends_position": null,
+            "base_map": null,
+            "map_view": null
+          },
           "queryType": "sql",
-          "layout": {"x": 64, "y": 0, "w": 32, "h": 18, "i": 2},
-          "config": {"show_legends": false},
           "queries": [
             {
-              "query": "SELECT COUNT(*) AS y FROM \"default\" WHERE \"garden.agent.flag\" = true",
+              "query": "SELECT COUNT(*) AS y FROM (SELECT DISTINCT trace_id, span_id, _timestamp, operation_name, garden_agent_flag, http_route, http_request_method, http_response_status_code, garden_person_id, duration, gen_ai_request_model, gen_ai_operation_name, garden_model_usage_total_tokens FROM \"garden_eval_traces\") WHERE \"garden_agent_flag\" = 'true' AND http_route IS NOT NULL",
+              "vrlFunctionQuery": null,
               "customQuery": true,
-              "fields": {"stream": "default", "stream_type": "traces", "x": [], "y": [], "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}},
-              "config": {"promql_legend": "Requests"}
+              "fields": {
+                "stream": "garden_eval_traces",
+                "stream_type": "traces",
+                "x": [],
+                "y": [
+                  {
+                    "label": "y",
+                    "alias": "y",
+                    "column": "y",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  }
+                ],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": "Requests"
+              }
             }
-          ]
+          ],
+          "layout": {
+            "x": 128,
+            "y": 0,
+            "w": 64,
+            "h": 18,
+            "i": 2
+          }
         },
         {
           "id": "portal-tool-routes",
           "type": "bar",
           "title": "Agent operations by route",
           "description": "Counts and response status for Garden API operations called by agents.",
+          "config": {
+            "show_legends": true,
+            "legends_position": null,
+            "base_map": null,
+            "map_view": null
+          },
           "queryType": "sql",
-          "layout": {"x": 0, "y": 18, "w": 48, "h": 18, "i": 3},
-          "config": {"show_legends": true},
           "queries": [
             {
-              "query": "SELECT \"http.route\" AS x, COUNT(*) AS y, CAST(\"http.response.status_code\" AS VARCHAR) AS series FROM \"default\" WHERE \"garden.agent.flag\" = true GROUP BY \"http.route\", \"http.response.status_code\" ORDER BY x ASC",
+              "query": "SELECT \"http_route\" AS x, COUNT(*) AS y, CAST(\"http_response_status_code\" AS VARCHAR) AS series FROM (SELECT DISTINCT trace_id, span_id, _timestamp, operation_name, garden_agent_flag, http_route, http_request_method, http_response_status_code, garden_person_id, duration, gen_ai_request_model, gen_ai_operation_name, garden_model_usage_total_tokens FROM \"garden_eval_traces\") WHERE \"garden_agent_flag\" = 'true' AND http_route IS NOT NULL GROUP BY \"http_route\", \"http_response_status_code\" ORDER BY x ASC",
+              "vrlFunctionQuery": null,
               "customQuery": true,
-              "fields": {"stream": "default", "stream_type": "traces", "x": [], "y": [], "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}},
-              "config": {"promql_legend": "{{series}}"}
+              "fields": {
+                "stream": "garden_eval_traces",
+                "stream_type": "traces",
+                "x": [
+                  {
+                    "label": "x",
+                    "alias": "x",
+                    "column": "x",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  }
+                ],
+                "y": [
+                  {
+                    "label": "y",
+                    "alias": "y",
+                    "column": "y",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  }
+                ],
+                "z": [],
+                "breakdown": [
+                  {
+                    "label": "series",
+                    "alias": "series",
+                    "column": "series",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  }
+                ],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": "{{series}}"
+              }
             }
-          ]
+          ],
+          "layout": {
+            "x": 0,
+            "y": 18,
+            "w": 96,
+            "h": 18,
+            "i": 3
+          }
         },
         {
           "id": "portal-model-usage",
           "type": "bar",
           "title": "Model calls and tokens",
           "description": "Garden model gateway calls and reported token usage by model.",
+          "config": {
+            "show_legends": true,
+            "legends_position": null,
+            "base_map": null,
+            "map_view": null
+          },
           "queryType": "sql",
-          "layout": {"x": 48, "y": 18, "w": 48, "h": 18, "i": 4},
-          "config": {"show_legends": true},
           "queries": [
             {
-              "query": "SELECT \"gen_ai.request.model\" AS x, COUNT(*) AS y, 'Model calls' AS series FROM \"default\" WHERE \"gen_ai.operation.name\" = 'chat' GROUP BY \"gen_ai.request.model\" UNION ALL SELECT \"gen_ai.request.model\" AS x, SUM(\"garden.model.usage.total_tokens\") AS y, 'Tokens' AS series FROM \"default\" WHERE \"gen_ai.operation.name\" = 'chat' GROUP BY \"gen_ai.request.model\" ORDER BY x ASC, series ASC",
+              "query": "SELECT \"gen_ai_request_model\" AS x, COUNT(*) AS y, 'Model calls' AS series FROM (SELECT DISTINCT trace_id, span_id, _timestamp, operation_name, garden_agent_flag, http_route, http_request_method, http_response_status_code, garden_person_id, duration, gen_ai_request_model, gen_ai_operation_name, garden_model_usage_total_tokens FROM \"garden_eval_traces\") WHERE \"gen_ai_operation_name\" = 'chat' AND garden_model_usage_total_tokens IS NOT NULL GROUP BY \"gen_ai_request_model\" UNION ALL SELECT \"gen_ai_request_model\" AS x, SUM(TRY_CAST(\"garden_model_usage_total_tokens\" AS BIGINT)) AS y, 'Tokens' AS series FROM (SELECT DISTINCT trace_id, span_id, _timestamp, operation_name, garden_agent_flag, http_route, http_request_method, http_response_status_code, garden_person_id, duration, gen_ai_request_model, gen_ai_operation_name, garden_model_usage_total_tokens FROM \"garden_eval_traces\") WHERE \"gen_ai_operation_name\" = 'chat' AND garden_model_usage_total_tokens IS NOT NULL GROUP BY \"gen_ai_request_model\" ORDER BY x ASC, series ASC",
+              "vrlFunctionQuery": null,
               "customQuery": true,
-              "fields": {"stream": "default", "stream_type": "traces", "x": [], "y": [], "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}},
-              "config": {"promql_legend": "{{series}}"}
+              "fields": {
+                "stream": "garden_eval_traces",
+                "stream_type": "traces",
+                "x": [
+                  {
+                    "label": "x",
+                    "alias": "x",
+                    "column": "x",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  }
+                ],
+                "y": [
+                  {
+                    "label": "y",
+                    "alias": "y",
+                    "column": "y",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  }
+                ],
+                "z": [],
+                "breakdown": [
+                  {
+                    "label": "series",
+                    "alias": "series",
+                    "column": "series",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  }
+                ],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": "{{series}}"
+              }
             }
-          ]
+          ],
+          "layout": {
+            "x": 96,
+            "y": 18,
+            "w": 96,
+            "h": 18,
+            "i": 4
+          }
         },
         {
           "id": "portal-agent-outcomes",
           "type": "table",
           "title": "Recent agent operations",
           "description": "Recent agent API operations, response codes, and trace identifiers.",
+          "config": {
+            "show_legends": false,
+            "legends_position": null,
+            "base_map": null,
+            "map_view": null,
+            "table_pagination": true,
+            "table_pagination_rows_per_page": 25
+          },
           "queryType": "sql",
-          "layout": {"x": 0, "y": 36, "w": 96, "h": 18, "i": 5},
-          "config": {"show_legends": false, "table_pagination": true, "table_pagination_rows_per_page": 25},
           "queries": [
             {
-              "query": "SELECT _timestamp, \"http.request.method\", \"http.route\", \"http.response.status_code\", \"garden.person.id\", trace_id, duration FROM \"default\" WHERE \"garden.agent.flag\" = true ORDER BY _timestamp DESC LIMIT 200",
+              "query": "SELECT _timestamp, \"http_request_method\", \"http_route\", \"http_response_status_code\", \"garden_person_id\", trace_id, ROUND(duration / 1000.0, 3) AS duration_ms FROM (SELECT DISTINCT trace_id, span_id, _timestamp, operation_name, garden_agent_flag, http_route, http_request_method, http_response_status_code, garden_person_id, duration, gen_ai_request_model, gen_ai_operation_name, garden_model_usage_total_tokens FROM \"garden_eval_traces\") WHERE \"garden_agent_flag\" = 'true' AND http_route IS NOT NULL ORDER BY _timestamp DESC LIMIT 200",
+              "vrlFunctionQuery": null,
               "customQuery": true,
-              "fields": {"stream": "default", "stream_type": "traces", "x": [], "y": [], "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}},
-              "config": {"promql_legend": ""}
+              "fields": {
+                "stream": "garden_eval_traces",
+                "stream_type": "traces",
+                "x": [],
+                "y": [
+                  {
+                    "label": "_timestamp",
+                    "alias": "_timestamp",
+                    "column": "_timestamp",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": false
+                  },
+                  {
+                    "label": "http_request_method",
+                    "alias": "http_request_method",
+                    "column": "http_request_method",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "http_route",
+                    "alias": "http_route",
+                    "column": "http_route",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "http_response_status_code",
+                    "alias": "http_response_status_code",
+                    "column": "http_response_status_code",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "garden_person_id",
+                    "alias": "garden_person_id",
+                    "column": "garden_person_id",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "trace_id",
+                    "alias": "trace_id",
+                    "column": "trace_id",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "Duration (ms)",
+                    "alias": "duration_ms",
+                    "column": "duration_ms",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  }
+                ],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": ""
+              }
             }
-          ]
+          ],
+          "layout": {
+            "x": 0,
+            "y": 36,
+            "w": 192,
+            "h": 18,
+            "i": 5
+          }
         }
       ]
     }
-  ]
+  ],
+  "variables": {
+    "list": [],
+    "showDynamicFilters": true
+  },
+  "defaultDatetimeDuration": {
+    "type": "relative",
+    "relativeTimePeriod": "7d"
+  }
 }

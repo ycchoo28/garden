@@ -177,6 +177,37 @@ def _content_parts(content: object) -> list[dict[str, Any]]:
     return parts
 
 
+def _is_conversation_title_request(body: dict[str, Any]) -> bool:
+    """Recognize the bundled DSH title request for telemetry classification only."""
+    messages = body.get("messages")
+    if body.get("tools") or not isinstance(messages, list):
+        return False
+    messages = cast("list[object]", messages)
+    if len(messages) != 2:
+        return False
+    system, user = messages
+    if not isinstance(system, dict) or not isinstance(user, dict):
+        return False
+    system = cast("dict[str, Any]", system)
+    user = cast("dict[str, Any]", user)
+    instruction = "\n".join(
+        str(part.get("content", "")) for part in _content_parts(system.get("content"))
+    )
+    content = "\n".join(
+        str(part.get("content", "")) for part in _content_parts(user.get("content"))
+    )
+    prefix = "Generate the session title from this JSON array of human messages:\n"
+    return (
+        system.get("role") in {"system", "developer"}
+        and instruction.startswith(
+            "Create a concise title for an AI coding-assistant session "
+            "from the supplied human messages."
+        )
+        and user.get("role") == "user"
+        and content.startswith((prefix, "Update the session title from this JSON object:\n"))
+    )
+
+
 def _trace_messages(messages: object) -> list[dict[str, Any]] | None:
     if not isinstance(messages, list):
         return None
@@ -370,17 +401,26 @@ class ModelService:
                 GARDEN_CONVERSATION_TITLE_SIDE_CALL,
             }:
                 side_call_type = GARDEN_CONVERSATION_TITLE_SIDE_CALL
+        if not side_call_type and _is_conversation_title_request(body):
+            side_call_type = GARDEN_CONVERSATION_TITLE_SIDE_CALL
         if side_call_type in {
             "title",
             "title_generation",
             GARDEN_CONVERSATION_TITLE_SIDE_CALL,
         }:
             attributes[GARDEN_MODEL_SIDE_CALL_TYPE] = GARDEN_CONVERSATION_TITLE_SIDE_CALL
+            # OpenObserve groups threads by this semantic attribute. Keep the Garden
+            # conversation ID shared for correlation, but separate auxiliary title messages.
+            attributes[GEN_AI_CONVERSATION_ID] = f"{conversation_id}:title"
         elif isinstance(side_call_type, str) and side_call_type.strip():
             attributes[GARDEN_MODEL_SIDE_CALL_TYPE] = side_call_type.strip()
 
         span = trace.get_tracer("garden.model_gateway").start_span(
-            "chat", kind=SpanKind.CLIENT, attributes=attributes
+            "chat conversation_title"
+            if attributes.get(GARDEN_MODEL_SIDE_CALL_TYPE) == GARDEN_CONVERSATION_TITLE_SIDE_CALL
+            else "chat",
+            kind=SpanKind.CLIENT,
+            attributes=attributes,
         )
         return span, capture_content, messages, attributes
 

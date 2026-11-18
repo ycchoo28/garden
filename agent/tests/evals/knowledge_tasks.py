@@ -16,6 +16,7 @@ from tests.evals.tasks import ClaimDraftTask, ReferenceContext
 
 @dataclass(frozen=True)
 class KnowledgeTask(ClaimDraftTask):
+    area: str = "knowledge"
     judge_criteria: str = ""
     requires_embedding: bool = True
 

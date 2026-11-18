@@ -52,6 +52,8 @@ def api_json(base_url: str, path: str, token: str, *, side_call: str = "grader")
 
 
 class DraftClaimGrader:
+    """Checks one matching draft claim line, uploaded receipt, expected fields and audit events."""
+
     id = "draft-claim-with-one-receipt"
 
     def grade(

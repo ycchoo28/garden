@@ -1,0 +1,130 @@
+[
+  {
+    "name": "garden_eval_traces",
+    "type": "traces",
+    "fields": [
+      {
+        "name": "trace_id",
+        "type": "Utf8"
+      },
+      {
+        "name": "span_id",
+        "type": "Utf8"
+      },
+      {
+        "name": "operation_name",
+        "type": "Utf8"
+      },
+      {
+        "name": "garden_agent_flag",
+        "type": "Utf8"
+      },
+      {
+        "name": "http_route",
+        "type": "Utf8"
+      },
+      {
+        "name": "http_request_method",
+        "type": "Utf8"
+      },
+      {
+        "name": "http_response_status_code",
+        "type": "Utf8"
+      },
+      {
+        "name": "garden_person_id",
+        "type": "Utf8"
+      },
+      {
+        "name": "gen_ai_request_model",
+        "type": "Utf8"
+      },
+      {
+        "name": "gen_ai_operation_name",
+        "type": "Utf8"
+      },
+      {
+        "name": "garden_model_usage_total_tokens",
+        "type": "Utf8"
+      },
+      {
+        "name": "garden_model_side_call_type",
+        "type": "Utf8"
+      },
+      {
+        "name": "_timestamp",
+        "type": "Int64"
+      },
+      {
+        "name": "duration",
+        "type": "Int64"
+      }
+    ]
+  },
+  {
+    "name": "garden_eval_trials",
+    "type": "logs",
+    "fields": [
+      {
+        "name": "run_id",
+        "type": "Utf8"
+      },
+      {
+        "name": "task_id",
+        "type": "Utf8"
+      },
+      {
+        "name": "model",
+        "type": "Utf8"
+      },
+      {
+        "name": "graders",
+        "type": "Utf8"
+      },
+      {
+        "name": "failure_reason",
+        "type": "Utf8"
+      },
+      {
+        "name": "trace_id",
+        "type": "Utf8"
+      },
+      {
+        "name": "suite",
+        "type": "Utf8"
+      },
+      {
+        "name": "_timestamp",
+        "type": "Int64"
+      },
+      {
+        "name": "repeat",
+        "type": "Int64"
+      },
+      {
+        "name": "tool_calls",
+        "type": "Int64"
+      },
+      {
+        "name": "tokens",
+        "type": "Int64"
+      },
+      {
+        "name": "requested_repeats",
+        "type": "Int64"
+      },
+      {
+        "name": "duration_seconds",
+        "type": "Float64"
+      },
+      {
+        "name": "passed",
+        "type": "Boolean"
+      },
+      {
+        "name": "aborted",
+        "type": "Boolean"
+      }
+    ]
+  }
+]
