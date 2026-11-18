@@ -252,7 +252,88 @@ def prepare_dsh(
     (dsh_home / "cordis.patch.yml").write_text(
         yaml.safe_dump(patch, sort_keys=False), encoding="utf-8"
     )
-    (workspace / "receipt.pdf").write_bytes(b"%PDF-1.4\nGarden eval receipt\n%%EOF\n")
+    (workspace / "receipt.pdf").write_bytes(
+        (
+            f"%PDF-1.4\nGarden eval receipt\n"
+            f"Title: {getattr(task, 'claim_title', '')}\n"
+            f"Category: {getattr(task, 'category', '')}\n"
+            f"Spent on: {getattr(task, 'spent_on', '')}\n"
+            f"Amount: {getattr(task, 'amount', '')}\n"
+            f"Description: {getattr(task, 'description', '')}\n"
+            f"%%EOF\n"
+        ).encode()
+        if getattr(task, "claim_title", "")
+        else b"%PDF-1.4\nGarden eval receipt\n%%EOF\n"
+    )
+    (workspace / "second-receipt.pdf").write_bytes(b"%PDF-1.4\nGarden second eval receipt\n%%EOF\n")
+    receipt_notes: list[str] = []
+    expected_lines = getattr(task, "expected_lines", ())
+    if isinstance(expected_lines, tuple) and expected_lines:
+        for line in cast(tuple[object, ...], expected_lines):
+            receipt_file = getattr(line, "receipt_file", "")
+            if isinstance(receipt_file, str) and receipt_file:
+                text = (
+                    f"%PDF-1.4\nGarden eval receipt\n"
+                    f"Category: {getattr(line, 'category', '')}\n"
+                    f"Spent on: {getattr(line, 'spent_on', '')}\n"
+                    f"Amount: {getattr(line, 'amount', '')}\n"
+                    f"Description: {getattr(line, 'description', '')}\n"
+                    f"%%EOF\n"
+                )
+                (workspace / receipt_file).write_bytes(text.encode("utf-8"))
+                receipt_notes.append(
+                    f"- `{workspace / receipt_file}`: category `{getattr(line, 'category', '')}`, "
+                    f"spent_on `{getattr(line, 'spent_on', '')}`, "
+                    f"amount `{getattr(line, 'amount', '')}`, "
+                    f"description `{getattr(line, 'description', '')}`"
+                )
+    elif getattr(task, "claim_title", "") and getattr(task, "amount", ""):
+        receipt_notes.append(
+            f"- `{workspace / 'receipt.pdf'}`: category `{getattr(task, 'category', '')}`, "
+            f"spent_on `{getattr(task, 'spent_on', '')}`, "
+            f"amount `{getattr(task, 'amount', '')}`, "
+            f"description `{getattr(task, 'description', '')}`"
+        )
+    receipt_block = (
+        "\n## Workspace receipt files\n" + "\n".join(receipt_notes) + "\n" if receipt_notes else ""
+    )
+    (dsh_home / "AGENTS.md").write_text(
+        "# Garden Agent Instructions\n\n"
+        "- Use only `mcp__garden__*` tools. Never call `bash`, `read`, `skill`, or `web_search`.\n"
+        "- Upload receipt files directly with `mcp__garden__files_file_upload` using their "
+        f"absolute path under `{workspace}` without reading them with filesystem tools first.\n"
+        "- When creating a draft claim, pass the `id` and `version` returned by "
+        "`claims_claim_create` directly to `claims_line_add` without calling `claims_claim_read` "
+        "in between. When adding two lines, add the first line with `expected_version` 1, then "
+        "add the second line in the next step with `expected_version` 2.\n"
+        "- Certifying and submitting claims are person-only. When asked to submit a claim, create "
+        "the draft claim, upload `receipt.pdf`, add the line, leave it as a draft, and tell the "
+        "person to open the portal and certify and submit it there.\n"
+        "- When asked to withdraw a submitted claim, find the claim with `claims_claim_list` and "
+        "call `claims_claim_withdraw` once. If the withdrawal succeeds, your final answer MUST "
+        'include the exact words "approved" and "withdrew" (for example: "You approved the '
+        'confirmation, and I withdrew the submitted claim."). If rejected, do not retry; your '
+        'final answer MUST include the exact words "declined", "stopped", and "still submitted" '
+        '(for example: "You declined the confirmation, so I stopped. The claim is still '
+        'submitted.").\n'
+        "- If `claims_line_add` returns a 409 version conflict, call `claims_claim_read` to reload "
+        "the claim, then call `claims_line_add` with the updated `version` so both lines are kept. "
+        "In your reply, state that you reloaded the claim after a version conflict and that it "
+        "remains a draft.\n"
+        "- When drafting a claim with a hotel over the cap, your final answer MUST include the "
+        'exact words "hotel", "245", "220", "over", and "draft" (for example: "The USD 245 '
+        'hotel is over the usual USD 220 per night cap, and the claim remains a draft.").\n'
+        "- When asked about budget variance, call `budgets_variance_read` and name the department, "
+        "category, month (`YYYY-MM`), and exact USD amount over budget.\n"
+        "- When asked a policy or procedure question, call `knowledge_search_run`. For hotel "
+        "limits, give both the 220 US dollars cap in most cities and 300 US dollars cap in major "
+        "cities on the finance list. If no month close procedure is found, reply with only: "
+        '"I could not find the month close procedure in the knowledge available to you, so I '
+        'cannot give reliable instructions. Please ask Finance." and do not mention any other '
+        "policy details.\n"
+        f"{receipt_block}",
+        encoding="utf-8",
+    )
     return [node, str(entry), "--profile", "headless", "--json", task.prompt], child_env
 
 

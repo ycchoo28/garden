@@ -244,9 +244,9 @@ agent-e2e: up
 agent-e2e-serve: up
     cd agent && uv run python -m tests.e2e.run --serve
 
-# Start or reuse OpenObserve on 127.0.0.1:55086 and open its UI.
+# Start or reuse OpenObserve on 127.0.0.1:55086, apply the dashboards and open its UI.
 [unix]
-eval-ui: eval-up
+eval-ui: eval-dashboards
     python3 -m webbrowser -t "http://127.0.0.1:${GARDEN_EVAL_OPENOBSERVE_PORT:-55086}"
 
 # Apply the checked-in OpenObserve dashboards and alert.
@@ -297,6 +297,7 @@ agent-eval *args:
     #!/usr/bin/env bash
     set -euo pipefail
     if just eval-up; then
+        just eval-dashboards >/dev/null || echo "Warning: could not apply OpenObserve dashboards automatically." >&2
         IFS='=' read -r _ GARDEN_OPENOBSERVE_ROOT_PASSWORD < var/openobserve.env
         auth="$(printf 'root@example.com:%s' "$GARDEN_OPENOBSERVE_ROOT_PASSWORD" | base64 | tr -d '\n')"
         endpoint="http://127.0.0.1:${GARDEN_EVAL_OPENOBSERVE_PORT:-55086}/api/default/v1"

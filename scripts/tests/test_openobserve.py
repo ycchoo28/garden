@@ -26,13 +26,38 @@ def test_checked_in_definitions_cover_eval_and_portal_workflows() -> None:
     )
     by_id = {str(panel["id"]): panel for panel in panels}
 
-    assert {"run", "task", "model"} == {
-        str(variable["name"])
+    variables_by_name = {
+        str(variable["name"]): variable
         for variable in cast(
             list[dict[str, object]],
             cast(dict[str, object], evals["variables"])["list"],
         )
     }
+    assert {"run", "task", "model"} == set(variables_by_name)
+    for var_name, field_name in [("task", "task_id"), ("model", "model")]:
+        var = variables_by_name[var_name]
+        assert var["type"] == "query_values"
+        assert var["multiSelect"] is True
+        assert var["selectAllValueForMultiSelect"] == "all"
+        query_data = cast(dict[str, object], var["query_data"])
+        assert query_data["stream"] == "garden_eval_trials"
+        assert query_data["field"] == field_name
+    for panel_id in (
+        "eval-task-model-grid",
+        "eval-grader-verdicts",
+        "eval-trial-drilldown",
+        "eval-artifacts",
+    ):
+        drilldowns = cast(
+            list[dict[str, object]],
+            cast(dict[str, object], by_id[panel_id]["config"])["drilldown"],
+        )
+        catalog_drill = next(item for item in drilldowns if item["name"] == "Open task in catalog")
+        assert catalog_drill["type"] == "byDashboard"
+        drill_data = cast(dict[str, object], catalog_drill["data"])
+        assert drill_data["dashboard"] == "Garden agent evals"
+        assert drill_data["tab"] == "Task catalog"
+        assert drill_data["variables"] == [{"name": "task", "value": '${row.field["task_id"]}'}]
     assert "heatmap_hide_below" in cast(dict[str, object], by_id["eval-pass-rate"]["config"])
     assert cast(dict[str, object], by_id["eval-pass-rate"]["config"])["heatmap_hide_below"] == 0
     assert "ORDER BY model ASC, task_id ASC" in str(
@@ -200,9 +225,14 @@ def test_catalog_tab_displays_questions_without_a_telemetry_query() -> None:
         ]
     )
     panel = tab["panels"][0]
+    assert panel["type"] == "html"
     assert "Draft a claim." in panel["markdownContent"]
     assert "Checks draft state." in panel["markdownContent"]
     assert "<script>" not in panel["markdownContent"]
+    assert "Draft a claim." in panel["htmlContent"]
+    assert "<script>" not in panel["htmlContent"]
+    assert 'data-selected="|{{task:pipe}}|"' in panel["htmlContent"]
+    assert 'data-task="example"' in panel["htmlContent"]
     assert panel["queries"] == []
 
 

@@ -37,7 +37,8 @@ The terminal output and JSON summary remain available if OpenObserve cannot acce
 ## OpenObserve comparison grid
 
 The checked-in [Evals dashboard](../observability/openobserve/dashboards/evals.json) reads trial records from the `garden_eval_trials` log stream.
-Set its Run ID, Task and Model filters to a specific value, or use `*` to include all values.
+Choose one or more tasks or models in the `Task` and `Model` multi-select dropdowns (or `All` for all values), and set `Run ID` to a specific run or `_o2_all_` for all runs.
+Clicking a row in the table panels (`Task by model grid`, `Grader verdicts`, `Trials and traces` or `Generated artifacts`) offers `Open task in catalog`, which switches to the `Task catalog` tab filtered to that task only.
 The comparison panels exclude the `reference` model so scripted checks do not affect model scores.
 
 | Dashboard panel | View | What it shows |
@@ -57,7 +58,7 @@ The Task by model grid exposes these columns:
 | --- | --- | --- | --- | --- | --- |
 | Task id | Model id | Completed and requested counts | Passed trial count | Passed divided by completed | `PASS` only when all requested repeats passed and none were aborted |
 
-Start the local viewer with `just eval-ui` and apply the checked-in dashboards with `just eval-dashboards`.
+Both `just agent-eval` and `just eval-ui` start the local viewer and apply the checked-in stream schemas, dashboards and generated task catalog automatically; run `just eval-dashboards` to refresh them at any time without running trials.
 OpenObserve listens on `127.0.0.1:55086` by default, and `GARDEN_EVAL_OPENOBSERVE_PORT` selects another loopback port.
 The local root password is stored in the ignored `var/openobserve.env` file.
 

@@ -10,15 +10,19 @@ import shutil
 import statistics
 import sys
 import tempfile
+import threading
 import time
 import uuid
 from collections.abc import Callable
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import cast
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
+from urllib.request import Request, urlopen
 
+from garden.engine.client import UploadFile, encode_multipart
 from garden.trace_contract import GEN_AI_CAPTURE_CONTENT_ENV
 from tests.evals import runner
 from tests.evals.artifacts import (
@@ -27,11 +31,11 @@ from tests.evals.artifacts import (
     snapshot_workspace,
 )
 from tests.evals.embedding import ensure_embedding_server
-from tests.evals.grading import GraderResult
+from tests.evals.grading import GraderResult, api_json
 from tests.evals.model_harness import installed_dsh_entry, prepare_dsh, run_dsh
 from tests.evals.task_types import EvalTask
 from tests.evals.telemetry import EvalTelemetry
-from tests.shared.stack import Services
+from tests.shared.stack import Services, psql
 from tests.shared.transcript import StepFailed
 
 DEFAULT_BUDGET_TOOL_CALLS = 40
@@ -488,6 +492,307 @@ def _redact_log(path: Path, upstream_key: str) -> None:
     path.write_text(content.replace(upstream_key, "[REDACTED]"), encoding="utf-8")
 
 
+def _upload_receipt(api_url: str, session: str, path: Path) -> str:
+    body, content_type = encode_multipart(
+        [
+            UploadFile(
+                name="file",
+                data=path.read_bytes(),
+                filename=path.name,
+                content_type="application/pdf",
+            )
+        ]
+    )
+    request = Request(
+        f"{api_url.rstrip('/')}/api/files",
+        data=body,
+        method="POST",
+        headers={
+            "Content-Type": content_type,
+            "Accept": "application/json",
+            "Cookie": f"garden_session={session}",
+        },
+    )
+    try:
+        with urlopen(request, timeout=30) as response:
+            payload = _object(cast(object, json.loads(response.read())))
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as error:
+        raise StepFailed(f"Could not upload trial receipt {path.name}: {error}.") from error
+    uploaded = _object(payload.get("uploaded")) if payload is not None else None
+    target = uploaded or payload
+    sha256 = target.get("sha256") if target is not None else None
+    if not isinstance(sha256, str):
+        raise StepFailed(f"The trial file upload for {path.name} returned no SHA-256.")
+    return sha256
+
+
+def _portal_json(
+    api_url: str,
+    path: str,
+    *,
+    method: str,
+    session: str,
+    body: dict[str, object] | None = None,
+    expected_status: int,
+) -> dict[str, object]:
+    status, response = runner._request_json(  # pyright: ignore[reportPrivateUsage]
+        f"{api_url.rstrip('/')}{path}",
+        method=method,
+        body=body,
+        cookie=f"garden_session={session}",
+    )
+    result = _object(response)
+    if status != expected_status or result is None:
+        raise StepFailed(f"Portal call {method} {path} returned HTTP {status}.")
+    return result
+
+
+def _claim_id_and_version(payload: dict[str, object]) -> tuple[str, int]:
+    claim = _object(payload.get("claim"))
+    claim_id = claim.get("id") if claim is not None else None
+    version = claim.get("version") if claim is not None else None
+    if not isinstance(claim_id, str) or not isinstance(version, int):
+        raise StepFailed("The portal claim response did not include an id and version.")
+    return claim_id, version
+
+
+def _setup_variance_fixture(
+    api_url: str, database: str, acting_token: str, workspace: Path
+) -> None:
+    psql(
+        database,
+        "delete from budgets.month_close where year_month = '2026-10'; "
+        "delete from budgets.line where year_month = '2026-10'; "
+        "delete from claims.line "
+        "where spent_on >= date '2026-10-01' and spent_on < date '2026-11-01'",
+    )
+    departments_raw = api_json(
+        api_url, "/api/users/departments", acting_token, side_call="trial_fixture"
+    )
+    if not isinstance(departments_raw, list):
+        raise StepFailed("The departments response was not a JSON list.")
+    design = next(
+        (
+            dept
+            for item in cast(list[object], departments_raw)
+            if (dept := _object(item)) is not None and dept.get("code") == "design"
+        ),
+        None,
+    )
+    department_id = design.get("id") if design is not None else None
+    if not isinstance(department_id, str):
+        raise StepFailed("The Design department id was not found.")
+    lena_session = runner._create_person_session(  # pyright: ignore[reportPrivateUsage]
+        database, "lena.fischer@fernhill.example"
+    )
+    _portal_json(
+        api_url,
+        "/api/budgets/lines",
+        method="POST",
+        session=lena_session,
+        body={
+            "department_id": department_id,
+            "year_month": "2026-10",
+            "category": "travel",
+            "amount": "5.00",
+        },
+        expected_status=201,
+    )
+    marcus_session = runner._create_person_session(  # pyright: ignore[reportPrivateUsage]
+        database, "marcus.lee@fernhill.example"
+    )
+    priya_session = runner._create_person_session(  # pyright: ignore[reportPrivateUsage]
+        database, "priya.nair@fernhill.example"
+    )
+    receipt_sha256 = _upload_receipt(api_url, marcus_session, workspace / "receipt.pdf")
+    created = _portal_json(
+        api_url,
+        "/api/claims",
+        method="POST",
+        session=marcus_session,
+        body={"title": "October travel spend"},
+        expected_status=201,
+    )
+    claim_id, version = _claim_id_and_version(created)
+    added = _portal_json(
+        api_url,
+        f"/api/claims/{claim_id}/lines",
+        method="POST",
+        session=marcus_session,
+        body={
+            "expected_version": version,
+            "category": "travel",
+            "spent_on": "2026-10-15",
+            "amount": "11.00",
+            "description": "October travel approved-spend fixture",
+            "receipt_sha256": receipt_sha256,
+        },
+        expected_status=201,
+    )
+    _, version = _claim_id_and_version(added)
+    submitted = _portal_json(
+        api_url,
+        f"/api/claims/{claim_id}/submit",
+        method="POST",
+        session=marcus_session,
+        body={"expected_version": version},
+        expected_status=200,
+    )
+    _, version = _claim_id_and_version(submitted)
+    _portal_json(
+        api_url,
+        f"/api/claims/{claim_id}/decision",
+        method="POST",
+        session=priya_session,
+        body={"expected_version": version, "decision": "approve", "reason": None},
+        expected_status=200,
+    )
+
+
+def _setup_submitted_claim_fixture(
+    task: EvalTask, api_url: str, database: str, workspace: Path
+) -> None:
+    session = runner._create_person_session(  # pyright: ignore[reportPrivateUsage]
+        database, task.asking_person
+    )
+    receipt_sha256 = _upload_receipt(api_url, session, workspace / "receipt.pdf")
+    created = _portal_json(
+        api_url,
+        "/api/claims",
+        method="POST",
+        session=session,
+        body={"title": getattr(task, "claim_title", "")},
+        expected_status=201,
+    )
+    claim_id, version = _claim_id_and_version(created)
+    spent_on: object = getattr(task, "spent_on", None)
+    spent_on_iso = spent_on.isoformat() if isinstance(spent_on, date) else str(spent_on)
+    added = _portal_json(
+        api_url,
+        f"/api/claims/{claim_id}/lines",
+        method="POST",
+        session=session,
+        body={
+            "expected_version": version,
+            "category": getattr(task, "category", "meals"),
+            "spent_on": spent_on_iso,
+            "amount": getattr(task, "amount", "42.30"),
+            "description": getattr(task, "description", ""),
+            "receipt_sha256": receipt_sha256,
+        },
+        expected_status=201,
+    )
+    _, version = _claim_id_and_version(added)
+    _portal_json(
+        api_url,
+        f"/api/claims/{claim_id}/submit",
+        method="POST",
+        session=session,
+        body={"expected_version": version},
+        expected_status=200,
+    )
+
+
+def _start_trial_companion(
+    task: EvalTask,
+    api_url: str,
+    database: str,
+    workspace: Path,
+    stop_event: threading.Event,
+) -> threading.Thread | None:
+    if task.confirmation in {"approve", "deny"}:
+        session = runner._create_person_session(  # pyright: ignore[reportPrivateUsage]
+            database, task.asking_person
+        )
+        decision = "approve" if task.confirmation == "approve" else "reject"
+
+        def decide_pending() -> None:
+            while not stop_event.is_set():
+                try:
+                    pending_id = psql(
+                        database,
+                        "select id from agent.confirmation "
+                        "where decided_at is null order by created_at desc limit 1",
+                    ).strip()
+                    if pending_id:
+                        _portal_json(
+                            api_url,
+                            f"/api/agent/my-confirmations/{pending_id}/decision",
+                            method="POST",
+                            session=session,
+                            body={"decision": decision},
+                            expected_status=200,
+                        )
+                        return
+                except Exception:
+                    pass
+                stop_event.wait(0.05)
+
+        thread = threading.Thread(target=decide_pending, daemon=True)
+        thread.start()
+        return thread
+
+    if task.id == "recover-claim-version-conflict":
+        session = runner._create_person_session(  # pyright: ignore[reportPrivateUsage]
+            database, task.asking_person
+        )
+        receipt_sha256 = _upload_receipt(api_url, session, workspace / "receipt.pdf")
+        expected_lines = getattr(task, "expected_lines", ())
+        human_line: object | None = (
+            cast(tuple[object, ...], expected_lines)[0]
+            if isinstance(expected_lines, tuple) and expected_lines
+            else None
+        )
+        if human_line is None:
+            return None
+        human_spent_on: object = getattr(human_line, "spent_on", None)
+        human_spent_on_iso = (
+            human_spent_on.isoformat() if isinstance(human_spent_on, date) else str(human_spent_on)
+        )
+        title = getattr(task, "claim_title", "Client visit").replace("'", "''")
+
+        def bump_version() -> None:
+            while not stop_event.is_set():
+                try:
+                    row = psql(
+                        database,
+                        "select id || '|' || version from claims.claim "
+                        f"where title = '{title}' order by created_at desc limit 1",
+                    ).strip()
+                    if row and "|" in row:
+                        claim_id, version_text = row.split("|", 1)
+                        if int(version_text) == 1:
+                            _portal_json(
+                                api_url,
+                                f"/api/claims/{claim_id}/lines",
+                                method="POST",
+                                session=session,
+                                body={
+                                    "expected_version": 1,
+                                    "category": getattr(human_line, "category", "meals"),
+                                    "spent_on": human_spent_on_iso,
+                                    "amount": getattr(human_line, "amount", "28.00"),
+                                    "description": getattr(
+                                        human_line,
+                                        "description",
+                                        "Client lunch added in the portal",
+                                    ),
+                                    "receipt_sha256": receipt_sha256,
+                                },
+                                expected_status=201,
+                            )
+                            return
+                except Exception:
+                    pass
+                stop_event.wait(0.03)
+
+        thread = threading.Thread(target=bump_version, daemon=True)
+        thread.start()
+        return thread
+
+    return None
+
+
 def run_model_trial(
     *,
     run_id: str,
@@ -548,37 +853,65 @@ def run_model_trial(
                 trial_id=trial_id,
             )
             workspace = temp / "workspace"
+            acting_token = logins["acting"]
+            if "acting_subject" in logins and logins["acting_subject"] != task.asking_person:
+                acting_token = runner._create_agent_login(  # pyright: ignore[reportPrivateUsage]
+                    api_url,
+                    database,
+                    task.asking_person,
+                    f"garden-eval-{task.id}",
+                )
             command, dsh_env = prepare_dsh(
                 task,
                 portal_url=api_url,
                 model=model,
-                acting_token=logins["acting"],
+                acting_token=acting_token,
                 home=temp / "home",
                 workspace=workspace,
                 environ=environ,
                 traceparent=EvalTelemetry.traceparent(),
             )
+            if "acting_subject" in logins and task.id == "which-budget-line-is-over":
+                _setup_variance_fixture(api_url, database, acting_token, workspace)
             before_workspace = snapshot_workspace(workspace)
-            before_claims = snapshot_claims(api_url, logins["acting"])
-            result = run_dsh(
-                command,
-                cwd=workspace,
-                env=dsh_env,
-                budget_tool_calls=(
-                    task.budget_tool_calls
-                    if task.budget_tool_calls is not None
-                    else DEFAULT_BUDGET_TOOL_CALLS
-                ),
-                budget_seconds=(
-                    task.budget_seconds
-                    if task.budget_seconds is not None
-                    else DEFAULT_BUDGET_SECONDS
-                ),
-                budget_tokens=(
-                    task.budget_tokens if task.budget_tokens is not None else DEFAULT_BUDGET_TOKENS
-                ),
-                upstream_key=upstream_key,
+            before_claims = snapshot_claims(api_url, acting_token)
+            if "acting_subject" in logins and task.id in {
+                "withdraw-claim-approved",
+                "withdraw-claim-denied",
+            }:
+                _setup_submitted_claim_fixture(task, api_url, database, workspace)
+            stop_companion = threading.Event()
+            companion = (
+                _start_trial_companion(task, api_url, database, workspace, stop_companion)
+                if "acting_subject" in logins
+                else None
             )
+            try:
+                result = run_dsh(
+                    command,
+                    cwd=workspace,
+                    env=dsh_env,
+                    budget_tool_calls=(
+                        task.budget_tool_calls
+                        if task.budget_tool_calls is not None
+                        else DEFAULT_BUDGET_TOOL_CALLS
+                    ),
+                    budget_seconds=(
+                        task.budget_seconds
+                        if task.budget_seconds is not None
+                        else DEFAULT_BUDGET_SECONDS
+                    ),
+                    budget_tokens=(
+                        task.budget_tokens
+                        if task.budget_tokens is not None
+                        else DEFAULT_BUDGET_TOKENS
+                    ),
+                    upstream_key=upstream_key,
+                )
+            finally:
+                stop_companion.set()
+                if companion is not None:
+                    companion.join(timeout=2)
             answer = result.final_answer
             exit_code = result.exit_code
             tool_calls = result.tool_calls
@@ -590,14 +923,14 @@ def run_model_trial(
                     log.write("dsh stderr:\n")
                     log.write(result.stderr)
             try:
-                gateway_tokens = runner.gateway_usage_total(api_url, logins["acting"])
+                gateway_tokens = runner.gateway_usage_total(api_url, acting_token)
             except Exception as failure:
                 gateway_usage_error = str(failure)
             artifacts = collect_trial_artifacts(
                 workspace=workspace,
                 before_workspace=before_workspace,
                 api_url=api_url,
-                token=logins["acting"],
+                token=acting_token,
                 before_claims=before_claims,
             )
             graders = runner.grade_task(
@@ -743,6 +1076,7 @@ def run_real_model_eval(
             embedder = selected_embedder.embedder
             safe_env["GARDEN_EMBEDDING_URL"] = selected_embedder.url
         logins = runner.ensure_template(safe_env, output, template_task, embedder)
+        logins["acting_subject"] = template_task.asking_person
         return run_model_trials(
             tasks,
             models,

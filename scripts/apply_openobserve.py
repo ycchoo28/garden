@@ -116,49 +116,114 @@ def ensure_stream_schemas(client: OpenObserveClient) -> None:
 
 
 def task_catalog_tab(tasks: Sequence[dict[str, object]]) -> dict[str, object]:
-    """Render source-controlled questions without depending on a telemetry time range."""
-    panels: list[dict[str, object]] = []
-    for index, task in enumerate(tasks):
+    """Render source-controlled questions filtered by the selected Task variable."""
+    markdown_blocks: list[str] = []
+    html_cards: list[str] = []
+    style_rules = [
+        ".task-catalog { font-family: sans-serif; line-height: 1.5; padding: 8px; }",
+        ".task-catalog-filter { margin: 0 0 12px 0; color: #57606a; font-size: 13px; }",
+        (
+            ".task-catalog-entry { display: none; border: 1px solid #d0d7de; "
+            "border-radius: 6px; padding: 16px; margin: 0 0 16px 0; }"
+        ),
+        ".task-catalog-entry h3 { margin: 0 0 8px 0; font-size: 16px; }",
+        ".task-catalog-entry h4 { margin: 12px 0 6px 0; font-size: 14px; }",
+        (
+            ".task-catalog-entry blockquote { margin: 8px 0; padding: 8px 12px; "
+            "border-left: 3px solid #d0d7de; background: rgba(175, 184, 193, 0.12); }"
+        ),
+        '.task-catalog[data-selected*="_o2_all_"] .task-catalog-entry { display: block; }',
+        '.task-catalog[data-selected="||"] .task-catalog-entry { display: block; }',
+    ]
+    for task in tasks:
+        task_id = html.escape(str(task["id"]), quote=True)
         graders = cast(list[dict[str, object]], task["graders"])
         checks = "\n".join(
             f"- **{html.escape(str(grader['id']))}**: "
             f"{html.escape(str(grader['description']).strip())}"
             for grader in graders
         )
+        html_checks = "".join(
+            f"<li><strong>{html.escape(str(grader['id']))}</strong>: "
+            f"{html.escape(str(grader['description']).strip())}</li>"
+            for grader in graders
+        )
         criteria = task.get("judge_criteria")
+        html_criteria = ""
         if criteria:
             checks += "\n\n**Judge criteria:** " + html.escape(str(criteria))
+            html_criteria = f"<p><strong>Judge criteria:</strong> {html.escape(str(criteria))}</p>"
         prompt = "\n".join("> " + html.escape(line) for line in str(task["prompt"]).splitlines())
-        budgets = ", ".join(
-            f"{label}: {task[key] if task[key] is not None else 'runner default'}"
-            for key, label in [
-                ("budget_tool_calls", "tool calls"),
-                ("budget_seconds", "seconds"),
-                ("budget_tokens", "tokens"),
-            ]
+        html_prompt = "<br>".join(html.escape(line) for line in str(task["prompt"]).splitlines())
+        budgets = html.escape(
+            ", ".join(
+                f"{label}: {task[key] if task[key] is not None else 'runner default'}"
+                for key, label in [
+                    ("budget_tool_calls", "tool calls"),
+                    ("budget_seconds", "seconds"),
+                    ("budget_tokens", "tokens"),
+                ]
+            )
         )
-        content = (
-            f"**Suite:** {task['suite']} | **Area:** {task['area']} | "
-            f"**Confirmation:** {task['confirmation']} | "
-            f"**Embedding required:** {'yes' if task.get('requires_embedding') else 'no'}\n\n"
+        suite = html.escape(str(task["suite"]))
+        area = html.escape(str(task["area"]))
+        confirmation = html.escape(str(task["confirmation"]))
+        embedding = "yes" if task.get("requires_embedding") else "no"
+        markdown_blocks.append(
+            f"## {task_id}\n\n"
+            f"**Suite:** {suite} | **Area:** {area} | "
+            f"**Confirmation:** {confirmation} | "
+            f"**Embedding required:** {embedding}\n\n"
             f"### Question\n\n{prompt}\n\n### Automated checks\n\n{checks}\n\n"
             f"**Budgets:** {budgets}.\n\n"
-            "Select this task ID in the Evals tab to see its runs and traces."
+            "Select this task ID in the Task dropdown or click a row in the Evals tab "
+            "to filter to this task."
         )
-        panels.append(
-            {
-                "id": f"task-catalog-{task['id']}",
-                "type": "markdown",
-                "title": str(task["id"]),
-                "description": "Registered eval task definition.",
-                "markdownContent": content,
-                "queries": [],
-                "queryType": "sql",
-                "config": {"show_legends": False},
-                "layout": {"x": 0, "y": index * 28, "w": 192, "h": 28, "i": index + 1},
-            }
+        style_rules.append(
+            f'.task-catalog[data-selected*="|{task_id}|"] '
+            f'.task-catalog-entry[data-task="{task_id}"] {{ display: block; }}'
         )
-    return {"tabId": "task-catalog", "name": "Task catalog", "panels": panels}
+        html_cards.append(
+            f'<section class="task-catalog-entry" data-task="{task_id}">'
+            f"<h3>{task_id}</h3>"
+            f"<p><strong>Suite:</strong> {suite} | <strong>Area:</strong> {area} | "
+            f"<strong>Confirmation:</strong> {confirmation} | "
+            f"<strong>Embedding required:</strong> {embedding}</p>"
+            f"<h4>Question</h4>"
+            f"<blockquote>{html_prompt}</blockquote>"
+            f"<h4>Automated checks</h4>"
+            f"<ul>{html_checks}</ul>"
+            f"{html_criteria}"
+            f"<p><strong>Budgets:</strong> {budgets}.</p>"
+            "</section>"
+        )
+    html_content = (
+        "<style>\n"
+        + "\n".join(style_rules)
+        + "\n</style>\n"
+        + '<div class="task-catalog" data-selected="|{{task:pipe}}|">\n'
+        + '<p class="task-catalog-filter">Showing tasks matching Task filter '
+        + "(choose All in the Task dropdown above to view all tasks).</p>\n"
+        + "\n".join(html_cards)
+        + "\n</div>"
+    )
+    panel = {
+        "id": "task-catalog",
+        "type": "html",
+        "title": "Task catalog",
+        "description": (
+            "Registered eval task definitions from tests.evals.registry.TASKS, "
+            "filtered by the Task dropdown."
+        ),
+        "htmlContent": html_content,
+        "markdownContent": "\n\n---\n\n".join(markdown_blocks),
+        "customChartContent": "",
+        "queries": [],
+        "queryType": "sql",
+        "config": {"show_legends": False},
+        "layout": {"x": 0, "y": 0, "w": 192, "h": max(36, len(tasks) * 16), "i": 1},
+    }
+    return {"tabId": "task-catalog", "name": "Task catalog", "panels": [panel]}
 
 
 def load_task_catalog() -> list[dict[str, object]]:
@@ -271,10 +336,15 @@ def main() -> int:
         )
     client = OpenObserveClient(args.url, args.org, args.username, args.password)
     dashboards, alerts = load_definitions()
+    active_alerts = (
+        alerts
+        if args.alert_destination
+        else [alert for alert in alerts if alert.get("destinations")]
+    )
     try:
         ensure_stream_schemas(client)
         dashboard_count, alert_count = apply_definitions(
-            client, dashboards, alerts, args.alert_destination, load_task_catalog()
+            client, dashboards, active_alerts, args.alert_destination, load_task_catalog()
         )
     except RuntimeError as error:
         raise SystemExit(str(error)) from None

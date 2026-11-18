@@ -25,9 +25,8 @@ Use `--model <id>` to select one configured model, `--repeat <n>` to change the 
 
 Every run writes JSON results under `agent/dist/evals/runs/`.
 OpenObserve receives trial records and traces when its local service is available, while JSON output remains available when telemetry export fails.
-Start the service and its UI with `just eval-ui`.
-Apply the checked-in dashboards and regression alert with `just eval-dashboards` after at least one trial has created the `garden_eval_trials` stream.
-The alert also requires an existing OpenObserve notification destination named by `GARDEN_OPENOBSERVE_ALERT_DESTINATION`.
+Both `just agent-eval` and `just eval-ui` start OpenObserve and apply the checked-in stream schemas, dashboards and generated task catalog automatically; run `just eval-dashboards` to refresh them directly.
+The regression alert is also applied when `GARDEN_OPENOBSERVE_ALERT_DESTINATION` names an existing OpenObserve notification destination.
 Stop the service with `just eval-down`; its named data volume and generated password file remain available for the next run.
 
 ## Add a task
