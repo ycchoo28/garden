@@ -213,6 +213,77 @@ def test_pending_signin_keeps_demo_services_running_and_prints_retry_path(
     assert demo.procs[0] is portal_process
 
 
+def test_demo_smoke_turn_runs_through_garden_dsh_wrapper(tmp_path, monkeypatch):
+    class Process:
+        returncode = 0
+
+        def poll(self):
+            return self.returncode
+
+        def wait(self):
+            return self.returncode
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+        def read(self):
+            return b"installer"
+
+    demo = object.__new__(DEMO.Demo)
+    demo.args = types.SimpleNamespace(non_interactive=False, persona=None)
+    demo.work = tmp_path
+    demo.api = "http://127.0.0.1:55000"
+    bin_dir = tmp_path / "bin"
+    garden = bin_dir / "garden"
+    dsh = bin_dir / "dsh"
+    demo.env = {
+        "GARDEN_BIN_DIR": str(bin_dir),
+        "GARDEN_HOME": str(tmp_path / "garden"),
+        "PATH": "",
+    }
+    portal_process = types.SimpleNamespace(poll=lambda: None)
+    demo.procs = [portal_process]
+    demo.manifest_file = tmp_path / "manifest.json"
+    demo.agent_pending_signin = False
+    calls = []
+
+    monkeypatch.setattr(DEMO.urllib.request, "urlopen", lambda *_args, **_kwargs: Response())
+    monkeypatch.setattr(DEMO, "with_user_path", lambda _env: None)
+    monkeypatch.setattr(DEMO, "open_browser_link", lambda _link: True)
+
+    def start(_command, env):
+        Path(env["GARDEN_LOGIN_LINK_FILE"]).write_text(
+            "http://127.0.0.1:55000/api/agent/cli/authorize?state=fake"
+        )
+        Path(env["GARDEN_LOGIN_STATUS_FILE"]).write_text("signed-in\n")
+        process = Process()
+        demo.procs.append(process)
+        return process
+
+    def run_command(args, **_kwargs):
+        calls.append(list(args))
+        return types.SimpleNamespace(returncode=0)
+
+    demo.start = start
+    demo.run = run_command
+
+    demo.install()
+
+    assert calls[-1] == [
+        garden,
+        "dsh",
+        "--profile",
+        "headless",
+        "--json",
+        "Reply in one short sentence: Garden demo is ready.",
+    ]
+    assert calls[-2] == [dsh, "--version"]
+
+
 @pytest.mark.parametrize("fault", ["none", "token", "model", "completion", "unreachable"])
 def test_saved_external_configuration_is_actually_validated(tmp_path, fault):
     class Upstream(DEMO.FakeModel):

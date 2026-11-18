@@ -1348,7 +1348,8 @@ class Demo:
             [garden, "tools"],
             [dsh, "--version"],
             [
-                dsh,
+                garden,
+                "dsh",
                 "--profile",
                 "headless",
                 "--json",
