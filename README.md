@@ -79,7 +79,7 @@ When the portal's minimum CLI version is newer than the command, the command sto
 ## Hardware
 
 - Docker with Compose, running on a machine with about 4 to 8 GB of RAM.
-  Postgres, the API, the worker and the Vite dev server together are the main load.
+  Postgres, the API, the worker and the Rsbuild dev server together are the main load.
   These figures are estimates, not measurements.
 - Disk for the container images (Postgres 17 with pgvector, the fake identity provider, and the llama.cpp image when you use embeddings), plus Python and JavaScript dependencies.
   I have not measured the image sizes.
@@ -368,7 +368,7 @@ All of these bind to 127.0.0.1.
 | Port | Service |
 | --- | --- |
 | 55000 | The API (uvicorn). |
-| 55173 | The web app (Vite dev server). It proxies `/api` and `/auth` to the API. |
+| 55173 | The web app (Rsbuild dev server). It proxies `/api` and `/auth` to the API. |
 | 55432 | Postgres 17 with pgvector. |
 | 55081 | The fake OpenID Connect provider. |
 | 55083 | The llama.cpp embedding server, when you run `just embedding-up`. |

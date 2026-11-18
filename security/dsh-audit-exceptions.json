@@ -1,0 +1,12 @@
+{
+  "exceptions": [
+    {
+      "advisory": "GHSA-fc5q-39xc-vjpf",
+      "lockfile": "agent/install/dsh/package-lock.json",
+      "package": "picomatch",
+      "required_by": "@deepseek-ai/dsh-hmr",
+      "reason": "User-approved exception: no patched picomatch release; required DSH hot-reload dependency.",
+      "revisit": "Remove this exception when dsh-hmr drops picomatch or a patched release is available."
+    }
+  ]
+}

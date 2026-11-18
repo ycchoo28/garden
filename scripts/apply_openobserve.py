@@ -233,8 +233,6 @@ def apply_definitions(
         path = f"/api/v2/{client.org}/alerts"
         method = "POST"
         body = json.loads(json.dumps(definition).replace("{{openobserve_url}}", client.base_url))
-        if title == "Garden agent evals" and task_catalog is not None:
-            body["tabs"].append(task_catalog_tab(task_catalog))
         if alert_destination:
             body["destinations"] = [alert_destination]
         if alert_id is not None:

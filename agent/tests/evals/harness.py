@@ -15,6 +15,7 @@ from urllib.request import Request, urlopen
 
 import yaml
 
+from garden.trace_contract import GARDEN_EVAL_TRACEPARENT_ENV
 from tests.evals.task_types import EvalTask, ReferenceSolution
 from tests.shared.browser import decide_confirmation
 from tests.shared.garden_cli import store_token
@@ -120,6 +121,7 @@ class DshHarnessAdapter:
         media: Path | None = None,
         acting_token: str,
         person_session: str | None = None,
+        traceparent: str | None = None,
     ) -> None:
         self.task = task
         self.portal_url = portal_url
@@ -159,6 +161,8 @@ class DshHarnessAdapter:
                 "PYTHONPATH": str(AGENT_ROOT / "src"),
             }
         )
+        if traceparent:
+            env[GARDEN_EVAL_TRACEPARENT_ENV] = traceparent
         store_token(env, portal_url, acting_token, device=f"eval-{task.id}")
 
         bin_dir = self.home / ".local" / "bin"

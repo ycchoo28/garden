@@ -19,6 +19,9 @@ from garden.trace_contract import (
     GARDEN_CONVERSATION_TITLE_SIDE_CALL,
     GARDEN_EVAL_RUN_ID,
     GARDEN_EVAL_TRIAL_ID,
+    GARDEN_MODEL_RUNTIME_CONTEXT,
+    GARDEN_MODEL_SIDE_CALL_INPUT_MESSAGES,
+    GARDEN_MODEL_SIDE_CALL_OUTPUT_MESSAGES,
     GARDEN_MODEL_SIDE_CALL_TYPE,
     GARDEN_MODEL_TOOL_NAMES,
     GARDEN_MODEL_TOTAL_TOKENS,
@@ -208,19 +211,47 @@ def _is_conversation_title_request(body: dict[str, Any]) -> bool:
     )
 
 
-def _trace_messages(messages: object) -> list[dict[str, Any]] | None:
-    if not isinstance(messages, list):
+def _is_runtime_context_message(role: object, parts: list[dict[str, Any]]) -> str | None:
+    """Detect DSH's injected runtime-context snapshot so it is not traced as a human prompt."""
+    if role not in {"user", "system", "developer"}:
         return None
+    text = "\n".join(
+        str(part.get("content", "")) for part in parts if part.get("type") == "text"
+    ).strip()
+    if text.startswith("Current runtime context."):
+        return text
+    return None
+
+
+def _trace_messages(
+    messages: object,
+) -> tuple[list[dict[str, Any]] | None, str | None]:
+    if not isinstance(messages, list):
+        return None, None
     result: list[dict[str, Any]] = []
+    runtime_context: str | None = None
     for raw_message in cast("list[object]", messages):
         if not isinstance(raw_message, dict):
             continue
         message = cast("dict[str, Any]", raw_message)
-        role = message.get("role")
+        raw_role = message.get("role")
+        parts = _content_parts(message.get("content"))
+        snapshot = _is_runtime_context_message(raw_role, parts)
+        if snapshot is not None:
+            runtime_context = snapshot
+            continue
+        role = (
+            "system"
+            if raw_role == "developer"
+            else (raw_role if isinstance(raw_role, str) else "unknown")
+        )
         traced: dict[str, Any] = {
-            "role": role if isinstance(role, str) else "unknown",
-            "parts": _content_parts(message.get("content")),
+            "role": role,
+            "parts": parts,
         }
+        tool_call_id = message.get("tool_call_id")
+        if role == "tool" and isinstance(tool_call_id, str):
+            traced["tool_call_id"] = tool_call_id
         tool_calls = message.get("tool_calls")
         if isinstance(tool_calls, list):
             for raw_call in cast("list[object]", tool_calls):
@@ -246,11 +277,11 @@ def _trace_messages(messages: object) -> list[dict[str, Any]] | None:
                     }
                 )
         result.append(traced)
-    return result
+    return result, runtime_context
 
 
 def _tool_names(messages: object) -> list[str]:
-    traced = _trace_messages(messages)
+    traced, _ = _trace_messages(messages)
     if traced is None:
         return []
     names: list[str] = []
@@ -275,14 +306,15 @@ def _response_messages(response: dict[str, Any]) -> list[dict[str, Any]]:
         if not isinstance(message, dict):
             continue
         message = cast("dict[str, Any]", message)
-        result.extend(_trace_messages([message]) or [])
+        traced, _ = _trace_messages([message])
+        result.extend(traced or [])
         finish_reason = choice.get("finish_reason")
         if isinstance(finish_reason, str):
             result[-1]["finish_reason"] = finish_reason
     return result
 
 
-def _stream_delta(line: str) -> tuple[str, list[str]]:
+def _stream_delta(line: str) -> tuple[str, list[dict[str, Any]]]:
     if not line.startswith("data:"):
         return "", []
     try:
@@ -296,7 +328,7 @@ def _stream_delta(line: str) -> tuple[str, list[str]]:
     if not isinstance(choices, list):
         return "", []
     text = ""
-    names: list[str] = []
+    tool_deltas: list[dict[str, Any]] = []
     for raw_choice in cast("list[object]", choices):
         if not isinstance(raw_choice, dict):
             continue
@@ -311,18 +343,58 @@ def _stream_delta(line: str) -> tuple[str, list[str]]:
         tool_calls = delta.get("tool_calls")
         if isinstance(tool_calls, list):
             for raw_call in cast("list[object]", tool_calls):
-                if not isinstance(raw_call, dict):
-                    continue
-                call = cast("dict[str, Any]", raw_call)
-                function = call.get("function")
-                name = (
-                    cast("dict[str, Any]", function).get("name")
-                    if isinstance(function, dict)
-                    else None
-                )
-                if isinstance(name, str) and name not in names:
-                    names.append(name)
-    return text, names
+                if isinstance(raw_call, dict):
+                    tool_deltas.append(cast("dict[str, Any]", raw_call))
+    return text, tool_deltas
+
+
+def _merge_stream_tool_calls(
+    accumulated: dict[int, dict[str, Any]], deltas: list[dict[str, Any]]
+) -> None:
+    for call in deltas:
+        raw_index = call.get("index", 0)
+        index = raw_index if isinstance(raw_index, int) and not isinstance(raw_index, bool) else 0
+        entry = accumulated.setdefault(index, {"id": "", "name": "", "arguments": []})
+        call_id = call.get("id")
+        if isinstance(call_id, str) and call_id:
+            entry["id"] = call_id
+        function = call.get("function")
+        if isinstance(function, dict):
+            fn = cast("dict[str, Any]", function)
+            name = fn.get("name")
+            if isinstance(name, str) and name:
+                entry["name"] = name
+            args_chunk = fn.get("arguments")
+            if isinstance(args_chunk, str) and args_chunk:
+                cast("list[str]", entry["arguments"]).append(args_chunk)
+
+
+def _stream_tool_parts(
+    accumulated: dict[int, dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[str]]:
+    parts: list[dict[str, Any]] = []
+    names: list[str] = []
+    for index in sorted(accumulated):
+        entry = accumulated[index]
+        name = str(entry.get("name", ""))
+        raw_args = "".join(cast("list[str]", entry.get("arguments", [])))
+        parsed_args: object = {}
+        if raw_args:
+            try:
+                parsed_args = json.loads(raw_args)
+            except ValueError:
+                parsed_args = {"value": raw_args}
+        parts.append(
+            {
+                "type": "tool_call",
+                "id": str(entry.get("id", "")),
+                "name": name,
+                "arguments": parsed_args,
+            }
+        )
+        if name and name not in names:
+            names.append(name)
+    return parts, names
 
 
 class ModelService:
@@ -366,7 +438,7 @@ class ModelService:
             now=now,
             supplied=supplied_conversation_id,
         )
-        messages = _trace_messages(body.get("messages"))
+        messages, runtime_context = _trace_messages(body.get("messages"))
         capture_content = (
             self._settings.gen_ai_capture_content != "NO_CONTENT" and messages is not None
         )
@@ -388,8 +460,6 @@ class ModelService:
             attributes[GARDEN_EVAL_RUN_ID] = self._settings.eval_run_id
         if self._settings.eval_trial_id:
             attributes[GARDEN_EVAL_TRIAL_ID] = self._settings.eval_trial_id
-        if capture_content and capture_on_span and messages is not None:
-            attributes[GEN_AI_INPUT_MESSAGES] = json.dumps(messages, ensure_ascii=False)
 
         side_call_type = supplied_side_call_type
         if not side_call_type and isinstance(metadata, dict):
@@ -409,11 +479,23 @@ class ModelService:
             GARDEN_CONVERSATION_TITLE_SIDE_CALL,
         }:
             attributes[GARDEN_MODEL_SIDE_CALL_TYPE] = GARDEN_CONVERSATION_TITLE_SIDE_CALL
-            # OpenObserve groups threads by this semantic attribute. Keep the Garden
-            # conversation ID shared for correlation, but separate auxiliary title messages.
+            # OpenObserve groups threads by this semantic attribute and builds thread turns
+            # from gen_ai.input.messages on chat spans. Keep title payloads in side-call
+            # attributes so auxiliary title prompts never merge into the task thread.
             attributes[GEN_AI_CONVERSATION_ID] = f"{conversation_id}:title"
         elif isinstance(side_call_type, str) and side_call_type.strip():
             attributes[GARDEN_MODEL_SIDE_CALL_TYPE] = side_call_type.strip()
+
+        if capture_content and capture_on_span and messages is not None:
+            input_key = (
+                GARDEN_MODEL_SIDE_CALL_INPUT_MESSAGES
+                if attributes.get(GARDEN_MODEL_SIDE_CALL_TYPE)
+                == GARDEN_CONVERSATION_TITLE_SIDE_CALL
+                else GEN_AI_INPUT_MESSAGES
+            )
+            attributes[input_key] = json.dumps(messages, ensure_ascii=False)
+            if runtime_context is not None:
+                attributes[GARDEN_MODEL_RUNTIME_CONTEXT] = runtime_context
 
         span = trace.get_tracer("garden.model_gateway").start_span(
             "chat conversation_title"
@@ -472,7 +554,13 @@ class ModelService:
         capture_on_span = self._settings.gen_ai_capture_content in GEN_AI_CAPTURE_SPAN_MODES
         capture_on_event = self._settings.gen_ai_capture_content in GEN_AI_CAPTURE_EVENT_MODES
         if capture_content and capture_on_span and output_messages:
-            attributes[GEN_AI_OUTPUT_MESSAGES] = json.dumps(output_messages, ensure_ascii=False)
+            output_key = (
+                GARDEN_MODEL_SIDE_CALL_OUTPUT_MESSAGES
+                if attributes.get(GARDEN_MODEL_SIDE_CALL_TYPE)
+                == GARDEN_CONVERSATION_TITLE_SIDE_CALL
+                else GEN_AI_OUTPUT_MESSAGES
+            )
+            attributes[output_key] = json.dumps(output_messages, ensure_ascii=False)
         if status == "ok":
             span.set_status(Status(StatusCode.OK))
         else:
@@ -676,18 +764,17 @@ class ModelService:
         usage: dict[str, Any] = {}
         status = "ok"
         content: list[str] = []
-        tool_names: list[str] = []
+        streamed_tools: dict[int, dict[str, Any]] = {}
         lines = upstream.aiter_lines()
         try:
             async for line in lines:
                 if line.startswith("data:") and '"usage"' in line:
                     _merge(usage, _event_usage(line))
-                text, names = _stream_delta(line)
+                text, tool_deltas = _stream_delta(line)
                 if capture_content and text:
                     content.append(text)
-                for name in names:
-                    if name not in tool_names:
-                        tool_names.append(name)
+                if tool_deltas:
+                    _merge_stream_tool_calls(streamed_tools, tool_deltas)
                 yield f"{line}\n".encode()
         except httpx.HTTPError:
             status = "upstream_error"
@@ -704,11 +791,13 @@ class ModelService:
                     pass
             raise
         finally:
-            output_messages = (
-                [{"role": "assistant", "parts": [{"type": "text", "content": "".join(content)}]}]
-                if content
-                else []
-            )
+            tool_parts, tool_names = _stream_tool_parts(streamed_tools)
+            parts: list[dict[str, Any]] = []
+            if content:
+                parts.append({"type": "text", "content": "".join(content)})
+            if capture_content and tool_parts:
+                parts.extend(tool_parts)
+            output_messages = [{"role": "assistant", "parts": parts}] if parts else []
             with anyio.CancelScope(shield=True):
                 await upstream.aclose()
                 await client.aclose()

@@ -28,7 +28,13 @@ from garden.trace_contract import (
     GARDEN_EVAL_RUN_ID_ENV,
     GARDEN_EVAL_TRIAL_ID,
     GARDEN_EVAL_TRIAL_ID_ENV,
+    GEN_AI_CAPTURE_CONTENT_ENV,
+    GEN_AI_CAPTURE_SPAN_MODES,
+    GEN_AI_INPUT_MESSAGES,
     GEN_AI_OPERATION_NAME,
+    GEN_AI_OUTPUT_MESSAGES,
+    GEN_AI_TOOL_CALL_ARGUMENTS,
+    GEN_AI_TOOL_CALL_RESULT,
     GEN_AI_TOOL_NAME,
 )
 
@@ -193,12 +199,21 @@ def _call(
     if raw_arguments is not None and not is_object(raw_arguments):
         raise _ProtocolError(INVALID_PARAMS, "Arguments must be an object.")
     arguments = as_object(raw_arguments)
+    capture_content = (
+        os.environ.get("GARDEN_ENVIRONMENT", "dev").strip().lower() == "dev"
+        and os.environ.get(GEN_AI_CAPTURE_CONTENT_ENV, "NO_CONTENT").strip().upper()
+        in GEN_AI_CAPTURE_SPAN_MODES
+    )
     attributes: dict[str, str | bool] = {
         GEN_AI_OPERATION_NAME: "execute_tool",
         GEN_AI_TOOL_NAME: name,
         GARDEN_AGENT_FLAG: True,
-        GARDEN_CONTENT_CAPTURED: False,
+        GARDEN_CONTENT_CAPTURED: capture_content,
     }
+    if capture_content:
+        args_json = _bounded_json(arguments)
+        attributes[GEN_AI_TOOL_CALL_ARGUMENTS] = args_json
+        attributes[GEN_AI_INPUT_MESSAGES] = args_json
     for attribute, environ in (
         (GARDEN_EVAL_RUN_ID, GARDEN_EVAL_RUN_ID_ENV),
         (GARDEN_EVAL_TRIAL_ID, GARDEN_EVAL_TRIAL_ID_ENV),
@@ -210,23 +225,48 @@ def _call(
     with trace.get_tracer("garden.mcp").start_as_current_span(name, attributes=attributes) as span:
         tool = engine.tool(name)
         if tool is None:
-            return _tool_error(
-                {
-                    "title": "Tool not available",
-                    "detail": f"{name} is not a tool you may use.",
-                    "fix": "Call tools/list to see the tools available to you.",
-                }
-            )
+            error_body = {
+                "title": "Tool not available",
+                "detail": f"{name} is not a tool you may use.",
+                "fix": "Call tools/list to see the tools available to you.",
+            }
+            if capture_content:
+                _set_result_attributes(span, {"error": error_body})
+            return _tool_error(error_body)
         try:
             value = engine.call(tool, arguments, notify=notify, cancel_event=cancel_event)
         except GardenError as error:
             span.set_status(Status(StatusCode.ERROR))
-            return _tool_error(error.to_dict()["error"])
+            error_body = error.to_dict()["error"]
+            if capture_content:
+                _set_result_attributes(span, {"error": error_body})
+            return _tool_error(error_body)
+        if capture_content:
+            _set_result_attributes(span, value)
         text = json.dumps(value, ensure_ascii=False)
         result: dict[str, Any] = {"content": [{"type": "text", "text": text}], "isError": False}
         if isinstance(value, dict):
             result["structuredContent"] = value
         return result
+
+
+_MAX_TRACE_JSON_BYTES = 32_768
+
+
+def _bounded_json(value: object) -> str:
+    encoded = json.dumps(value, ensure_ascii=False, default=str)
+    if len(encoded) <= _MAX_TRACE_JSON_BYTES:
+        return encoded
+    return json.dumps(
+        {"truncated": True, "preview": encoded[: _MAX_TRACE_JSON_BYTES - 128]},
+        ensure_ascii=False,
+    )
+
+
+def _set_result_attributes(span: trace.Span, value: object) -> None:
+    encoded = _bounded_json(value)
+    span.set_attribute(GEN_AI_TOOL_CALL_RESULT, encoded)
+    span.set_attribute(GEN_AI_OUTPUT_MESSAGES, encoded)
 
 
 def _tool_error(body: dict[str, Any]) -> dict[str, Any]:

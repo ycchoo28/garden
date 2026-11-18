@@ -946,6 +946,113 @@
             "h": 36,
             "i": 12
           }
+        },
+        {
+          "id": "eval-artifacts",
+          "type": "table",
+          "title": "Generated artifacts",
+          "description": "Claim state and generated workspace file previews captured before trial cleanup. Open the trial trace and inspect eval.artifacts for the same evidence.",
+          "config": {
+            "show_legends": false,
+            "legends_position": null,
+            "base_map": null,
+            "map_view": null,
+            "wrap_table_cells": true,
+            "table_pagination": true,
+            "table_pagination_rows_per_page": 25
+          },
+          "queryType": "sql",
+          "queries": [
+            {
+              "query": "SELECT _timestamp, run_id, task_id, model, artifacts, trace_id FROM \"garden_eval_trials\" WHERE run_id = COALESCE(NULLIF('{{run:singlequote}}', '_o2_all_'), run_id) AND task_id = COALESCE(NULLIF('{{task:singlequote}}', '_o2_all_'), task_id) AND model = COALESCE(NULLIF('{{model:singlequote}}', '_o2_all_'), model) AND model <> 'reference' ORDER BY _timestamp DESC LIMIT 200",
+              "vrlFunctionQuery": null,
+              "customQuery": true,
+              "fields": {
+                "stream": "garden_eval_trials",
+                "stream_type": "logs",
+                "x": [],
+                "y": [
+                  {
+                    "label": "_timestamp",
+                    "alias": "_timestamp",
+                    "column": "_timestamp",
+                    "color": null,
+                    "aggregationFunction": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": false
+                  },
+                  {
+                    "label": "run_id",
+                    "alias": "run_id",
+                    "column": "run_id",
+                    "color": null,
+                    "aggregationFunction": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "task_id",
+                    "alias": "task_id",
+                    "column": "task_id",
+                    "color": null,
+                    "aggregationFunction": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "model",
+                    "alias": "model",
+                    "column": "model",
+                    "color": null,
+                    "aggregationFunction": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "artifacts",
+                    "alias": "artifacts",
+                    "column": "artifacts",
+                    "color": null,
+                    "aggregationFunction": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "trace_id",
+                    "alias": "trace_id",
+                    "column": "trace_id",
+                    "color": null,
+                    "aggregationFunction": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  }
+                ],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": ""
+              }
+            }
+          ],
+          "layout": {
+            "x": 0,
+            "y": 154,
+            "w": 192,
+            "h": 24,
+            "i": 13
+          }
         }
       ]
     }

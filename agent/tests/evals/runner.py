@@ -21,7 +21,16 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
-from garden.trace_contract import GARDEN_EVAL_RUN_ID_ENV, GARDEN_EVAL_TRIAL_ID_ENV
+from garden.trace_contract import (
+    GARDEN_EVAL_RUN_ID_ENV,
+    GARDEN_EVAL_TRIAL_ID_ENV,
+    GEN_AI_CAPTURE_CONTENT_ENV,
+)
+from tests.evals.artifacts import (
+    collect_trial_artifacts,
+    snapshot_claims,
+    snapshot_workspace,
+)
 from tests.evals.embedding import ensure_embedding_server
 from tests.evals.grading import DraftClaimGrader, GraderResult, api_json, trial_passed
 from tests.evals.harness import DshHarnessAdapter
@@ -219,6 +228,7 @@ def _backend_env(
             "GARDEN_PUBLIC_URL": public_url
             or base_env.get("GARDEN_PUBLIC_URL", "http://localhost:55173"),
             "GARDEN_FILES_ROOT": str(files_root),
+            GEN_AI_CAPTURE_CONTENT_ENV: base_env.get(GEN_AI_CAPTURE_CONTENT_ENV, "SPAN_ONLY"),
         }
     )
     if "GARDEN_EMBEDDING_URL" in base_env:
@@ -549,6 +559,7 @@ def _trial_record(
     tool_calls: int,
     graders: list[GraderResult],
     error: str | None,
+    artifacts: list[dict[str, object]] | None = None,
 ) -> dict[str, object]:
     passed = error is None and trial_passed(graders)
     failures = [result.reason for result in graders if result.verdict != "pass"]
@@ -582,6 +593,7 @@ def _trial_record(
         "database": database,
         "database_kept": db_kept,
         "confirmation": task.confirmation,
+        "artifacts": [] if artifacts is None else artifacts,
     }
 
 
@@ -608,6 +620,7 @@ def run_trial(
     tool_calls = 0
     error: str | None = None
     graders: list[GraderResult] = []
+    artifacts: list[dict[str, object]] = []
     services = Services()
     try:
         new_database(database, template=TEMPLATE_DB)
@@ -649,7 +662,11 @@ def run_trial(
                     services,
                 )
             adapter: DshHarnessAdapter | None = None
+            workspace = temp / "workspace"
+            before_workspace: dict[str, str] = {}
+            before_claims: dict[str, object] = {}
             try:
+                traceparent = EvalTelemetry.traceparent()
                 if isinstance(task, ClaimDraftTask):
                     if web_url is None:
                         raise StepFailed("The confirmation trial has no web URL.")
@@ -660,10 +677,11 @@ def run_trial(
                         public_url=web_url,
                         oidc_url=env.get("GARDEN_OIDC_ISSUER", "http://127.0.0.1:55081/default"),
                         home=temp / "home",
-                        workspace=temp / "workspace",
+                        workspace=workspace,
                         media=temp / "media",
                         acting_token=logins["acting"],
                         person_session=logins["person_session"],
+                        traceparent=traceparent,
                     )
                 else:
                     adapter = DshHarnessAdapter(
@@ -671,9 +689,12 @@ def run_trial(
                         portal_url=api_url,
                         database=database,
                         home=temp / "home",
-                        workspace=temp / "workspace",
+                        workspace=workspace,
                         acting_token=logins["acting"],
+                        traceparent=traceparent,
                     )
+                before_workspace = snapshot_workspace(workspace)
+                before_claims = snapshot_claims(api_url, logins["acting"])
                 answer = adapter.run_reference(solution)
                 if isinstance(task, ClaimDraftTask):
                     adapter.verify_confirmations()
@@ -688,6 +709,13 @@ def run_trial(
                     except Exception as failure:
                         if error is None:
                             error = f"Harness cleanup failed: {failure}"
+            artifacts = collect_trial_artifacts(
+                workspace=workspace,
+                before_workspace=before_workspace,
+                api_url=api_url,
+                token=logins["acting"],
+                before_claims=before_claims,
+            )
             graders = grade_task(
                 task,
                 api_url,
@@ -739,6 +767,7 @@ def run_trial(
         tool_calls=tool_calls,
         graders=graders,
         error=error,
+        artifacts=artifacts,
     )
 
 
@@ -833,6 +862,18 @@ def run_reference(
                         error=f"Trial runner failed: {failure}",
                     )
                 record["trace_id"] = telemetry.trace_id(span)
+                artifacts_value = record.get("artifacts")
+                artifacts = (
+                    cast(list[dict[str, object]], artifacts_value)
+                    if isinstance(artifacts_value, list)
+                    else []
+                )
+                telemetry.record_artifacts(
+                    span,
+                    artifacts,
+                    run_id=run_id,
+                    trial_id=trial_id,
+                )
                 span.set_attribute("garden.eval.passed", record.get("passed") is True)
                 failure_reason = record.get("failure_reason")
                 if isinstance(failure_reason, str):

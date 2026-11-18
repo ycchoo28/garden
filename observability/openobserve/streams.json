@@ -124,6 +124,10 @@
       {
         "name": "aborted",
         "type": "Boolean"
+      },
+      {
+        "name": "artifacts",
+        "type": "Utf8"
       }
     ]
   }

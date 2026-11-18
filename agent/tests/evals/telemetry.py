@@ -6,7 +6,7 @@ import json
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 
-from opentelemetry import propagate
+from opentelemetry import propagate, trace
 from opentelemetry._logs import SeverityNumber
 from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
@@ -17,7 +17,13 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.trace import Span
 
-from garden.trace_contract import GARDEN_EVAL_RUN_ID, GARDEN_EVAL_TRIAL_ID
+from garden.trace_contract import (
+    GARDEN_EVAL_ARTIFACT_COUNT,
+    GARDEN_EVAL_ARTIFACTS,
+    GARDEN_EVAL_RUN_ID,
+    GARDEN_EVAL_TRIAL_ID,
+)
+from tests.evals.artifacts import bounded_artifacts_json
 
 _SERVICE_NAME = "garden-agent-evals"
 _EXPORT_TIMEOUT_SECONDS = 1
@@ -125,6 +131,31 @@ class EvalTelemetry:
         carrier: dict[str, str] = {}
         propagate.inject(carrier)
         return carrier.get("traceparent")
+
+    def record_artifacts(
+        self,
+        span: Span,
+        artifacts: list[dict[str, object]],
+        *,
+        run_id: str,
+        trial_id: str,
+    ) -> None:
+        encoded = bounded_artifacts_json(artifacts)
+        span.set_attribute(GARDEN_EVAL_ARTIFACT_COUNT, len(artifacts))
+        span.set_attribute(GARDEN_EVAL_ARTIFACTS, encoded)
+        if not artifacts:
+            return
+        with self._tracer.start_as_current_span(
+            "eval.artifacts",
+            context=trace.set_span_in_context(span),
+            attributes={
+                GARDEN_EVAL_RUN_ID: run_id,
+                GARDEN_EVAL_TRIAL_ID: trial_id,
+                GARDEN_EVAL_ARTIFACT_COUNT: len(artifacts),
+                GARDEN_EVAL_ARTIFACTS: encoded,
+            },
+        ):
+            pass
 
     def record_trial(self, record: dict[str, object]) -> None:
         attributes: dict[str, bool | float | int | str] = {}

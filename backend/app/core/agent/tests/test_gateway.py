@@ -20,6 +20,9 @@ from garden.trace_contract import (
     GARDEN_EVAL_SIDE_CALL,
     GARDEN_EVAL_SIDE_CALL_HEADER,
     GARDEN_EVAL_TRIAL_ID,
+    GARDEN_MODEL_RUNTIME_CONTEXT,
+    GARDEN_MODEL_SIDE_CALL_INPUT_MESSAGES,
+    GARDEN_MODEL_SIDE_CALL_OUTPUT_MESSAGES,
     GARDEN_MODEL_SIDE_CALL_TYPE,
     GARDEN_MODEL_TOTAL_TOKENS,
     GARDEN_PERSON_ID,
@@ -34,6 +37,9 @@ from garden.trace_contract import (
     GEN_AI_REQUEST_MODEL,
     GEN_AI_RESPONSE_MODEL,
     GEN_AI_RESPONSE_STATUS,
+    GEN_AI_TOOL_CALL_ARGUMENTS,
+    GEN_AI_TOOL_CALL_RESULT,
+    GEN_AI_TOOL_NAME,
     GEN_AI_USAGE_INPUT_TOKENS,
     GEN_AI_USAGE_OUTPUT_TOKENS,
     MODEL_SIDE_CALL_HEADER,
@@ -98,6 +104,7 @@ class FakeUpstream:
         self.requests: list[httpx.Request] = []
         self.status = 200
         self.usage: dict[str, int] = {"prompt_tokens": 3, "completion_tokens": 4, "total_tokens": 7}
+        self.stream_lines: list[str] | None = None
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
@@ -105,6 +112,12 @@ class FakeUpstream:
             return httpx.Response(self.status, json={"error": "upstream trouble"})
         sent: dict[str, Any] = json.loads(request.content)
         if sent.get("stream") is True:
+            if self.stream_lines is not None:
+                return httpx.Response(
+                    200,
+                    content="".join(self.stream_lines).encode(),
+                    headers={"content-type": "text/event-stream"},
+                )
             events: list[dict[str, Any]] = [{"choices": [{"delta": {"content": "pong"}}]}]
             options: dict[str, Any] = sent.get("stream_options") or {}
             if options.get("include_usage") is True:
@@ -848,3 +861,200 @@ async def test_dsh_title_request_has_its_own_thread_without_changing_upstream_pr
     assert attributes[GEN_AI_CONVERSATION_ID] == (
         str(attributes[GARDEN_AGENT_CONVERSATION_ID]) + ":title"
     )
+
+
+@pytest.mark.asyncio
+async def test_title_side_call_keeps_messages_out_of_thread_payload_and_api_span_not_tool_call(
+    upstream: FakeUpstream,
+    client: AsyncClient,
+    identity: FakeIdentity,
+    configure: Callable[..., None],
+    span_exporter: InMemorySpanExporter,
+) -> None:
+    configure(gen_ai_capture_content="SPAN_ONLY")
+    token = await cli_sign_in(client, identity, MARCUS, device="cli")
+    title_body: dict[str, Any] = {
+        **CHAT,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "Create a concise title for an AI coding-assistant session "
+                    "from the supplied human messages."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    "Generate the session title from this JSON array of human messages:\n"
+                    '[{"seq":1,"text":"Draft a claim."}]'
+                ),
+            },
+        ],
+    }
+
+    response = await client.post(
+        "/api/agent/model/v1/chat/completions",
+        json=title_body,
+        headers=bearer(token),
+    )
+
+    assert response.status_code == 200
+    [chat_span] = _model_gateway_spans(span_exporter)
+    chat_attrs = _span_attributes(chat_span)
+    assert GEN_AI_INPUT_MESSAGES not in chat_attrs
+    assert GEN_AI_OUTPUT_MESSAGES not in chat_attrs
+    assert "Draft a claim." in chat_attrs[GARDEN_MODEL_SIDE_CALL_INPUT_MESSAGES]
+    assert "pong" in chat_attrs[GARDEN_MODEL_SIDE_CALL_OUTPUT_MESSAGES]
+    [api_span] = [
+        span
+        for span in span_exporter.get_finished_spans()
+        if span.name == "agent.model.chat_completion"
+    ]
+    assert GEN_AI_OPERATION_NAME not in _span_attributes(api_span)
+
+
+@pytest.mark.asyncio
+async def test_streaming_tool_calls_are_captured_in_output_messages(
+    upstream: FakeUpstream,
+    client: AsyncClient,
+    identity: FakeIdentity,
+    configure: Callable[..., None],
+    span_exporter: InMemorySpanExporter,
+) -> None:
+    configure(gen_ai_capture_content="SPAN_ONLY")
+    await sign_in(client, identity, MARCUS)
+    chunk_one = {
+        "id": "chatcmpl-1",
+        "model": "gpt-6-luna",
+        "choices": [
+            {
+                "index": 0,
+                "delta": {
+                    "role": "assistant",
+                    "tool_calls": [
+                        {
+                            "index": 0,
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {
+                                "name": "claims_claim_create",
+                                "arguments": '{"title":',
+                            },
+                        }
+                    ],
+                },
+                "finish_reason": None,
+            }
+        ],
+    }
+    chunk_two = {
+        "id": "chatcmpl-1",
+        "model": "gpt-6-luna",
+        "choices": [
+            {
+                "index": 0,
+                "delta": {"tool_calls": [{"index": 0, "function": {"arguments": '"Dinner"}'}}]},
+                "finish_reason": "tool_calls",
+            }
+        ],
+        "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+    }
+    upstream.stream_lines = [
+        f"data: {json.dumps(chunk_one)}\n\n",
+        f"data: {json.dumps(chunk_two)}\n\n",
+        "data: [DONE]\n\n",
+    ]
+
+    response = await client.post(
+        "/api/agent/model/v1/chat/completions",
+        json={**CHAT, "stream": True},
+    )
+
+    assert response.status_code == 200
+    [chat_span] = _model_gateway_spans(span_exporter)
+    attrs = _span_attributes(chat_span)
+    output = json.loads(str(attrs[GEN_AI_OUTPUT_MESSAGES]))
+    assert output == [
+        {
+            "role": "assistant",
+            "parts": [
+                {
+                    "type": "tool_call",
+                    "id": "call_1",
+                    "name": "claims_claim_create",
+                    "arguments": {"title": "Dinner"},
+                }
+            ],
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_agent_tool_http_span_captures_arguments_and_result_when_enabled(
+    client: AsyncClient,
+    identity: FakeIdentity,
+    monkeypatch: pytest.MonkeyPatch,
+    span_exporter: InMemorySpanExporter,
+) -> None:
+    monkeypatch.setenv(GEN_AI_CAPTURE_CONTENT_ENV, "SPAN_ONLY")
+    token = await cli_sign_in(client, identity, MARCUS, device="cli")
+
+    created = await client.post(
+        "/api/claims",
+        json={"title": "Client dinner"},
+        headers=bearer(token),
+    )
+
+    assert created.status_code == 201, created.text
+    [tool_span] = [
+        span for span in span_exporter.get_finished_spans() if span.name == "claims.claim.create"
+    ]
+    attrs = _span_attributes(tool_span)
+    assert attrs[GEN_AI_OPERATION_NAME] == "execute_tool"
+    assert attrs[GEN_AI_TOOL_NAME] == "claims.claim.create"
+    assert attrs[GARDEN_CONTENT_CAPTURED] is True
+    assert json.loads(str(attrs[GEN_AI_TOOL_CALL_ARGUMENTS])) == {
+        "body": {"title": "Client dinner"}
+    }
+    assert json.loads(str(attrs[GEN_AI_INPUT_MESSAGES])) == {"body": {"title": "Client dinner"}}
+    result_payload = json.loads(str(attrs[GEN_AI_TOOL_CALL_RESULT]))
+    assert result_payload["claim"]["title"] == "Client dinner"
+    assert json.loads(str(attrs[GEN_AI_OUTPUT_MESSAGES])) == result_payload
+
+
+@pytest.mark.asyncio
+async def test_runtime_context_snapshot_is_extracted_from_human_thread_messages(
+    upstream: FakeUpstream,
+    client: AsyncClient,
+    identity: FakeIdentity,
+    configure: Callable[..., None],
+    span_exporter: InMemorySpanExporter,
+) -> None:
+    configure(gen_ai_capture_content="SPAN_ONLY")
+    await sign_in(client, identity, MARCUS)
+    runtime_text = (
+        "Current runtime context. This snapshot supersedes earlier runtime-context snapshots.\n\n"
+        'Current working directory: "/tmp/workspace".'
+    )
+    body = {
+        "model": "garden-small",
+        "messages": [
+            {"role": "developer", "content": "You are an assistant."},
+            {"role": "user", "content": "Draft a claim for lunch."},
+            {"role": "user", "content": runtime_text},
+        ],
+    }
+
+    response = await client.post("/api/agent/model/v1/chat/completions", json=body)
+
+    assert response.status_code == 200
+    assert json.loads(upstream.requests[-1].content)["messages"] == body["messages"]
+    [chat_span] = _model_gateway_spans(span_exporter)
+    attrs = _span_attributes(chat_span)
+    traced_input = json.loads(str(attrs[GEN_AI_INPUT_MESSAGES]))
+    assert traced_input == [
+        {"role": "system", "parts": [{"type": "text", "content": "You are an assistant."}]},
+        {"role": "user", "parts": [{"type": "text", "content": "Draft a claim for lunch."}]},
+    ]
+    assert attrs[GARDEN_MODEL_RUNTIME_CONTEXT] == runtime_text

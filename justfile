@@ -79,7 +79,7 @@ migrate: up
 seed: migrate
     cd backend && uv run python -m app.seed
 
-# Run the API with reload, the background worker and the Vite dev server until Ctrl+C. Seeds first.
+# Run the API with reload, the background worker and the Rsbuild dev server until Ctrl+C. Seeds first.
 [unix]
 dev: seed
     #!/usr/bin/env bash
@@ -334,7 +334,7 @@ frontend-check:
     scripts/check-ui-colours.sh
 
 # Browser tests: a person signs in through the fake provider and sees the shell. Needs Postgres and the fake provider (see `just up`).
-# Playwright starts the API and Vite itself. Chromium must be installed (`bunx playwright install chromium`).
+# Playwright starts the API and Rsbuild itself. Chromium must be installed (`bunx playwright install chromium`).
 [unix]
 e2e: up
     #!/usr/bin/env bash

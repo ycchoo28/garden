@@ -21,7 +21,12 @@ from garden.trace_contract import (
     GARDEN_EVAL_RUN_ID_ENV,
     GARDEN_EVAL_TRIAL_ID,
     GARDEN_EVAL_TRIAL_ID_ENV,
+    GEN_AI_CAPTURE_CONTENT_ENV,
+    GEN_AI_INPUT_MESSAGES,
     GEN_AI_OPERATION_NAME,
+    GEN_AI_OUTPUT_MESSAGES,
+    GEN_AI_TOOL_CALL_ARGUMENTS,
+    GEN_AI_TOOL_CALL_RESULT,
 )
 from tests.shared.fake_portal import GOOD_TOKEN, FakePortal
 from tests.shared.garden_cli import as_json, run_garden, store_token
@@ -239,4 +244,39 @@ def test_stdio_mcp_traces_each_tool_call(engine: Any, monkeypatch: pytest.Monkey
         assert span.attributes[GARDEN_CONTENT_CAPTURED] is False
         assert span.attributes[GARDEN_EVAL_RUN_ID] == "run-stdio"
         assert span.attributes[GARDEN_EVAL_TRIAL_ID] == "trial-stdio"
+    provider.shutdown()
+
+
+def test_stdio_mcp_captures_tool_arguments_and_result_when_enabled(
+    engine: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    provider = TracerProvider()
+    exporter = InMemorySpanExporter()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    monkeypatch.setattr(trace, "get_tracer", provider.get_tracer)
+    monkeypatch.setenv(GEN_AI_CAPTURE_CONTENT_ENV, "SPAN_ONLY")
+    message = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {"name": "files_file_read", "arguments": {"sha256": SHA}},
+    }
+
+    serve(engine, StringIO(json.dumps(message)), StringIO())
+
+    [tool_span] = [
+        span
+        for span in exporter.get_finished_spans()
+        if span.attributes is not None
+        and span.attributes.get(GEN_AI_OPERATION_NAME) == "execute_tool"
+    ]
+    assert tool_span.attributes is not None
+    assert tool_span.attributes[GARDEN_CONTENT_CAPTURED] is True
+    assert json.loads(str(tool_span.attributes[GEN_AI_TOOL_CALL_ARGUMENTS])) == {"sha256": SHA}
+    assert json.loads(str(tool_span.attributes[GEN_AI_INPUT_MESSAGES])) == {"sha256": SHA}
+    assert json.loads(str(tool_span.attributes[GEN_AI_TOOL_CALL_RESULT])) is not None
+    assert (
+        tool_span.attributes[GEN_AI_OUTPUT_MESSAGES]
+        == tool_span.attributes[GEN_AI_TOOL_CALL_RESULT]
+    )
     provider.shutdown()

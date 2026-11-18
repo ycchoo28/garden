@@ -113,3 +113,22 @@ Previously stored traces keep their original attributes.
 
 Local app and eval exporters use the `garden_eval_traces` stream.
 If you configure an exporter yourself, include `stream-name=garden_eval_traces` in its OTLP trace headers for the monitoring dashboard.
+
+### Tool payloads, runtime context and generated artifacts
+
+Eval tracing captures bounded tool arguments and JSON results in development mode.
+Production content capture remains disabled.
+The model gateway and harness housekeeping requests are not displayed as business tool calls.
+DSH runtime-context snapshots are stored in `garden.model.runtime_context`, while the captured human conversation retains the actual task question.
+This changes trace presentation only; the model still receives its runtime context.
+
+The `Generated artifacts` panel shows the claim state and generated workspace file previews saved before trial cleanup.
+The same snapshot is on the trial root and its `eval.artifacts` child span.
+Text previews are bounded; binary files have metadata and a digest rather than a full download.
+Workspace symlinks are excluded.
+A captured draft is a historical snapshot, not a live claim page backed by the deleted trial database.
+
+The frontend dependency graph contains no `picomatch` and its high-severity audit remains strict.
+The unchanged DSH installer lockfile retains `picomatch` through the required `@deepseek-ai/dsh-hmr` package.
+The user-approved exception for GHSA-fc5q-39xc-vjpf is recorded only in `security/dsh-audit-exceptions.json`; it is not a global scanner ignore.
+Revisit it when that parent drops `picomatch` or a patched release becomes available.

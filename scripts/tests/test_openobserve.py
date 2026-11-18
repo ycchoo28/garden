@@ -206,6 +206,54 @@ def test_catalog_tab_displays_questions_without_a_telemetry_query() -> None:
     assert panel["queries"] == []
 
 
+def test_apply_definitions_with_task_catalog_does_not_mutate_alerts() -> None:
+    class FakeClient:
+        org = "default"
+        base_url = "http://127.0.0.1:55086"
+
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str, dict[str, object] | None]] = []
+
+        def dashboards(self) -> list[dict[str, object]]:
+            return []
+
+        def alerts(self) -> list[dict[str, object]]:
+            return []
+
+        def request(self, method: str, path: str, body: dict[str, object] | None = None) -> object:
+            self.calls.append((method, path, body))
+            return {}
+
+    client = FakeClient()
+    dashboards = [
+        {
+            "title": "Garden agent evals",
+            "dashboardId": "",
+            "tabs": [{"tabId": "default", "name": "Evals", "panels": []}],
+        }
+    ]
+    alerts = [{"name": "garden_regression_task_failed", "destinations": []}]
+    catalog = [
+        {
+            "id": "example",
+            "prompt": "Draft a claim.",
+            "suite": "capability",
+            "area": "claims",
+            "confirmation": "none",
+            "budget_tool_calls": 10,
+            "budget_seconds": None,
+            "budget_tokens": 1000,
+            "graders": [{"id": "draft", "description": "Checks draft state."}],
+        }
+    ]
+    assert apply_openobserve.apply_definitions(client, dashboards, alerts, "dest", catalog) == (
+        1,
+        1,
+    )
+    assert len(cast(list[object], client.calls[0][2]["tabs"])) == 2
+    assert "tabs" not in cast(dict[str, object], client.calls[1][2])
+
+
 def test_schema_initialization_creates_streams_and_only_adds_missing_fields() -> None:
     class SchemaClient:
         org = "default"

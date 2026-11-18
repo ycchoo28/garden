@@ -21,6 +21,11 @@ from urllib.parse import urlsplit
 
 from garden.trace_contract import GEN_AI_CAPTURE_CONTENT_ENV
 from tests.evals import runner
+from tests.evals.artifacts import (
+    collect_trial_artifacts,
+    snapshot_claims,
+    snapshot_workspace,
+)
 from tests.evals.embedding import ensure_embedding_server
 from tests.evals.grading import GraderResult
 from tests.evals.model_harness import installed_dsh_entry, prepare_dsh, run_dsh
@@ -280,6 +285,18 @@ def run_model_trials(
             }
             record["trace_id"] = telemetry.trace_id(span)
             safe_record = cast(dict[str, object], _redact(record, upstream_key))
+            artifacts_value = safe_record.get("artifacts")
+            artifacts = (
+                cast(list[dict[str, object]], artifacts_value)
+                if isinstance(artifacts_value, list)
+                else []
+            )
+            telemetry.record_artifacts(
+                span,
+                artifacts,
+                run_id=active_run_id,
+                trial_id=trial_id,
+            )
             passed = safe_record.get("passed") is True
             span.set_attribute("garden.eval.passed", passed)
             failure_reason = safe_record.get("failure_reason")
@@ -505,6 +522,7 @@ def run_model_trial(
     budget_exceeded: str | None = None
     error: str | None = None
     graders: list[GraderResult] = []
+    artifacts: list[dict[str, object]] = []
     try:
         runner.new_database(database, template=runner.TEMPLATE_DB)
         db_created = True
@@ -529,19 +547,22 @@ def run_model_trial(
                 run_id=run_id,
                 trial_id=trial_id,
             )
+            workspace = temp / "workspace"
             command, dsh_env = prepare_dsh(
                 task,
                 portal_url=api_url,
                 model=model,
                 acting_token=logins["acting"],
                 home=temp / "home",
-                workspace=temp / "workspace",
+                workspace=workspace,
                 environ=environ,
                 traceparent=EvalTelemetry.traceparent(),
             )
+            before_workspace = snapshot_workspace(workspace)
+            before_claims = snapshot_claims(api_url, logins["acting"])
             result = run_dsh(
                 command,
-                cwd=temp / "workspace",
+                cwd=workspace,
                 env=dsh_env,
                 budget_tool_calls=(
                     task.budget_tool_calls
@@ -572,6 +593,13 @@ def run_model_trial(
                 gateway_tokens = runner.gateway_usage_total(api_url, logins["acting"])
             except Exception as failure:
                 gateway_usage_error = str(failure)
+            artifacts = collect_trial_artifacts(
+                workspace=workspace,
+                before_workspace=before_workspace,
+                api_url=api_url,
+                token=logins["acting"],
+                before_claims=before_claims,
+            )
             graders = runner.grade_task(
                 task,
                 api_url,
@@ -653,6 +681,7 @@ def run_model_trial(
         "database": database,
         "database_kept": db_kept,
         "confirmation": task.confirmation,
+        "artifacts": artifacts,
     }
 
 
