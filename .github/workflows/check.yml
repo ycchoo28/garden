@@ -39,6 +39,11 @@ jobs:
       - name: Install Chromium for the browser tests
         run: cd frontend && bunx playwright install --with-deps chromium
       - name: Check
+        # Keep listeners below Linux's ephemeral client-port range during API startup.
+        env:
+          GARDEN_E2E_API_URL: http://127.0.0.1:15000
+          GARDEN_E2E_WEB_URL: http://localhost:15173
+          GARDEN_E2E_EMBEDDING_URL: http://127.0.0.1:15084
         run: just check
 
   eval-reference:
@@ -98,4 +103,9 @@ jobs:
       - name: Prove guardrails reject planted violations and permit valid code
         run: just guardrail-test
       - name: Check the generated module
+        # Keep listeners below Linux's ephemeral client-port range during API startup.
+        env:
+          GARDEN_E2E_API_URL: http://127.0.0.1:15000
+          GARDEN_E2E_WEB_URL: http://localhost:15173
+          GARDEN_E2E_EMBEDDING_URL: http://127.0.0.1:15084
         run: just check

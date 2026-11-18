@@ -341,6 +341,7 @@ e2e: up
     set -euo pipefail
     api="${GARDEN_E2E_API_URL:-{{api_url}}}"
     web="${GARDEN_E2E_WEB_URL:-{{web_url}}}"
+    embedding="${GARDEN_E2E_EMBEDDING_URL:-http://127.0.0.1:55084}"
     export GARDEN_E2E_API_URL="$api"
     export GARDEN_E2E_WEB_URL="$web"
     export GARDEN_PUBLIC_URL="$web"
@@ -348,7 +349,7 @@ e2e: up
     # The first sign-in page a fresh provider serves is slow, so warm the page the browser opens too.
     curl --fail --silent --show-error --max-time 60 --retry 30 --retry-all-errors --retry-delay 1 "$GARDEN_OIDC_ISSUER/authorize?client_id=$GARDEN_OIDC_CLIENT_ID&response_type=code&redirect_uri=$GARDEN_PUBLIC_URL/auth/callback&scope=openid&state=warmup" >/dev/null
     # The tests start their own API, worker, web app and embedder, so those ports must be free.
-    for port in "${api##*:}" "${web##*:}" 55084; do
+    for port in "${api##*:}" "${web##*:}" "${embedding##*:}"; do
         if (echo > "/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
             echo "Port $port is already in use, for example by just demo or just dev. Stop it before the browser tests." >&2
             exit 1

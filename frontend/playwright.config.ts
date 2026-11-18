@@ -4,7 +4,7 @@ import { API_URL, WEB_URL } from './e2e/urls';
 
 // The API and the background worker both embed text. The browser tests use a fake embeddings server
 // (backend/tests/fake_embedding_server.py), so no test needs the bge-m3 model or an API key.
-const EMBEDDING_URL = 'http://127.0.0.1:55084';
+const EMBEDDING_URL = process.env.GARDEN_E2E_EMBEDDING_URL ?? 'http://127.0.0.1:55084';
 
 // The browser tests run against the dev stack: Vite proxies /api and /auth to the API.
 // GARDEN_E2E_WEB_URL and GARDEN_E2E_API_URL move both (see e2e/urls.ts). The API reads the repo-root
