@@ -104,7 +104,10 @@ DSH can send a separate request to create a short session title.
 That request wraps the human message in a JSON array and asks the model to generate a title.
 The task execution uses its own model request with the original task prompt and agent context.
 Recognized title calls have the span name `chat conversation_title` and `garden.model.side_call.type=conversation_title`.
-They retain the Garden conversation ID and trial trace, but use a separate `gen_ai.conversation.id` ending in `:title` so OpenObserve does not prepend title instructions to the task thread.
+They retain the Garden conversation ID and trial trace, and use a separate `gen_ai.conversation.id` ending in `:title` for consumers that group conversations.
+OpenObserve's whole-trace Thread view can still combine auxiliary messages.
+Headless model evals disable the automatic LLM title provider and use DSH's deterministic title fallback, avoiding the extra request and its token cost.
+Interactive sessions retain automatic title generation.
 Their usage remains included in gateway model usage.
 Previously stored traces keep their original attributes.
 

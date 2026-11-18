@@ -219,6 +219,9 @@ def prepare_dsh(
     if not isinstance(patch_value, list):
         raise StepFailed("dsh's configuration template is invalid.")
     patch = cast(list[object], patch_value)
+    # Eval trials already have stable task IDs. Use DSH's deterministic fallback
+    # title instead of paying for an auxiliary completion that obscures the task thread.
+    patch.append({"id": "session-title-llm", "disabled": True})
     for layer_value in patch:
         layer = _object(layer_value)
         rows_value = layer.get("insert") if layer is not None else None

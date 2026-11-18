@@ -42,6 +42,7 @@ def test_prepare_dsh_propagates_the_trial_parent_to_model_and_mcp_calls(
 
     patch_value = yaml.safe_load((tmp_path / "home" / ".dsh" / "cordis.patch.yml").read_text())
     patch = cast(list[object], patch_value)
+    assert {"id": "session-title-llm", "disabled": True} in patch
 
     def row_by_id(row_id: str) -> dict[str, object]:
         for layer_value in patch:
