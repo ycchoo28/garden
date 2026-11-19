@@ -65,6 +65,7 @@ Read it before you change anything, then read the folder you work in.
 - [GLOSSARY.md](GLOSSARY.md) for the domain words. Use these terms and avoid the ones it lists as terms to avoid.
 - [docs/code-patterns.md](docs/code-patterns.md) for how to write a route, a service, a repository and a test.
 - [docs/ui.md](docs/ui.md) for the frontend shell and colour rules.
+- [docs/wsl-testing.md](docs/wsl-testing.md) for remote WSL 2 acceptance testing (`just wsl-accept` and `win-test-wsl`).
 - [docs/adr/README.md](docs/adr/README.md) for the decisions and why they were made.
 
 ## Architecture enforcement and handover

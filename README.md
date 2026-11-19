@@ -162,6 +162,7 @@ Shell `GARDEN_*` variables override that file.
 `GARDEN_DEMO_API_PORT`, `GARDEN_DEMO_WEB_PORT`, `GARDEN_DEMO_EMBEDDING_PORT` and `GARDEN_DEMO_MODEL_PORT` override the loopback ports (55000, 55173, 55084 and 55085).
 `GARDEN_DEV_POSTGRES_PORT`, `GARDEN_DEV_OIDC_PORT` and `COMPOSE_PROJECT_NAME` isolate Compose dependencies; set the database URL and OIDC issuer to match.
 Automated runs must use a fresh database ending in `_test` and isolated HOME, `GARDEN_HOME`, `GARDEN_DSH_HOME` and `GARDEN_BIN_DIR`, then drop that database and stop their test Compose project afterwards.
+For remote WSL 2 acceptance testing (`just wsl-accept` and direct `win-test-wsl` SSH), see [docs/wsl-testing.md](docs/wsl-testing.md).
 
 ## Development setup
 
