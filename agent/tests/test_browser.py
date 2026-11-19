@@ -8,10 +8,10 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-from conftest import finish_login, open_sign_in
-from fake_portal import FakePortal
 
 from garden.auth import open_link
+from tests.shared.fake_portal import FakePortal
+from tests.shared.garden_cli import finish_login, open_sign_in
 
 # The line gio printed on the captain's terminal when no handler was set up.
 GIO_NOISE = "gio: https://portal.example.test/cli/login?port=34053: Operation not supported"

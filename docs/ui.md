@@ -1,6 +1,6 @@
 # Frontend and UI
 
-The frontend is Vue 3 with strict TypeScript, built by Vite and run by Bun.
+The frontend is Vue 3 with strict TypeScript, built by Rsbuild and run by Bun.
 It talks to the API through a client generated from the OpenAPI contract, with TanStack vue-query for caching and zod for validation.
 
 ## Shell

@@ -19,6 +19,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from opentelemetry import propagate, trace
+
 from garden import __version__
 from garden.shared import (
     CliTooOld,
@@ -28,6 +30,14 @@ from garden.shared import (
     as_object,
     as_text,
     is_object,
+)
+from garden.trace_contract import (
+    GARDEN_AGENT_FLAG,
+    GARDEN_AGENT_LOGIN_ID,
+    GARDEN_AGENT_LOGIN_ID_HEADER,
+    GARDEN_EVAL_TRACEPARENT_ENV,
+    GARDEN_PERSON_ID,
+    GARDEN_PERSON_ID_HEADER,
 )
 
 CONTRACT_HEADER = "x-garden-contract-version"
@@ -152,6 +162,8 @@ class PortalClient:
         self.token = token
         self.timeout = parse_client_timeout() if timeout is None else timeout
         self._transport = transport or UrllibTransport()
+        self.person_id: str | None = None
+        self.agent_login_id: str | None = None
 
     def url(self, path: str, query: dict[str, Any] | None = None) -> str:
         full = f"{self.portal_url}{path}"
@@ -186,10 +198,28 @@ class PortalClient:
             data = json.dumps(body).encode("utf-8")
         if self.token:
             request_headers["Authorization"] = f"Bearer {self.token}"
+        propagate.inject(request_headers)
+        if not request_headers.get("traceparent"):
+            traceparent = os.environ.get(GARDEN_EVAL_TRACEPARENT_ENV)
+            if traceparent:
+                request_headers["traceparent"] = traceparent
         request = urllib.request.Request(
             self.url(path, query), data=data, method=method, headers=request_headers
         )
         response = self._transport.send(request, self.timeout)
+        person_id = response.headers.get(GARDEN_PERSON_ID_HEADER)
+        login_id = response.headers.get(GARDEN_AGENT_LOGIN_ID_HEADER)
+        if person_id:
+            self.person_id = person_id
+        if login_id:
+            self.agent_login_id = login_id
+        span = trace.get_current_span()
+        if span.is_recording():
+            if person_id:
+                span.set_attribute(GARDEN_PERSON_ID, person_id)
+            if login_id:
+                span.set_attribute(GARDEN_AGENT_LOGIN_ID, login_id)
+                span.set_attribute(GARDEN_AGENT_FLAG, True)
         check_min_version(response.headers)
         return response
 

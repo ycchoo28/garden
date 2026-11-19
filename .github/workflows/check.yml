@@ -39,7 +39,37 @@ jobs:
       - name: Install Chromium for the browser tests
         run: cd frontend && bunx playwright install --with-deps chromium
       - name: Check
+        # Keep listeners below Linux's ephemeral client-port range during API startup.
+        env:
+          GARDEN_E2E_API_URL: http://127.0.0.1:15000
+          GARDEN_E2E_WEB_URL: http://localhost:15173
+          GARDEN_E2E_EMBEDDING_URL: http://127.0.0.1:15084
         run: just check
+
+  eval-reference:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.3"
+      - uses: extractions/setup-just@v3
+      - name: Set up
+        run: just setup
+      - name: Install Chromium for the scripted browser evals
+        run: cd frontend && bunx playwright install --with-deps chromium
+      - name: Run scripted reference evals
+        run: just agent-eval --reference --fake-embedding --junitxml dist/evals/junit.xml
+      - name: Publish JUnit results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-eval-junit
+          path: agent/dist/evals/junit.xml
+          if-no-files-found: error
 
   scaffold:
     runs-on: ubuntu-24.04
@@ -73,4 +103,9 @@ jobs:
       - name: Prove guardrails reject planted violations and permit valid code
         run: just guardrail-test
       - name: Check the generated module
+        # Keep listeners below Linux's ephemeral client-port range during API startup.
+        env:
+          GARDEN_E2E_API_URL: http://127.0.0.1:15000
+          GARDEN_E2E_WEB_URL: http://localhost:15173
+          GARDEN_E2E_EMBEDDING_URL: http://127.0.0.1:15084
         run: just check

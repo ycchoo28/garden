@@ -1,0 +1,945 @@
+"""Build isolated reference trials and record their complete results."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import re
+import secrets
+import shutil
+import socket
+import subprocess
+import sys
+import tempfile
+import time
+import uuid
+from datetime import UTC, datetime, timedelta, timezone
+from pathlib import Path
+from typing import cast
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit, urlunsplit
+from urllib.request import Request, urlopen
+
+from garden.trace_contract import (
+    GARDEN_EVAL_RUN_ID_ENV,
+    GARDEN_EVAL_TRIAL_ID_ENV,
+    GEN_AI_CAPTURE_CONTENT_ENV,
+)
+from tests.evals.artifacts import (
+    collect_trial_artifacts,
+    snapshot_claims,
+    snapshot_workspace,
+)
+from tests.evals.embedding import ensure_embedding_server
+from tests.evals.grading import DraftClaimGrader, GraderResult, api_json, trial_passed
+from tests.evals.harness import DshHarnessAdapter
+from tests.evals.knowledge_grading import AnswerJudgeGrader, JudgeModel
+from tests.evals.task_types import EvalTask, ReferenceSolution
+from tests.evals.tasks import ClaimDraftTask
+from tests.evals.telemetry import EvalTelemetry
+from tests.shared.paths import AGENT_ROOT, REPO
+from tests.shared.stack import Services, free_port, psql, wait_for
+from tests.shared.transcript import StepFailed
+
+TEMPLATE_DB = "garden_agent_eval_template"
+OWNED_DB = re.compile(r"^garden_agent_eval_(?:template|[a-z0-9-]+)$")
+OUTPUT = AGENT_ROOT / "dist" / "evals"
+RUNS = OUTPUT / "runs"
+
+
+RUN_ID_TIMEZONE = timezone(timedelta(hours=8))
+
+
+def make_run_id(*, task_count: int | None = None, mode: str | None = None) -> str:
+    """Build a chronological, human-readable run id (GMT+8) safe for filenames and DB prefixes."""
+    stamp = datetime.now(RUN_ID_TIMEZONE).strftime("%Y-%m-%d-%H%M%S-gmt8")
+    short = uuid.uuid4().hex[:6]
+    parts = [stamp]
+    if mode == "reference":
+        parts.append("ref")
+    if task_count is not None:
+        parts.append(f"{task_count}task" if task_count == 1 else f"{task_count}tasks")
+    parts.append(short)
+    return "-".join(parts)
+
+
+def run_db_tag(run_id: str) -> str:
+    """Short unique lowercase hex tag derived from run_id for Postgres DB names."""
+    return hashlib.sha256(run_id.encode()).hexdigest()[:8]
+
+
+def _as_object(value: object) -> dict[str, object] | None:
+    if not isinstance(value, dict):
+        return None
+    return cast(dict[str, object], value)
+
+
+def prereqs_missing(environ: dict[str, str]) -> list[str]:
+    missing = [name for name in ("docker", "just", "uv") if shutil.which(name) is None]
+    if not environ.get("GARDEN_DATABASE_URL"):
+        missing.append("GARDEN_DATABASE_URL is not set; run 'just setup' or set it in .env")
+    try:
+        database = urlsplit(environ.get("GARDEN_DATABASE_URL", ""))
+        if database.scheme not in {"postgresql", "postgresql+psycopg"}:
+            missing.append("GARDEN_DATABASE_URL must use PostgreSQL")
+        elif database.hostname not in {"localhost", "127.0.0.1"}:
+            missing.append("GARDEN_DATABASE_URL must point to the local Compose database")
+        else:
+            expected_port = int(environ.get("GARDEN_DEV_POSTGRES_PORT", "55432"))
+            if database.port != expected_port:
+                missing.append(
+                    "GARDEN_DATABASE_URL must use the Compose port in GARDEN_DEV_POSTGRES_PORT"
+                )
+    except ValueError:
+        missing.append("GARDEN_DATABASE_URL is invalid")
+    if environ.get("GARDEN_ENVIRONMENT", "dev") != "dev":
+        missing.append("GARDEN_ENVIRONMENT must be dev for local evals")
+    issuer = urlsplit(environ.get("GARDEN_OIDC_ISSUER", "http://127.0.0.1:55081/default"))
+    try:
+        expected_oidc_port = int(environ.get("GARDEN_DEV_OIDC_PORT", "55081"))
+        if (
+            issuer.scheme != "http"
+            or issuer.hostname not in {"localhost", "127.0.0.1"}
+            or issuer.port != expected_oidc_port
+        ):
+            missing.append("GARDEN_OIDC_ISSUER must point to the local Compose identity provider")
+    except ValueError:
+        missing.append("GARDEN_OIDC_ISSUER is invalid")
+    if shutil.which("docker") is not None:
+        try:
+            result = subprocess.run(
+                ["docker", "info", "--format", "{{.ServerVersion}}"],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=20,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            result = None
+        if result is None or result.returncode != 0:
+            missing.append("Docker is installed, but its daemon is not reachable")
+    return missing
+
+
+def _run(
+    command: list[str],
+    *,
+    cwd: Path,
+    env: dict[str, str],
+    timeout: float = 600,
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        command,
+        cwd=cwd,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+
+
+def start_stack(env: dict[str, str]) -> None:
+    database = urlsplit(env.get("GARDEN_DATABASE_URL", ""))
+    issuer = urlsplit(env.get("GARDEN_OIDC_ISSUER", "http://127.0.0.1:55081/default"))
+    if not _port_ready(database.hostname, database.port) or not _port_ready(
+        issuer.hostname, issuer.port
+    ):
+        try:
+            result = _run(["just", "up"], cwd=REPO, env=env, timeout=1200)
+        except (OSError, subprocess.TimeoutExpired) as error:
+            raise StepFailed(
+                f"Could not start the Garden dev stack with 'just up': {error}."
+            ) from error
+        if result.returncode != 0:
+            output = (result.stdout + result.stderr).strip()
+            raise StepFailed(
+                f"Could not start the Garden dev stack with 'just up':\n{output[-4000:]}"
+            )
+    issuer = env.get("GARDEN_OIDC_ISSUER", "http://127.0.0.1:55081/default").rstrip("/")
+    wait_for(f"{issuer}/.well-known/openid-configuration", timeout=120)
+
+
+def _port_ready(host: str | None, port: int | None) -> bool:
+    if host is None or port is None:
+        return False
+    try:
+        with socket.create_connection((host, port), timeout=2):
+            return True
+    except OSError:
+        return False
+
+
+def _database_url(database: str, env: dict[str, str]) -> str:
+    parsed = urlsplit(env["GARDEN_DATABASE_URL"])
+    return urlunsplit((parsed.scheme, parsed.netloc, f"/{database}", parsed.query, parsed.fragment))
+
+
+def _template_fingerprint(task: EvalTask, embedder: str) -> str:
+    backend = REPO / "backend"
+    paths = [backend / "app" / "seed.py", backend / "app" / "composition.py"]
+    paths.extend(sorted((backend / "migrations").rglob("*.py")))
+    paths.extend(sorted((backend / "app").rglob("permissions.py")))
+    if task.requires_embedding:
+        paths.append(backend / "app" / "demo_seed.py")
+        paths.extend(sorted((backend / "app" / "demo_data" / "policies").glob("*.md")))
+        if embedder.startswith("fake:"):
+            paths.append(backend / "tests" / "fakes.py")
+    digest = hashlib.sha256(b"garden-agent-eval-template-v2\n")
+    digest.update(task.asking_person.encode())
+    digest.update(b"\0")
+    digest.update(embedder.encode())
+    for path in sorted(set(paths)):
+        digest.update(path.relative_to(backend).as_posix().encode())
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def _database_exists(name: str) -> bool:
+    return psql("postgres", f"select count(*) from pg_database where datname = '{name}'") == "1"
+
+
+def drop_owned_database(name: str) -> None:
+    if not OWNED_DB.fullmatch(name):
+        raise StepFailed(f"Refusing to drop a database not owned by this eval runner: {name}.")
+    psql("postgres", f'drop database if exists "{name}" with (force)')
+
+
+def new_database(name: str, *, template: str | None = None) -> None:
+    if not OWNED_DB.fullmatch(name):
+        raise StepFailed(f"Refusing to create a database outside the eval namespace: {name}.")
+    clause = f' with template "{template}"' if template else ""
+    psql("postgres", f'create database "{name}"{clause}')
+
+
+def _template_marker() -> str:
+    return psql(
+        "postgres",
+        "select coalesce(shobj_description(oid, 'pg_database'), '') "
+        f"from pg_database where datname = '{TEMPLATE_DB}'",
+    )
+
+
+def _backend_env(
+    database: str,
+    files_root: Path,
+    base_env: dict[str, str],
+    model_env: dict[str, str] | None = None,
+    *,
+    public_url: str | None = None,
+    run_id: str | None = None,
+    trial_id: str | None = None,
+) -> dict[str, str]:
+    env = {key: value for key, value in base_env.items() if not key.startswith("GARDEN_")}
+    env.update(
+        {
+            "GARDEN_ENVIRONMENT": "dev",
+            "GARDEN_DATABASE_URL": _database_url(database, base_env),
+            "GARDEN_FAKE_OIDC": "true",
+            "GARDEN_OIDC_ISSUER": base_env.get(
+                "GARDEN_OIDC_ISSUER", "http://127.0.0.1:55081/default"
+            ),
+            "GARDEN_OIDC_CLIENT_ID": base_env.get("GARDEN_OIDC_CLIENT_ID", "garden-dev"),
+            "GARDEN_OIDC_CLIENT_SECRET": base_env.get(
+                "GARDEN_OIDC_CLIENT_SECRET", "garden-dev-secret"
+            ),
+            "GARDEN_PUBLIC_URL": public_url
+            or base_env.get("GARDEN_PUBLIC_URL", "http://localhost:55173"),
+            "GARDEN_FILES_ROOT": str(files_root),
+            GEN_AI_CAPTURE_CONTENT_ENV: base_env.get(GEN_AI_CAPTURE_CONTENT_ENV, "SPAN_ONLY"),
+        }
+    )
+    if "GARDEN_EMBEDDING_URL" in base_env:
+        env["GARDEN_EMBEDDING_URL"] = base_env["GARDEN_EMBEDDING_URL"]
+    if run_id is not None:
+        env[GARDEN_EVAL_RUN_ID_ENV] = run_id
+    if trial_id is not None:
+        env[GARDEN_EVAL_TRIAL_ID_ENV] = trial_id
+    if model_env is not None:
+        env.update(model_env)
+    return env
+
+
+def start_api(
+    database: str,
+    files_root: Path,
+    log: Path,
+    base_env: dict[str, str],
+    services: Services,
+    model_env: dict[str, str] | None = None,
+    *,
+    public_url: str | None = None,
+    port: int | None = None,
+    run_id: str | None = None,
+    trial_id: str | None = None,
+) -> str:
+    port = port or free_port()
+    files_root.mkdir(parents=True, exist_ok=True)
+    process = services.start(
+        ["uv", "run", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", str(port)],
+        cwd=REPO / "backend",
+        env=_backend_env(
+            database,
+            files_root,
+            base_env,
+            model_env,
+            public_url=public_url,
+            run_id=run_id,
+            trial_id=trial_id,
+        ),
+        log=log,
+    )
+    url = f"http://127.0.0.1:{port}"
+    wait_for(f"{url}/api/health", timeout=120)
+    if process.poll() is not None:
+        raise StepFailed(f"The trial API exited during startup. See {log}.")
+    return url
+
+
+def _start_web(
+    api_url: str,
+    web_url: str,
+    base_env: dict[str, str],
+    log: Path,
+    services: Services,
+) -> None:
+    web_env = {key: value for key, value in base_env.items() if not key.startswith("GARDEN_")}
+    web_env["GARDEN_E2E_API_URL"] = api_url
+    port = urlsplit(web_url).port
+    if port is None:
+        raise StepFailed("The trial web URL has no port.")
+    process = services.start(
+        ["bun", "run", "dev", "--strictPort", "--host", "127.0.0.1", "--port", str(port)],
+        cwd=REPO / "frontend",
+        env=web_env,
+        log=log,
+    )
+    wait_for(web_url, timeout=120)
+    if process.poll() is not None:
+        raise StepFailed(f"The trial web app exited during startup. See {log}.")
+
+
+def _request_json(
+    url: str,
+    *,
+    method: str,
+    body: dict[str, object] | None = None,
+    cookie: str | None = None,
+) -> tuple[int, object]:
+    data = None if body is None else json.dumps(body).encode()
+    request = Request(url, data=data, method=method)
+    if data is not None:
+        request.add_header("Content-Type", "application/json")
+    if cookie is not None:
+        request.add_header("Cookie", cookie)
+    try:
+        with urlopen(request, timeout=30) as response:
+            return response.status, cast(object, json.loads(response.read()))
+    except HTTPError as error:
+        content = error.read()
+        try:
+            response = cast(object, json.loads(content or b"null"))
+        except json.JSONDecodeError:
+            response = {"detail": content.decode("utf-8", "replace")}
+        return error.code, response
+    except (URLError, TimeoutError, json.JSONDecodeError) as error:
+        raise StepFailed(
+            f"Could not create a trial Agent login through the API: {error}."
+        ) from error
+
+
+def _create_agent_login(api_url: str, database: str, subject: str, device: str) -> str:
+    browser_token = secrets.token_urlsafe(32)
+    hashed = hashlib.sha256(browser_token.encode()).hexdigest()
+    escaped_subject = subject.replace("'", "''")
+    psql(
+        database,
+        "insert into users.web_session (token_hash, person_id, created_at, last_seen_at) "
+        f"select '{hashed}', id, now(), now() from users.person "
+        f"where subject = '{escaped_subject}'",
+    )
+    if (
+        psql(
+            database,
+            f"select count(*) from users.web_session where token_hash = '{hashed}'",
+        )
+        != "1"
+    ):
+        raise StepFailed(f"The seeded person {subject!r} was not found for the trial Agent login.")
+    status, response = _request_json(
+        f"{api_url}/api/agent/my-logins",
+        method="POST",
+        cookie=f"garden_session={browser_token}",
+        body={"device": device, "expires_in_days": 30},
+    )
+    response_object = _as_object(response)
+    token = response_object.get("token") if response_object is not None else None
+    if status != 201 or not isinstance(token, str):
+        raise StepFailed(
+            f"The API could not create the trial Agent login for {subject!r} (HTTP {status})."
+        )
+    return token
+
+
+def _create_person_session(database: str, subject: str) -> str:
+    browser_token = secrets.token_urlsafe(32)
+    hashed = hashlib.sha256(browser_token.encode()).hexdigest()
+    escaped_subject = subject.replace("'", "''")
+    psql(
+        database,
+        "insert into users.web_session (token_hash, person_id, created_at, last_seen_at) "
+        f"select '{hashed}', id, now(), now() from users.person "
+        f"where subject = '{escaped_subject}'",
+    )
+    if (
+        psql(
+            database,
+            f"select count(*) from users.web_session where token_hash = '{hashed}'",
+        )
+        != "1"
+    ):
+        raise StepFailed(f"The seeded person {subject!r} was not found for the browser session.")
+    return browser_token
+
+
+def ensure_template(
+    env: dict[str, str], output: Path, task: EvalTask, embedder: str
+) -> dict[str, str]:
+    fingerprint = _template_fingerprint(task, embedder)
+    marker = f"garden-agent-eval-template:{embedder}:{fingerprint}"
+    login_file = output / "template-logins.json"
+    if _template_marker() == marker and login_file.is_file():
+        try:
+            logins = _as_object(cast(object, json.loads(login_file.read_text(encoding="utf-8"))))
+            if (
+                logins is not None
+                and logins.get("acting_subject") == task.asking_person
+                and isinstance(logins.get("acting"), str)
+                and isinstance(logins.get("grader"), str)
+                and (
+                    not isinstance(task, ClaimDraftTask)
+                    or isinstance(logins.get("person_session"), str)
+                )
+            ):
+                acting = logins["acting"]
+                grader = logins["grader"]
+                assert isinstance(acting, str) and isinstance(grader, str)
+                cached_logins = {"acting": acting, "grader": grader}
+                if isinstance(task, ClaimDraftTask):
+                    person_session = logins["person_session"]
+                    assert isinstance(person_session, str)
+                    cached_logins["person_session"] = person_session
+                return cached_logins
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    if _database_exists(TEMPLATE_DB):
+        drop_owned_database(TEMPLATE_DB)
+    new_database(TEMPLATE_DB)
+    try:
+        template_env = _backend_env(TEMPLATE_DB, output / "template-files", env)
+        seed_modules = (
+            ("app.migrate", "app.demo_seed")
+            if task.requires_embedding
+            else (
+                "app.migrate",
+                "app.seed",
+            )
+        )
+        for module in seed_modules:
+            result = _run(
+                ["uv", "run", "python", "-m", module],
+                cwd=REPO / "backend",
+                env=template_env,
+                timeout=900,
+            )
+            if result.returncode != 0:
+                raise StepFailed(
+                    f"Template setup failed in {module}:\n{(result.stdout + result.stderr)[-4000:]}"
+                )
+
+        with tempfile.TemporaryDirectory(prefix="garden-eval-template-") as temp_name:
+            temp = Path(temp_name)
+            services = Services()
+            try:
+                api_url = start_api(
+                    TEMPLATE_DB,
+                    temp / "files",
+                    temp / "api.log",
+                    env,
+                    services,
+                )
+                logins = {
+                    "acting_subject": task.asking_person,
+                    "acting": _create_agent_login(
+                        api_url,
+                        TEMPLATE_DB,
+                        task.asking_person,
+                        "garden-eval-task",
+                    ),
+                    "grader": _create_agent_login(
+                        api_url,
+                        TEMPLATE_DB,
+                        "dev.admin@fernhill.example",
+                        "garden-eval-grader",
+                    ),
+                }
+                if isinstance(task, ClaimDraftTask):
+                    logins["person_session"] = _create_person_session(
+                        TEMPLATE_DB, task.asking_person
+                    )
+            finally:
+                services.stop_all()
+
+        psql(
+            "postgres",
+            f"comment on database \"{TEMPLATE_DB}\" is '{marker}'",
+        )
+        login_file.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(login_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(logins, handle)
+            handle.write("\n")
+        login_file.chmod(0o600)
+        return logins
+    except Exception:
+        drop_owned_database(TEMPLATE_DB)
+        raise
+
+
+def grade_task(
+    task: EvalTask,
+    api_url: str,
+    grader_token: str,
+    *,
+    answer: str,
+    reference: bool,
+    judge: JudgeModel | None = None,
+) -> list[GraderResult]:
+    results: list[GraderResult] = []
+    for grader in task.graders:
+        if isinstance(grader, AnswerJudgeGrader):
+            results.append(
+                grader.grade(
+                    api_url,
+                    grader_token,
+                    task,
+                    answer=answer,
+                    reference=reference,
+                    judge=judge,
+                )
+            )
+        else:
+            claim_grader = cast(DraftClaimGrader, grader)
+            results.append(
+                claim_grader.grade(
+                    api_url,
+                    grader_token,
+                    cast(ClaimDraftTask, task),
+                    answer=answer,
+                )
+            )
+    return results
+
+
+def gateway_usage_total(api_url: str, agent_token: str) -> int | None:
+    """Read the current trial's authoritative gateway token count."""
+    usage = _as_object(
+        api_json(
+            api_url,
+            "/api/agent/model/my-usage",
+            agent_token,
+            side_call="trial_metrics",
+        )
+    )
+    total = usage.get("total_tokens") if usage is not None else None
+    if isinstance(total, int) and not isinstance(total, bool) and total >= 0:
+        return total
+    return None
+
+
+def _trial_record(
+    *,
+    run_id: str,
+    task: EvalTask,
+    embedder: str,
+    variant: str,
+    expected_pass: bool,
+    started: float,
+    database: str,
+    db_kept: bool,
+    reference_solution: str,
+    answer: str,
+    exit_code: int,
+    tool_calls: int,
+    graders: list[GraderResult],
+    error: str | None,
+    artifacts: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
+    passed = error is None and trial_passed(graders)
+    failures = [result.reason for result in graders if result.verdict != "pass"]
+    failure_reason = error or (" ".join(failures) if failures else None)
+    return {
+        "run_id": run_id,
+        "trial_id": f"{run_db_tag(run_id)}-{variant}",
+        "task_id": task.id,
+        "suite": task.suite,
+        "area": task.area,
+        "model": "reference",
+        "repeat": 1,
+        "reference_solution": reference_solution,
+        "expected_pass": expected_pass,
+        "passed": passed,
+        "failure_reason": failure_reason,
+        "error": error,
+        "graders": [
+            {"grader": result.grader, "verdict": result.verdict, "reason": result.reason}
+            for result in graders
+        ],
+        "findings": [],
+        "tool_calls": tool_calls,
+        "tokens": 0,
+        "gateway_tokens": 0,
+        "duration_seconds": round(time.monotonic() - started, 3),
+        "dsh_exit_code": exit_code,
+        "final_answer": answer,
+        "trace_id": None,
+        "embedder": embedder,
+        "database": database,
+        "database_kept": db_kept,
+        "confirmation": task.confirmation,
+        "artifacts": [] if artifacts is None else artifacts,
+    }
+
+
+def run_trial(
+    *,
+    run_id: str,
+    task: EvalTask,
+    embedder: str,
+    variant: str,
+    expected_pass: bool,
+    solution: ReferenceSolution,
+    logins: dict[str, str],
+    env: dict[str, str],
+    output: Path,
+    keep_failed: bool,
+) -> dict[str, object]:
+    started = time.monotonic()
+    trial_id = f"{run_db_tag(run_id)}-{variant}"
+    database = f"garden_agent_eval_{trial_id}"
+    db_created = False
+    db_kept = False
+    answer = ""
+    exit_code = 1
+    tool_calls = 0
+    error: str | None = None
+    graders: list[GraderResult] = []
+    artifacts: list[dict[str, object]] = []
+    services = Services()
+    try:
+        new_database(database, template=TEMPLATE_DB)
+        db_created = True
+        with tempfile.TemporaryDirectory(prefix=f"garden-eval-{trial_id}-") as temp_name:
+            temp = Path(temp_name)
+            web_url: str | None = None
+            if isinstance(task, ClaimDraftTask):
+                api_port = free_port()
+                web_port = free_port()
+                web_url = f"http://127.0.0.1:{web_port}"
+                api_url = start_api(
+                    database,
+                    temp / "files",
+                    output / "logs" / f"{trial_id}.log",
+                    env,
+                    services,
+                    public_url=web_url,
+                    port=api_port,
+                    run_id=run_id,
+                    trial_id=trial_id,
+                )
+            else:
+                api_url = start_api(
+                    database,
+                    temp / "files",
+                    output / "logs" / f"{trial_id}.log",
+                    env,
+                    services,
+                    run_id=run_id,
+                    trial_id=trial_id,
+                )
+            if web_url is not None:
+                _start_web(
+                    api_url,
+                    web_url,
+                    env,
+                    output / "logs" / f"{trial_id}-web.log",
+                    services,
+                )
+            adapter: DshHarnessAdapter | None = None
+            workspace = temp / "workspace"
+            before_workspace: dict[str, str] = {}
+            before_claims: dict[str, object] = {}
+            try:
+                traceparent = EvalTelemetry.traceparent()
+                if isinstance(task, ClaimDraftTask):
+                    if web_url is None:
+                        raise StepFailed("The confirmation trial has no web URL.")
+                    adapter = DshHarnessAdapter(
+                        task,
+                        portal_url=api_url,
+                        database=database,
+                        public_url=web_url,
+                        oidc_url=env.get("GARDEN_OIDC_ISSUER", "http://127.0.0.1:55081/default"),
+                        home=temp / "home",
+                        workspace=workspace,
+                        media=temp / "media",
+                        acting_token=logins["acting"],
+                        person_session=logins["person_session"],
+                        traceparent=traceparent,
+                    )
+                else:
+                    adapter = DshHarnessAdapter(
+                        task,
+                        portal_url=api_url,
+                        database=database,
+                        home=temp / "home",
+                        workspace=workspace,
+                        acting_token=logins["acting"],
+                        traceparent=traceparent,
+                    )
+                before_workspace = snapshot_workspace(workspace)
+                before_claims = snapshot_claims(api_url, logins["acting"])
+                answer = adapter.run_reference(solution)
+                if isinstance(task, ClaimDraftTask):
+                    adapter.verify_confirmations()
+                exit_code = 0
+            except Exception as failure:
+                error = f"Reference solution failed: {failure}"
+            finally:
+                if adapter is not None:
+                    tool_calls = adapter.tool_calls
+                    try:
+                        adapter.close()
+                    except Exception as failure:
+                        if error is None:
+                            error = f"Harness cleanup failed: {failure}"
+            artifacts = collect_trial_artifacts(
+                workspace=workspace,
+                before_workspace=before_workspace,
+                api_url=api_url,
+                token=logins["acting"],
+                before_claims=before_claims,
+            )
+            graders = grade_task(
+                task,
+                api_url,
+                logins["grader"],
+                answer=answer,
+                reference=True,
+            )
+    except Exception as failure:
+        error = f"Trial setup failed: {failure}"
+        graders = [
+            GraderResult(grader.id, "fail", f"The trial could not run: {failure}")
+            for grader in task.graders
+        ]
+    finally:
+        try:
+            services.stop_all()
+        except Exception as failure:
+            if error is None:
+                error = f"Trial API cleanup failed: {failure}"
+
+    passed = error is None and trial_passed(graders)
+    if db_created and keep_failed and not passed:
+        db_kept = True
+    elif db_created:
+        try:
+            drop_owned_database(database)
+        except Exception as failure:
+            if error is None:
+                error = f"Trial database cleanup failed: {failure}"
+            passed = False
+
+    return _trial_record(
+        run_id=run_id,
+        task=task,
+        embedder=embedder,
+        variant=variant,
+        expected_pass=expected_pass,
+        started=started,
+        database=database,
+        db_kept=db_kept,
+        reference_solution=variant,
+        answer=answer,
+        exit_code=exit_code,
+        tool_calls=tool_calls,
+        graders=graders,
+        error=error,
+        artifacts=artifacts,
+    )
+
+
+def run_reference(
+    task: EvalTask,
+    *,
+    keep_failed: bool = False,
+    environ: dict[str, str] | None = None,
+    fake_embedding: bool = False,
+) -> tuple[dict[str, object], Path]:
+    started_at = datetime.now(UTC)
+    env = dict(os.environ if environ is None else environ)
+    missing = prereqs_missing(env)
+    if missing:
+        raise StepFailed(
+            "Missing eval prerequisites:\n" + "\n".join(f"- {item}" for item in missing)
+        )
+    start_stack(env)
+    OUTPUT.mkdir(parents=True, exist_ok=True)
+    RUNS.mkdir(parents=True, exist_ok=True)
+    (OUTPUT / "logs").mkdir(parents=True, exist_ok=True)
+    embedder = "none"
+    embedder_services = Services()
+    try:
+        if task.requires_embedding:
+            selected_embedder = ensure_embedding_server(
+                env,
+                OUTPUT / "logs",
+                embedder_services,
+                fake=fake_embedding,
+            )
+            embedder = selected_embedder.embedder
+            env["GARDEN_EMBEDDING_URL"] = selected_embedder.url
+        logins = ensure_template(env, OUTPUT, task, embedder)
+        run_id = make_run_id(task_count=1, mode="reference")
+        telemetry = EvalTelemetry(env)
+        records: list[dict[str, object]] = []
+        for variant, expected_pass, solution in (
+            ("perfect", True, task.perfect),
+            ("wrong", False, task.wrong),
+        ):
+            if solution is None:
+                raise StepFailed(f"Task {task.id!r} has no {variant} reference solution.")
+            trial_id = f"{run_db_tag(run_id)}-{variant}"
+            with telemetry.trial_span(
+                run_id=run_id,
+                trial_id=trial_id,
+                task_id=task.id,
+                suite=task.suite,
+                area=task.area,
+                model="reference",
+                repeat=1,
+            ) as span:
+                try:
+                    record = run_trial(
+                        run_id=run_id,
+                        task=task,
+                        embedder=embedder,
+                        variant=variant,
+                        expected_pass=expected_pass,
+                        solution=solution,
+                        logins=logins,
+                        env=env,
+                        output=OUTPUT,
+                        keep_failed=keep_failed,
+                    )
+                except Exception as failure:
+                    record = _trial_record(
+                        run_id=run_id,
+                        task=task,
+                        embedder=embedder,
+                        variant=variant,
+                        expected_pass=expected_pass,
+                        started=time.monotonic(),
+                        database=f"garden_agent_eval_{run_db_tag(run_id)}-{variant}",
+                        db_kept=False,
+                        reference_solution=variant,
+                        answer="",
+                        exit_code=1,
+                        tool_calls=0,
+                        graders=[
+                            GraderResult(grader.id, "fail", f"The trial runner failed: {failure}")
+                            for grader in task.graders
+                        ],
+                        error=f"Trial runner failed: {failure}",
+                    )
+                record["trace_id"] = telemetry.trace_id(span)
+                artifacts_value = record.get("artifacts")
+                artifacts = (
+                    cast(list[dict[str, object]], artifacts_value)
+                    if isinstance(artifacts_value, list)
+                    else []
+                )
+                telemetry.record_artifacts(
+                    span,
+                    artifacts,
+                    run_id=run_id,
+                    trial_id=trial_id,
+                )
+                span.set_attribute("garden.eval.passed", record.get("passed") is True)
+                failure_reason = record.get("failure_reason")
+                if isinstance(failure_reason, str):
+                    span.set_attribute("garden.eval.failure_reason", failure_reason)
+                telemetry.record_trial(record)
+            records.append(record)
+        passed = all(
+            record["passed"] is record["expected_pass"] and record["error"] is None
+            for record in records
+        )
+        summary: dict[str, object] = {
+            "run_id": run_id,
+            "started_at": started_at.isoformat(),
+            "finished_at": datetime.now(UTC).isoformat(),
+            "mode": "reference",
+            "task": {
+                "id": task.id,
+                "prompt": task.prompt,
+                "asking_person": task.asking_person,
+                "confirmation": task.confirmation,
+                "suite": task.suite,
+                "area": task.area,
+                "graders": [grader.id for grader in task.graders],
+                "budget_tool_calls": task.budget_tool_calls,
+                "budget_seconds": task.budget_seconds,
+                "budget_tokens": task.budget_tokens,
+                "web_tools_off": task.web_tools_off,
+                "requires_embedding": task.requires_embedding,
+                "embedder": embedder,
+            },
+            "passed": passed,
+            "trials": records,
+        }
+        path = RUNS / f"{run_id}.json"
+        path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+        if not telemetry.flush():
+            print(
+                f"OpenObserve export did not complete; the JSON summary remains at {path}.",
+                file=sys.stderr,
+            )
+        return summary, path
+    finally:
+        embedder_services.stop_all()
+
+
+def print_summary(summary: dict[str, object], path: Path) -> None:
+    print(f"Agent eval reference run {summary['run_id']}")
+    print("Task                 Case      Expected  Result")
+    trials = summary.get("trials")
+    if isinstance(trials, list):
+        for record_value in cast(list[object], trials):
+            record = _as_object(record_value)
+            if record is None:
+                continue
+            expected = "pass" if record.get("expected_pass") is True else "fail"
+            result = "pass" if record.get("passed") is True else "fail"
+            task_id = str(record.get("task_id", ""))
+            reference_solution = str(record.get("reference_solution", ""))
+            print(f"{task_id:<20} {reference_solution:<9} {expected:<9} {result}")
+            failure_reason = record.get("failure_reason")
+            if failure_reason:
+                print(f"  {failure_reason}")
+    print(f"JSON summary: {path}")
