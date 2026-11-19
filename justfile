@@ -308,7 +308,12 @@ agent-eval *args:
     else
         echo "OpenObserve could not start; continuing without its local OTLP endpoint. Trial records remain in the JSON summary." >&2
     fi
-    cd agent && uv run python -m tests.evals.run {{args}}
+    status=0
+    (cd agent && uv run python -m tests.evals.run {{args}}) || status=$?
+    # Re-apply so the dashboard opens on the run that just finished.
+    sleep 5
+    just eval-dashboards >/dev/null 2>&1 || true
+    exit $status
 
 # Backend tests against the real Postgres in Compose, in a separate *_test database.
 # CI runs this against the Postgres that `just up` starts in the same job.

@@ -37,7 +37,7 @@ The terminal output and JSON summary remain available if OpenObserve cannot acce
 ## OpenObserve comparison grid
 
 The checked-in [Evals dashboard](../observability/openobserve/dashboards/evals.json) reads trial records from the `garden_eval_trials` log stream.
-Choose one or more tasks or models in the `Task` and `Model` multi-select dropdowns (or `All` for all values), and set `Run ID` to a specific run or `_o2_all_` for all runs.
+Choose one or more tasks or models in the `Task` and `Model` multi-select dropdowns (or `All` for all values), and set `Run ID` to a specific run or `_o2_all_` for all runs. The checked-in dashboard opens on the newest run: `scripts/apply_openobserve.py` presets `Run ID` to the latest run when it applies the dashboard, and `just agent-eval` re-applies it after each run. Variable changes still need the highlighted Refresh button, because OpenObserve v1.1.2 has no auto-apply setting for dashboard variables.
 Clicking a row in the table panels (`Task by model grid`, `Grader verdicts`, `Trials and traces` or `Generated artifacts`) offers `Open task in catalog`, which switches to the `Task catalog` tab filtered to that task only.
 The comparison panels exclude the `reference` model so scripted checks do not affect model scores.
 

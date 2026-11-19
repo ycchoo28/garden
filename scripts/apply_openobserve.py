@@ -8,6 +8,7 @@ import html
 import json
 import os
 import subprocess
+import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import cast
@@ -58,6 +59,45 @@ class OpenObserveClient:
     def alerts(self) -> list[dict[str, object]]:
         response = self.request("GET", f"/api/v2/{self.org}/alerts")
         return _items(response, "list")
+
+
+def latest_run_id(client: OpenObserveClient) -> str | None:
+    """Return the run_id of the newest real trial, or None when nothing is ingested yet."""
+    end = int(time.time() * 1_000_000)
+    start = end - 30 * 24 * 3600 * 1_000_000
+    sql = (
+        'SELECT run_id FROM "garden_eval_trials" '
+        "WHERE model <> 'reference' ORDER BY _timestamp DESC LIMIT 1"
+    )
+    body = {
+        "query": {
+            "sql": sql,
+            "start_time": start,
+            "end_time": end,
+            "from": 0,
+            "size": 1,
+        }
+    }
+    try:
+        response = client.request("POST", f"/api/{client.org}/_search?type=logs", body)
+    except RuntimeError:
+        return None
+    hits = cast(dict[str, object], response).get("hits") if isinstance(response, dict) else None
+    if isinstance(hits, list) and hits and isinstance(hits[0], dict):
+        run_id = hits[0].get("run_id")
+        if isinstance(run_id, str) and run_id:
+            return run_id
+    return None
+
+
+def _default_run_variable(body: dict[str, object], run_id: str | None) -> None:
+    """Preselect the newest run so the dashboard opens on the current round, not all runs."""
+    if run_id is None:
+        return
+    variables = cast(dict[str, object], body.get("variables", {}))
+    for variable in cast(list[dict[str, object]], variables.get("list", [])):
+        if variable.get("name") == "run":
+            variable["value"] = run_id
 
 
 def _items(response: object, key: str) -> list[dict[str, object]]:
@@ -276,6 +316,8 @@ def apply_definitions(
         body = json.loads(json.dumps(definition).replace("{{openobserve_url}}", client.base_url))
         if title == "Garden agent evals" and task_catalog is not None:
             body["tabs"].append(task_catalog_tab(task_catalog))
+        if title == "Garden agent evals":
+            _default_run_variable(body, latest_run_id(client))
         if dashboard_id is not None:
             dashboard_hash = existing_dashboard.get("hash") if existing_dashboard else None
             if not isinstance(dashboard_hash, str) or not dashboard_hash:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 from urllib.request import Request
 
 import pytest
@@ -280,8 +280,8 @@ def test_apply_definitions_with_task_catalog_does_not_mutate_alerts() -> None:
         1,
         1,
     )
-    assert len(cast(list[object], client.calls[0][2]["tabs"])) == 2
-    assert "tabs" not in cast(dict[str, object], client.calls[1][2])
+    assert len(cast(list[object], client.calls[1][2]["tabs"])) == 2
+    assert "tabs" not in cast(dict[str, object], client.calls[2][2])
 
 
 def test_schema_initialization_creates_streams_and_only_adds_missing_fields() -> None:
@@ -315,3 +315,22 @@ def test_schema_initialization_creates_streams_and_only_adds_missing_fields() ->
             assert body["fields"]
             if exists:
                 assert all(field["name"] != "_timestamp" for field in body["fields"])
+
+
+def test_latest_run_becomes_default_run_variable() -> None:
+    class FakeClient:
+        org = "default"
+
+        def request(self, method: str, path: str, body: dict[str, object] | None = None) -> object:
+            assert method == "POST"
+            assert path == "/api/default/_search?type=logs"
+            return {"hits": [{"run_id": "2026-11-19-112300-gmt8-1task-abc123"}]}
+
+    run_id = apply_openobserve.latest_run_id(cast(Any, FakeClient()))
+    assert run_id == "2026-11-19-112300-gmt8-1task-abc123"
+    body: dict[str, object] = {"variables": {"list": [{"name": "run", "value": ""}]}}
+    apply_openobserve._default_run_variable(body, run_id)
+    variables = cast(dict[str, list[dict[str, object]]], body["variables"])
+    assert variables["list"][0]["value"] == run_id
+    apply_openobserve._default_run_variable(body, None)
+    assert variables["list"][0]["value"] == run_id
