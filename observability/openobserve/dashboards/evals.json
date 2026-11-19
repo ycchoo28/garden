@@ -2,7 +2,7 @@
   "version": 8,
   "dashboardId": "",
   "title": "Garden agent evals",
-  "description": "Compare model trials, grader results, and traces. Choose Task or Model from the dropdowns (or All), or set Run ID (_o2_all_ for all). Click a task row to open its Task catalog entry.",
+  "description": "Compare model trials, grader results, and traces. Choose Run ID, Task, or Model from the dropdowns (or All). Click a task row to open its Task catalog entry.",
   "role": "",
   "owner": "",
   "tabs": [
@@ -25,7 +25,7 @@
           "queryType": "sql",
           "queries": [
             {
-              "query": "SELECT model AS x, task_id AS y, CAST(SUM(CASE WHEN passed THEN 1 ELSE 0 END) AS DOUBLE) / COUNT(*) AS z FROM \"garden_eval_trials\" WHERE run_id = COALESCE(NULLIF('{{run:singlequote}}', '_o2_all_'), run_id) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference' GROUP BY model, task_id ORDER BY model ASC, task_id ASC",
+              "query": "SELECT model AS x, task_id AS y, CAST(SUM(CASE WHEN passed THEN 1 ELSE 0 END) AS DOUBLE) / COUNT(*) AS z FROM \"garden_eval_trials\" WHERE ('_o2_all_' IN ({{run:singlequote}}) OR run_id IN ({{run:singlequote}})) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference' GROUP BY model, task_id ORDER BY model ASC, task_id ASC",
               "vrlFunctionQuery": null,
               "customQuery": true,
               "fields": {
@@ -99,7 +99,7 @@
           "queryType": "sql",
           "queries": [
             {
-              "query": "SELECT model AS x, task_id AS y, MIN(complete_pass) AS z FROM (SELECT run_id, task_id, model, COUNT(*) AS trials, SUM(CASE WHEN passed THEN 1 ELSE 0 END) AS passes, CASE WHEN COUNT(*) = MAX(requested_repeats) AND SUM(CASE WHEN passed THEN 1 ELSE 0 END) = MAX(requested_repeats) AND SUM(CASE WHEN aborted THEN 1 ELSE 0 END) = 0 THEN 1 ELSE 0 END AS complete_pass FROM \"garden_eval_trials\" WHERE run_id = COALESCE(NULLIF('{{run:singlequote}}', '_o2_all_'), run_id) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference' GROUP BY run_id, task_id, model) GROUP BY model, task_id ORDER BY model ASC, task_id ASC",
+              "query": "SELECT model AS x, task_id AS y, MIN(complete_pass) AS z FROM (SELECT run_id, task_id, model, COUNT(*) AS trials, SUM(CASE WHEN passed THEN 1 ELSE 0 END) AS passes, CASE WHEN COUNT(*) = MAX(requested_repeats) AND SUM(CASE WHEN passed THEN 1 ELSE 0 END) = MAX(requested_repeats) AND SUM(CASE WHEN aborted THEN 1 ELSE 0 END) = 0 THEN 1 ELSE 0 END AS complete_pass FROM \"garden_eval_trials\" WHERE ('_o2_all_' IN ({{run:singlequote}}) OR run_id IN ({{run:singlequote}})) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference' GROUP BY run_id, task_id, model) GROUP BY model, task_id ORDER BY model ASC, task_id ASC",
               "vrlFunctionQuery": null,
               "customQuery": true,
               "fields": {
@@ -194,7 +194,7 @@
           "queryType": "sql",
           "queries": [
             {
-              "query": "SELECT task_id, model, SUM(trials) AS trials, SUM(passes) AS passes, ROUND(100.0 * SUM(passes) / SUM(trials), 1) AS pass_rate_percent, CASE WHEN MIN(complete_pass) = 1 THEN 'PASS' ELSE 'FAIL' END AS pass_k FROM (SELECT run_id, task_id, model, COUNT(*) AS trials, SUM(CASE WHEN passed THEN 1 ELSE 0 END) AS passes, CASE WHEN COUNT(*) = MAX(requested_repeats) AND SUM(CASE WHEN passed THEN 1 ELSE 0 END) = MAX(requested_repeats) AND SUM(CASE WHEN aborted THEN 1 ELSE 0 END) = 0 THEN 1 ELSE 0 END AS complete_pass FROM \"garden_eval_trials\" WHERE run_id = COALESCE(NULLIF('{{run:singlequote}}', '_o2_all_'), run_id) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference' GROUP BY run_id, task_id, model) GROUP BY task_id, model ORDER BY task_id ASC, model ASC",
+              "query": "SELECT task_id, model, SUM(trials) AS trials, SUM(passes) AS passes, ROUND(100.0 * SUM(passes) / SUM(trials), 1) AS pass_rate_percent, CASE WHEN MIN(complete_pass) = 1 THEN 'PASS' ELSE 'FAIL' END AS pass_k FROM (SELECT run_id, task_id, model, COUNT(*) AS trials, SUM(CASE WHEN passed THEN 1 ELSE 0 END) AS passes, CASE WHEN COUNT(*) = MAX(requested_repeats) AND SUM(CASE WHEN passed THEN 1 ELSE 0 END) = MAX(requested_repeats) AND SUM(CASE WHEN aborted THEN 1 ELSE 0 END) = 0 THEN 1 ELSE 0 END AS complete_pass FROM \"garden_eval_trials\" WHERE ('_o2_all_' IN ({{run:singlequote}}) OR run_id IN ({{run:singlequote}})) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference' GROUP BY run_id, task_id, model) GROUP BY task_id, model ORDER BY task_id ASC, model ASC",
               "vrlFunctionQuery": null,
               "customQuery": true,
               "fields": {
@@ -292,7 +292,7 @@
           "queryType": "sql",
           "queries": [
             {
-              "query": "SELECT CONCAT(task_id, ' / ', model) AS x, 'Tool calls' AS series, AVG(tool_calls) AS y FROM \"garden_eval_trials\" WHERE run_id = COALESCE(NULLIF('{{run:singlequote}}', '_o2_all_'), run_id) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference' GROUP BY task_id, model UNION ALL SELECT CONCAT(task_id, ' / ', model) AS x, 'Tokens' AS series, AVG(tokens) AS y FROM \"garden_eval_trials\" WHERE run_id = COALESCE(NULLIF('{{run:singlequote}}', '_o2_all_'), run_id) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference' GROUP BY task_id, model UNION ALL SELECT CONCAT(task_id, ' / ', model) AS x, 'Duration seconds' AS series, AVG(duration_seconds) AS y FROM \"garden_eval_trials\" WHERE run_id = COALESCE(NULLIF('{{run:singlequote}}', '_o2_all_'), run_id) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference' GROUP BY task_id, model ORDER BY x, series",
+              "query": "SELECT CONCAT(task_id, ' / ', model) AS x, 'Tool calls' AS series, AVG(tool_calls) AS y FROM \"garden_eval_trials\" WHERE ('_o2_all_' IN ({{run:singlequote}}) OR run_id IN ({{run:singlequote}})) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference' GROUP BY task_id, model UNION ALL SELECT CONCAT(task_id, ' / ', model) AS x, 'Tokens' AS series, AVG(tokens) AS y FROM \"garden_eval_trials\" WHERE ('_o2_all_' IN ({{run:singlequote}}) OR run_id IN ({{run:singlequote}})) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference' GROUP BY task_id, model UNION ALL SELECT CONCAT(task_id, ' / ', model) AS x, 'Duration seconds' AS series, AVG(duration_seconds) AS y FROM \"garden_eval_trials\" WHERE ('_o2_all_' IN ({{run:singlequote}}) OR run_id IN ({{run:singlequote}})) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference' GROUP BY task_id, model ORDER BY x, series",
               "vrlFunctionQuery": null,
               "customQuery": true,
               "fields": {
@@ -365,7 +365,7 @@
           "queryType": "sql",
           "queries": [
             {
-              "query": "SELECT MIN(_timestamp) AS x, AVG(CASE WHEN passed THEN 100.0 ELSE 0.0 END) AS y, CONCAT(run_id, ' / ', model) AS series FROM \"garden_eval_trials\" WHERE run_id = COALESCE(NULLIF('{{run:singlequote}}', '_o2_all_'), run_id) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference' GROUP BY run_id, model ORDER BY x ASC",
+              "query": "SELECT MIN(_timestamp) AS x, AVG(CASE WHEN passed THEN 100.0 ELSE 0.0 END) AS y, CONCAT(run_id, ' / ', model) AS series FROM \"garden_eval_trials\" WHERE ('_o2_all_' IN ({{run:singlequote}}) OR run_id IN ({{run:singlequote}})) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference' GROUP BY run_id, model ORDER BY x ASC",
               "vrlFunctionQuery": null,
               "customQuery": true,
               "fields": {
@@ -439,7 +439,7 @@
           "queryType": "sql",
           "queries": [
             {
-              "query": "SELECT ROUND(100.0 * AVG(CASE WHEN passed THEN 1.0 ELSE 0.0 END), 1) AS y FROM \"garden_eval_trials\" WHERE run_id = COALESCE(NULLIF('{{run:singlequote}}', '_o2_all_'), run_id) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference'",
+              "query": "SELECT ROUND(100.0 * AVG(CASE WHEN passed THEN 1.0 ELSE 0.0 END), 1) AS y FROM \"garden_eval_trials\" WHERE ('_o2_all_' IN ({{run:singlequote}}) OR run_id IN ({{run:singlequote}})) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference'",
               "vrlFunctionQuery": null,
               "customQuery": true,
               "fields": {
@@ -492,7 +492,7 @@
           "queryType": "sql",
           "queries": [
             {
-              "query": "SELECT SUM(CASE WHEN passed THEN 1 ELSE 0 END) AS y FROM \"garden_eval_trials\" WHERE run_id = COALESCE(NULLIF('{{run:singlequote}}', '_o2_all_'), run_id) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference'",
+              "query": "SELECT SUM(CASE WHEN passed THEN 1 ELSE 0 END) AS y FROM \"garden_eval_trials\" WHERE ('_o2_all_' IN ({{run:singlequote}}) OR run_id IN ({{run:singlequote}})) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference'",
               "vrlFunctionQuery": null,
               "customQuery": true,
               "fields": {
@@ -545,7 +545,7 @@
           "queryType": "sql",
           "queries": [
             {
-              "query": "SELECT SUM(tool_calls) AS y FROM \"garden_eval_trials\" WHERE run_id = COALESCE(NULLIF('{{run:singlequote}}', '_o2_all_'), run_id) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference'",
+              "query": "SELECT SUM(tool_calls) AS y FROM \"garden_eval_trials\" WHERE ('_o2_all_' IN ({{run:singlequote}}) OR run_id IN ({{run:singlequote}})) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference'",
               "vrlFunctionQuery": null,
               "customQuery": true,
               "fields": {
@@ -598,7 +598,7 @@
           "queryType": "sql",
           "queries": [
             {
-              "query": "SELECT SUM(tokens) AS y FROM \"garden_eval_trials\" WHERE run_id = COALESCE(NULLIF('{{run:singlequote}}', '_o2_all_'), run_id) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference'",
+              "query": "SELECT SUM(tokens) AS y FROM \"garden_eval_trials\" WHERE ('_o2_all_' IN ({{run:singlequote}}) OR run_id IN ({{run:singlequote}})) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference'",
               "vrlFunctionQuery": null,
               "customQuery": true,
               "fields": {
@@ -652,7 +652,7 @@
           "queryType": "sql",
           "queries": [
             {
-              "query": "SELECT ROUND(SUM(duration_seconds), 3) AS y FROM \"garden_eval_trials\" WHERE run_id = COALESCE(NULLIF('{{run:singlequote}}', '_o2_all_'), run_id) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference'",
+              "query": "SELECT ROUND(SUM(duration_seconds), 3) AS y FROM \"garden_eval_trials\" WHERE ('_o2_all_' IN ({{run:singlequote}}) OR run_id IN ({{run:singlequote}})) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference'",
               "vrlFunctionQuery": null,
               "customQuery": true,
               "fields": {
@@ -727,7 +727,7 @@
           "queryType": "sql",
           "queries": [
             {
-              "query": "SELECT _timestamp, run_id, task_id, model, repeat, passed, graders, failure_reason FROM \"garden_eval_trials\" WHERE run_id = COALESCE(NULLIF('{{run:singlequote}}', '_o2_all_'), run_id) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference' ORDER BY _timestamp DESC LIMIT 200",
+              "query": "SELECT _timestamp, run_id, task_id, model, repeat, passed, graders, failure_reason FROM \"garden_eval_trials\" WHERE ('_o2_all_' IN ({{run:singlequote}}) OR run_id IN ({{run:singlequote}})) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference' ORDER BY _timestamp DESC LIMIT 200",
               "vrlFunctionQuery": null,
               "customQuery": true,
               "fields": {
@@ -864,7 +864,7 @@
           "queryType": "sql",
           "queries": [
             {
-              "query": "SELECT _timestamp, run_id, task_id, model, repeat, passed, tool_calls, tokens, duration_seconds, graders, failure_reason, trace_id, CONCAT('/web/traces/trace-details?stream=garden_eval_traces&trace_id=', trace_id, '&from=', CAST(_timestamp - 60000000 AS VARCHAR), '&to=', CAST(_timestamp + 60000000 AS VARCHAR), '&org_identifier=default') AS trace_link FROM \"garden_eval_trials\" WHERE run_id = COALESCE(NULLIF('{{run:singlequote}}', '_o2_all_'), run_id) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference' ORDER BY _timestamp DESC LIMIT 200",
+              "query": "SELECT _timestamp, run_id, task_id, model, repeat, passed, tool_calls, tokens, duration_seconds, graders, failure_reason, trace_id, CONCAT('/web/traces/trace-details?stream=garden_eval_traces&trace_id=', trace_id, '&from=', CAST(_timestamp - 60000000 AS VARCHAR), '&to=', CAST(_timestamp + 60000000 AS VARCHAR), '&org_identifier=default') AS trace_link FROM \"garden_eval_trials\" WHERE ('_o2_all_' IN ({{run:singlequote}}) OR run_id IN ({{run:singlequote}})) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference' ORDER BY _timestamp DESC LIMIT 200",
               "vrlFunctionQuery": null,
               "customQuery": true,
               "fields": {
@@ -1038,7 +1038,7 @@
           "queryType": "sql",
           "queries": [
             {
-              "query": "SELECT _timestamp, run_id, task_id, model, artifacts, trace_id FROM \"garden_eval_trials\" WHERE run_id = COALESCE(NULLIF('{{run:singlequote}}', '_o2_all_'), run_id) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference' ORDER BY _timestamp DESC LIMIT 200",
+              "query": "SELECT _timestamp, run_id, task_id, model, artifacts, trace_id FROM \"garden_eval_trials\" WHERE ('_o2_all_' IN ({{run:singlequote}}) OR run_id IN ({{run:singlequote}})) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference' ORDER BY _timestamp DESC LIMIT 200",
               "vrlFunctionQuery": null,
               "customQuery": true,
               "fields": {
@@ -1134,13 +1134,23 @@
   "variables": {
     "list": [
       {
-        "type": "textbox",
+        "type": "query_values",
         "name": "run",
-        "label": "Run ID (_o2_all_ for all)",
-        "query_data": null,
-        "value": "_o2_all_",
-        "options": null,
-        "escapeSingleQuotes": true
+        "label": "Run ID",
+        "query_data": {
+          "stream_type": "logs",
+          "stream": "garden_eval_trials",
+          "field": "run_id",
+          "max_record_size": 1000,
+          "filter": []
+        },
+        "value": "",
+        "options": [],
+        "multiSelect": true,
+        "selectAllValueForMultiSelect": "all",
+        "customValueForMultiSelect": "",
+        "escapeSingleQuotes": true,
+        "showOn": []
       },
       {
         "type": "query_values",

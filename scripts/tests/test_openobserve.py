@@ -34,7 +34,7 @@ def test_checked_in_definitions_cover_eval_and_portal_workflows() -> None:
         )
     }
     assert {"run", "task", "model"} == set(variables_by_name)
-    for var_name, field_name in [("task", "task_id"), ("model", "model")]:
+    for var_name, field_name in [("run", "run_id"), ("task", "task_id"), ("model", "model")]:
         var = variables_by_name[var_name]
         assert var["type"] == "query_values"
         assert var["multiSelect"] is True
@@ -89,7 +89,7 @@ def test_checked_in_definitions_cover_eval_and_portal_workflows() -> None:
             assert "{{task:singlequote}}" in sql
             assert "{{model:singlequote}}" in sql
             assert "model <> 'reference'" in sql
-            assert "NULLIF('{{run:singlequote}}'," in sql
+            assert "'_o2_all_' IN ({{run:singlequote}})" in sql
     trial_query = str(
         cast(dict[str, object], cast(list[object], by_id["eval-trial-drilldown"]["queries"])[0])[
             "query"
