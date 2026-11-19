@@ -4,9 +4,9 @@ import { API_URL, WEB_URL } from './e2e/urls';
 
 // The API and the background worker both embed text. The browser tests use a fake embeddings server
 // (backend/tests/fake_embedding_server.py), so no test needs the bge-m3 model or an API key.
-const EMBEDDING_URL = 'http://127.0.0.1:55084';
+const EMBEDDING_URL = process.env.GARDEN_E2E_EMBEDDING_URL ?? 'http://127.0.0.1:55084';
 
-// The browser tests run against the dev stack: Vite proxies /api and /auth to the API.
+// The browser tests run against the dev stack: Rsbuild proxies /api and /auth to the API.
 // GARDEN_E2E_WEB_URL and GARDEN_E2E_API_URL move both (see e2e/urls.ts). The API reads the repo-root
 // .env, which points at the fake sign-in provider that `just up` starts. `just e2e` points the API and
 // the worker at a fresh database of their own through GARDEN_DATABASE_URL, so the tests never reuse a
@@ -54,7 +54,7 @@ export default defineConfig({
       timeout: 120_000,
     },
     {
-      command: `bun run dev --strictPort --port ${new URL(WEB_URL).port}`,
+      command: `bun run dev --host 127.0.0.1 --strictPort --port ${new URL(WEB_URL).port}`,
       url: WEB_URL,
       reuseExistingServer: false,
       timeout: 120_000,

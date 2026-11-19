@@ -3,3 +3,5 @@
 # Format: <advisory id> <review-by YYYY-MM-DD> <why it is accepted>
 # Entries are read by scripts/allowed-advisories.sh and passed to bun audit, pip-audit and Trivy.
 GHSA-vfj7-8cjw-p6xm 2027-01-19 braces 3.0.3, dev tooling only (eslint-plugin-boundaries); no fixed version is published, so it is not in the shipped bundle.
+# DSH-only acceptance is recorded in security/dsh-audit-exceptions.json.
+# It is deliberately excluded from this global list and from frontend-audit.

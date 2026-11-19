@@ -1,9 +1,15 @@
 """Application factory. It wires the shared plumbing and the installed modules together."""
 
+import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 from app.composition import MODULES, PORTS, InstalledModule
 from app.core.users import ROLE_NAMES, advertise_permissions
@@ -17,13 +23,33 @@ from app.shared.permissions import (
     check_roles_declare_permissions,
     merge_roles,
 )
+from app.shared.tracing import TraceAPIOperations
+
+
+def _configure_tracing() -> TracerProvider | None:
+    if not (
+        os.environ.get("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
+        or os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+    ):
+        return None
+    provider = TracerProvider(resource=Resource.create({"service.name": "garden-api"}))
+    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+    trace.set_tracer_provider(provider)
+    return provider
+
+
+tracer_provider = _configure_tracing()
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     # The API hands work to the background worker through the job queue, so it opens the queue too.
-    async with jobs.open_async():
-        yield
+    try:
+        async with jobs.open_async():
+            yield
+    finally:
+        if tracer_provider is not None:
+            tracer_provider.force_flush(timeout_millis=5_000)
 
 
 def create_app(modules: tuple[InstalledModule, ...] = MODULES) -> FastAPI:
@@ -44,6 +70,7 @@ def create_app(modules: tuple[InstalledModule, ...] = MODULES) -> FastAPI:
         # Under /api, which every portal address forwards to the API, so the CLI can read it.
         openapi_url="/api/openapi.json",
     )
+    app.add_middleware(TraceAPIOperations)
     install_problem_handlers(app)
     install_contract_headers(app)
     advertise_permissions(app)

@@ -1,13 +1,13 @@
 // Drives a headless browser through a CLI sign-in, the way a person would: the browser signs in at the
 // dev identity provider as a seeded person, and the CLI's loopback listener receives the approval.
-// Used by scripts/e2e.py.
+// Used by tests/shared/browser.py, through the end-to-end run in tests/e2e/run.py.
 // Usage: node approve-login.cjs <login-link> <out-dir> <seeded-name> <seeded-subject>
 // Takes one screenshot into out-dir and reads and writes no secrets. The browser never opens a window.
 const path = require('node:path');
 const { createRequire } = require('node:module');
 
 // playwright-core comes from the frontend's dependencies, the same version the browser tests use.
-const frontend = path.resolve(__dirname, '../../frontend/package.json');
+const frontend = path.resolve(__dirname, '../../../frontend/package.json');
 const { chromium } = createRequire(frontend)('playwright-core');
 
 const [loginLink, outDir, personName, personSubject] = process.argv.slice(2);
