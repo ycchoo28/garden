@@ -131,6 +131,11 @@ demo-uninstall *args:
 demo-e2e: up
     GARDEN_DEMO_E2E=1 uv run --project backend pytest scripts/tests/test_demo_e2e.py -q
 
+# Run the reusable WSL/Linux demo acceptance harness (preflight, browser-check, or run).
+[unix]
+wsl-accept *args:
+    python3 scripts/wsl_accept.py "$@"
+
 # Drop and recreate the dev database named in .env, then migrate and load the demo data again. Asks for confirmation first.
 [unix]
 reset: up
