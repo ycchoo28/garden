@@ -49,25 +49,29 @@ def is_wsl(environ: Mapping[str, str] | None = None, osrelease: str | None = Non
 
 
 def _open_in_windows(url: str) -> bool:
-    commands: list[list[str]] = []
+    commands: list[tuple[list[str], bool]] = []
     wslview = shutil.which("wslview")
     if wslview:
-        commands.append([wslview, url])
-    explorer = shutil.which("explorer.exe")
+        commands.append(([wslview, url], False))
+    explorer = _find_windows_tool("explorer.exe")
     if explorer:
-        commands.append([explorer, url])
-    powershell = shutil.which("powershell.exe")
+        commands.append(([explorer, url], True))
+    powershell = _find_windows_tool("powershell.exe")
     if powershell:
         quoted_url = url.replace("'", "''")
         script = f"Start-Process -FilePath '{quoted_url}'"
         encoded = base64.b64encode(script.encode("utf-16le")).decode("ascii")
-        commands.append([powershell, "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded])
+        commands.append(
+            ([powershell, "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded], True)
+        )
 
-    for command in commands:
+    for command, is_windows_launcher in commands:
         try:
             result = subprocess.run(
                 command,
                 check=False,
+                cwd="/mnt/c" if is_windows_launcher and Path("/mnt/c").is_dir() else None,
+                stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 timeout=10,
@@ -77,6 +81,17 @@ def _open_in_windows(url: str) -> bool:
         if result.returncode == 0:
             return True
     return False
+
+
+def _find_windows_tool(name: str) -> str | None:
+    executable = shutil.which(name)
+    if executable:
+        return executable
+    candidates = {
+        "explorer.exe": (Path("/mnt/c/Windows/explorer.exe"),),
+        "powershell.exe": (Path("/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"),),
+    }
+    return next((str(path) for path in candidates.get(name, ()) if path.is_file()), None)
 
 
 def _attempt(url: str, open_with: Callable[[str], bool]) -> bool:

@@ -136,6 +136,48 @@ def test_wsl_uses_explorer_when_wslview_is_unavailable(
     assert calls == [["/mnt/c/Windows/explorer.exe", LINK]]
 
 
+def test_wsl_finds_explorer_when_windows_paths_are_not_on_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("BROWSER", raising=False)
+    monkeypatch.setattr(browser_module, "is_wsl", lambda: True)
+
+    def no_windows_tool(_name: str) -> str | None:
+        return None
+
+    def mounted_explorer_exists(path: Path) -> bool:
+        return str(path) == "/mnt/c/Windows/explorer.exe"
+
+    def windows_drive_is_mounted(path: Path) -> bool:
+        return str(path) == "/mnt/c"
+
+    monkeypatch.setattr(browser_module.shutil, "which", no_windows_tool)
+    monkeypatch.setattr(Path, "is_file", mounted_explorer_exists)
+    monkeypatch.setattr(Path, "is_dir", windows_drive_is_mounted)
+    calls: list[tuple[list[str], dict[str, object]]] = []
+
+    def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        calls.append((command, kwargs))
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(browser_module.subprocess, "run", run)
+
+    assert open_link(LINK) is True
+    assert calls == [
+        (
+            ["/mnt/c/Windows/explorer.exe", LINK],
+            {
+                "check": False,
+                "cwd": "/mnt/c",
+                "stdin": subprocess.DEVNULL,
+                "stdout": subprocess.DEVNULL,
+                "stderr": subprocess.DEVNULL,
+                "timeout": 10,
+            },
+        )
+    ]
+
+
 def test_a_user_browser_setting_skips_the_wsl_launcher(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BROWSER", "preferred-browser %s")
     monkeypatch.setattr(browser_module, "is_wsl", lambda: True)
