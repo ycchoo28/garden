@@ -79,12 +79,18 @@ migrate: up
 seed: migrate
     cd backend && uv run python -m app.seed
 
-# Run the API with reload, the background worker and the Vite dev server until Ctrl+C. Seeds first.
+# Run the API with reload, the background worker and the Rsbuild dev server until Ctrl+C. Seeds first.
 [unix]
 dev: seed
     #!/usr/bin/env bash
     set -euo pipefail
     trap 'kill 0' EXIT
+    if [ -s var/openobserve.env ]; then
+        IFS='=' read -r _ GARDEN_OPENOBSERVE_ROOT_PASSWORD < var/openobserve.env
+        auth="$(printf 'root@example.com:%s' "$GARDEN_OPENOBSERVE_ROOT_PASSWORD" | base64 | tr -d '\n')"
+        export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="http://127.0.0.1:${GARDEN_EVAL_OPENOBSERVE_PORT:-55086}/api/default/v1/traces"
+        export OTEL_EXPORTER_OTLP_TRACES_HEADERS="Authorization=Basic $auth,stream-name=garden_eval_traces"
+    fi
     (cd backend && uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 55000) &
     (cd backend && uv run python -m app.worker) &
     (cd frontend && bun run dev --strictPort --port 55173) &
@@ -230,13 +236,84 @@ agent-publish: agent-build
 # The dev database is never used. Writes agent/dist/e2e (the transcript, logs and screenshots).
 [unix]
 agent-e2e: up
-    cd agent && uv run python scripts/e2e.py
+    cd agent && uv run python -m tests.e2e.run
 
 # The same stack as agent-e2e, held up for a hand test from Windows. It prints the installer one-liner and the steps for
 # PowerShell, and it stays up until Ctrl+C, which stops its processes and drops its test database. Writes agent/dist/e2e-serve.
 [unix]
 agent-e2e-serve: up
-    cd agent && uv run python scripts/e2e.py --serve
+    cd agent && uv run python -m tests.e2e.run --serve
+
+# Start or reuse OpenObserve on 127.0.0.1:55086, apply the dashboards and open its UI.
+[unix]
+eval-ui: eval-dashboards
+    python3 -m webbrowser -t "http://127.0.0.1:${GARDEN_EVAL_OPENOBSERVE_PORT:-55086}"
+
+# Apply the checked-in OpenObserve dashboards and alert.
+[unix]
+eval-dashboards: eval-up
+    #!/usr/bin/env bash
+    set -euo pipefail
+    IFS='=' read -r _ password < var/openobserve.env
+    export GARDEN_OPENOBSERVE_URL="http://127.0.0.1:${GARDEN_EVAL_OPENOBSERVE_PORT:-55086}"
+    export GARDEN_OPENOBSERVE_PASSWORD="$password"
+    uv run --no-project --python 3.12 python scripts/apply_openobserve.py
+
+# Generate the local root password once and start or reuse OpenObserve.
+[unix]
+eval-up:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mkdir -p var
+    password=""
+    if [ -s var/openobserve.env ]; then
+        IFS='=' read -r _ password < var/openobserve.env
+    fi
+    if [ "${#password}" -lt 8 ] || [[ "$password" != *[[:lower:]]* ]] \
+        || [[ "$password" != *[[:upper:]]* ]] || [[ "$password" != *[[:digit:]]* ]] \
+        || [[ "$password" != *[^[:alnum:]]* ]]; then
+        password="$(openssl rand -hex 32)Aa7!"
+        (umask 077; printf 'GARDEN_OPENOBSERVE_ROOT_PASSWORD=%s\n' "$password" > var/openobserve.env)
+    fi
+    chmod 600 var/openobserve.env
+    docker compose -f dev/compose.yaml --profile eval --env-file var/openobserve.env up -d --wait openobserve
+    curl --fail --silent --show-error --retry 30 --retry-all-errors --retry-delay 1 \
+        "http://127.0.0.1:${GARDEN_EVAL_OPENOBSERVE_PORT:-55086}/healthz" >/dev/null
+
+# Stop the eval service while keeping its named data volume and generated password.
+[unix]
+eval-down:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -s var/openobserve.env ]; then
+        docker compose -f dev/compose.yaml --profile eval --env-file var/openobserve.env stop openobserve
+    else
+        docker compose -f dev/compose.yaml --profile eval stop openobserve
+    fi
+
+# Run one task's scripted positive and negative reference trials without a model.
+[unix]
+agent-eval *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if just eval-up; then
+        just eval-dashboards >/dev/null || echo "Warning: could not apply OpenObserve dashboards automatically." >&2
+        IFS='=' read -r _ GARDEN_OPENOBSERVE_ROOT_PASSWORD < var/openobserve.env
+        auth="$(printf 'root@example.com:%s' "$GARDEN_OPENOBSERVE_ROOT_PASSWORD" | base64 | tr -d '\n')"
+        endpoint="http://127.0.0.1:${GARDEN_EVAL_OPENOBSERVE_PORT:-55086}/api/default/v1"
+        export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="$endpoint/traces"
+        export OTEL_EXPORTER_OTLP_TRACES_HEADERS="Authorization=Basic $auth,stream-name=garden_eval_traces"
+        export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT="$endpoint/logs"
+        export OTEL_EXPORTER_OTLP_LOGS_HEADERS="Authorization=Basic $auth,stream-name=garden_eval_trials"
+    else
+        echo "OpenObserve could not start; continuing without its local OTLP endpoint. Trial records remain in the JSON summary." >&2
+    fi
+    status=0
+    (cd agent && uv run python -m tests.evals.run {{args}}) || status=$?
+    # Re-apply so the dashboard opens on the run that just finished.
+    sleep 5
+    just eval-dashboards >/dev/null 2>&1 || true
+    exit $status
 
 # Backend tests against the real Postgres in Compose, in a separate *_test database.
 # CI runs this against the Postgres that `just up` starts in the same job.
@@ -263,18 +340,22 @@ frontend-check:
     scripts/check-ui-colours.sh
 
 # Browser tests: a person signs in through the fake provider and sees the shell. Needs Postgres and the fake provider (see `just up`).
-# Playwright starts the API and Vite itself. Chromium must be installed (`bunx playwright install chromium`).
+# Playwright starts the API and Rsbuild itself. Chromium must be installed (`bunx playwright install chromium`).
 [unix]
 e2e: up
     #!/usr/bin/env bash
     set -euo pipefail
+    api="${GARDEN_E2E_API_URL:-{{api_url}}}"
+    web="${GARDEN_E2E_WEB_URL:-{{web_url}}}"
+    embedding="${GARDEN_E2E_EMBEDDING_URL:-http://127.0.0.1:55084}"
+    export GARDEN_E2E_API_URL="$api"
+    export GARDEN_E2E_WEB_URL="$web"
+    export GARDEN_PUBLIC_URL="$web"
     curl --fail --silent --show-error --retry 30 --retry-all-errors --retry-delay 1 "$GARDEN_OIDC_ISSUER/.well-known/openid-configuration" >/dev/null
     # The first sign-in page a fresh provider serves is slow, so warm the page the browser opens too.
     curl --fail --silent --show-error --max-time 60 --retry 30 --retry-all-errors --retry-delay 1 "$GARDEN_OIDC_ISSUER/authorize?client_id=$GARDEN_OIDC_CLIENT_ID&response_type=code&redirect_uri=$GARDEN_PUBLIC_URL/auth/callback&scope=openid&state=warmup" >/dev/null
     # The tests start their own API, worker, web app and embedder, so those ports must be free.
-    api="${GARDEN_E2E_API_URL:-{{api_url}}}"
-    web="${GARDEN_E2E_WEB_URL:-{{web_url}}}"
-    for port in "${api##*:}" "${web##*:}" 55084; do
+    for port in "${api##*:}" "${web##*:}" "${embedding##*:}"; do
         if (echo > "/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
             echo "Port $port is already in use, for example by just demo or just dev. Stop it before the browser tests." >&2
             exit 1
@@ -354,6 +435,10 @@ frontend-audit:
 # Scaffold a new business module: backend package, schema migration, starter tests and frontend folder.
 new-module name:
     uv run --project backend python scripts/new_module.py "{{name}}"
+
+# Scaffold a new agent eval task and unit test following the repo's grader standards.
+new-eval task_id *args:
+    uv run --no-project --python 3.12 python scripts/new_eval.py "{{task_id}}" {{args}}
 
 # Windows versions of the demo recipes. Recipes marked [unix] above are not on Windows, so only
 # these run there. Lines run one at a time through the shell set above.

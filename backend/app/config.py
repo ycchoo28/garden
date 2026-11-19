@@ -5,7 +5,13 @@ from pathlib import Path
 from typing import Literal, Self
 
 from garden.limits import THREAD_POOL_SIZE
-from pydantic import SecretStr, model_validator
+from garden.trace_contract import (
+    GARDEN_EVAL_RUN_ID_ENV,
+    GARDEN_EVAL_TRIAL_ID_ENV,
+    GEN_AI_CAPTURE_CONTENT_ENV,
+    GEN_AI_CAPTURE_CONTENT_MODES,
+)
+from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -18,6 +24,18 @@ class Settings(BaseSettings):
 
     environment: Literal["dev", "stage", "prod"] = "dev"
     database_url: str
+    gen_ai_capture_content: Literal["NO_CONTENT", "SPAN_ONLY", "EVENT_ONLY", "SPAN_AND_EVENT"] = (
+        Field(
+            default="NO_CONTENT",
+            validation_alias=AliasChoices(GEN_AI_CAPTURE_CONTENT_ENV, "gen_ai_capture_content"),
+        )
+    )
+    eval_run_id: str = Field(
+        default="", validation_alias=AliasChoices(GARDEN_EVAL_RUN_ID_ENV, "eval_run_id")
+    )
+    eval_trial_id: str = Field(
+        default="", validation_alias=AliasChoices(GARDEN_EVAL_TRIAL_ID_ENV, "eval_trial_id")
+    )
     # The OpenID Connect issuer that signs people in. Dev uses the fake one in dev/compose.yaml.
     oidc_issuer: str = ""
     oidc_client_id: str = ""
@@ -57,6 +75,14 @@ class Settings(BaseSettings):
     # config and the install scripts. The portal serves only the names it offers, from this folder.
     agent_downloads_dir: Path = Path("var/agent-downloads")
 
+    @field_validator("gen_ai_capture_content", mode="before")
+    @classmethod
+    def normalize_gen_ai_capture_content(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        mode = value.strip().upper()
+        return mode if mode in GEN_AI_CAPTURE_CONTENT_MODES else "NO_CONTENT"
+
     @property
     def allowed_model_names(self) -> list[str]:
         """The allowed models in the order the setting lists them, without repeats."""
@@ -88,6 +114,14 @@ class Settings(BaseSettings):
     def refuse_fake_oidc_outside_dev(self) -> Self:
         if self.fake_oidc and self.environment != "dev":
             raise ValueError("GARDEN_FAKE_OIDC is only allowed when GARDEN_ENVIRONMENT=dev")
+        return self
+
+    @model_validator(mode="after")
+    def refuse_gen_ai_content_capture_outside_dev(self) -> Self:
+        if self.gen_ai_capture_content != "NO_CONTENT" and self.environment != "dev":
+            raise ValueError(
+                f"{GEN_AI_CAPTURE_CONTENT_ENV} is only allowed when GARDEN_ENVIRONMENT=dev"
+            )
         return self
 
     @model_validator(mode="after")

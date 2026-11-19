@@ -10,6 +10,7 @@ import re
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 from dataclasses import dataclass
 from typing import Any
 
@@ -17,6 +18,7 @@ from garden.engine import ContractCache, Engine, PortalClient
 from garden.limits import THREAD_POOL_SIZE
 from garden.mcp.server import handle
 from garden.shared import GardenError, as_object, is_object
+from garden.trace_contract import GARDEN_AGENT_FLAG, GARDEN_AGENT_LOGIN_ID, GARDEN_PERSON_ID
 
 _BEARER = re.compile(r"ag_[A-Za-z0-9_-]+\Z")
 _UNREACHABLE = "The portal could not be reached."
@@ -135,8 +137,9 @@ class _StreamableHTTPApp:
                 "The server did not report its port. Set the hosted MCP API base URL.",
             )
             return
+        portal = PortalClient(api_base_url, token=token)
         engine = Engine(
-            PortalClient(api_base_url, token=token),
+            portal,
             cache_dir=None,
             hosted_files=True,
             max_file_bytes=settings.files_max_bytes,
@@ -146,10 +149,17 @@ class _StreamableHTTPApp:
         )
         loop = asyncio.get_running_loop()
         try:
-            await loop.run_in_executor(self._executor, engine.permissions)
+            await loop.run_in_executor(self._executor, copy_context().run, engine.permissions)
         except (GardenError, OSError) as error:
             await _portal_failure(send, None, error)
             return
+        state = scope.setdefault("state", {})
+        if isinstance(state, dict):
+            state[GARDEN_AGENT_FLAG] = True
+            if portal.person_id:
+                state[GARDEN_PERSON_ID] = portal.person_id
+            if portal.agent_login_id:
+                state[GARDEN_AGENT_LOGIN_ID] = portal.agent_login_id
 
         max_body_bytes = (settings.files_max_bytes * 14 + 9) // 10 + 16_384
         content_length = headers.get(b"content-length")
@@ -207,7 +217,11 @@ class _StreamableHTTPApp:
             tool_name = arguments.get("name")
             if isinstance(tool_name, str):
                 try:
-                    tool = await loop.run_in_executor(self._executor, engine.tool, tool_name)
+                    tool = await loop.run_in_executor(
+                        self._executor,
+                        copy_context().run,
+                        lambda: engine.tool(tool_name),
+                    )
                 except (GardenError, OSError) as error:
                     await _portal_failure(send, message["id"], error)
                     return
@@ -245,7 +259,7 @@ class _StreamableHTTPApp:
             except Exception:
                 return 200, _rpc_error(message.get("id"), -32603, "Internal error.")
 
-        worker = loop.run_in_executor(self._executor, process)
+        worker = loop.run_in_executor(self._executor, copy_context().run, process)
         disconnect = asyncio.create_task(_watch_disconnect(receive, cancel_event))
         first_notification = asyncio.create_task(notifications.get())
         next_notification: asyncio.Task[dict[str, Any]] | None = None

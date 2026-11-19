@@ -1,0 +1,1200 @@
+{
+  "version": 8,
+  "dashboardId": "",
+  "title": "Garden agent evals",
+  "description": "Compare model trials, grader results, and traces. Choose Run ID, Task, or Model from the dropdowns (or All). Click a task row to open its Task catalog entry.",
+  "role": "",
+  "owner": "",
+  "tabs": [
+    {
+      "tabId": "default",
+      "name": "Evals",
+      "panels": [
+        {
+          "id": "eval-pass-rate",
+          "type": "heatmap",
+          "title": "Pass rate by task and model",
+          "description": "Zero is a red, visible failure. Both heatmaps use ascending model order.",
+          "config": {
+            "show_legends": true,
+            "legends_position": null,
+            "base_map": null,
+            "map_view": null,
+            "heatmap_hide_below": 0
+          },
+          "queryType": "sql",
+          "queries": [
+            {
+              "query": "SELECT model AS x, task_id AS y, CAST(SUM(CASE WHEN passed THEN 1 ELSE 0 END) AS DOUBLE) / COUNT(*) AS z FROM \"garden_eval_trials\" WHERE ('_o2_all_' IN ({{run:singlequote}}) OR run_id IN ({{run:singlequote}})) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference' GROUP BY model, task_id ORDER BY model ASC, task_id ASC",
+              "vrlFunctionQuery": null,
+              "customQuery": true,
+              "fields": {
+                "stream": "garden_eval_trials",
+                "stream_type": "logs",
+                "x": [
+                  {
+                    "label": "x",
+                    "alias": "x",
+                    "column": "x",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  }
+                ],
+                "y": [
+                  {
+                    "label": "y",
+                    "alias": "y",
+                    "column": "y",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  }
+                ],
+                "z": [
+                  {
+                    "label": "z",
+                    "alias": "z",
+                    "column": "z",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  }
+                ],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": ""
+              }
+            }
+          ],
+          "layout": {
+            "x": 0,
+            "y": 0,
+            "w": 96,
+            "h": 18,
+            "i": 1
+          }
+        },
+        {
+          "id": "eval-pass-k",
+          "type": "heatmap",
+          "title": "Pass^k by task and model",
+          "description": "Each run is checked separately for all requested repeats. One means every selected run completed and passed every repeat.",
+          "config": {
+            "show_legends": true,
+            "legends_position": null,
+            "base_map": null,
+            "map_view": null,
+            "heatmap_hide_below": 0
+          },
+          "queryType": "sql",
+          "queries": [
+            {
+              "query": "SELECT model AS x, task_id AS y, MIN(complete_pass) AS z FROM (SELECT run_id, task_id, model, COUNT(*) AS trials, SUM(CASE WHEN passed THEN 1 ELSE 0 END) AS passes, CASE WHEN COUNT(*) = MAX(requested_repeats) AND SUM(CASE WHEN passed THEN 1 ELSE 0 END) = MAX(requested_repeats) AND SUM(CASE WHEN aborted THEN 1 ELSE 0 END) = 0 THEN 1 ELSE 0 END AS complete_pass FROM \"garden_eval_trials\" WHERE ('_o2_all_' IN ({{run:singlequote}}) OR run_id IN ({{run:singlequote}})) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference' GROUP BY run_id, task_id, model) GROUP BY model, task_id ORDER BY model ASC, task_id ASC",
+              "vrlFunctionQuery": null,
+              "customQuery": true,
+              "fields": {
+                "stream": "garden_eval_trials",
+                "stream_type": "logs",
+                "x": [
+                  {
+                    "label": "x",
+                    "alias": "x",
+                    "column": "x",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  }
+                ],
+                "y": [
+                  {
+                    "label": "y",
+                    "alias": "y",
+                    "column": "y",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  }
+                ],
+                "z": [
+                  {
+                    "label": "z",
+                    "alias": "z",
+                    "column": "z",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  }
+                ],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": ""
+              }
+            }
+          ],
+          "layout": {
+            "x": 96,
+            "y": 0,
+            "w": 96,
+            "h": 18,
+            "i": 2
+          }
+        },
+        {
+          "id": "eval-task-model-grid",
+          "type": "table",
+          "title": "Task by model grid",
+          "description": "PASS requires all repeats of every selected run to pass. Separate runs are checked independently. Click a row to open its task in the Task catalog.",
+          "config": {
+            "show_legends": false,
+            "legends_position": null,
+            "base_map": null,
+            "map_view": null,
+            "drilldown": [
+              {
+                "name": "Open task in catalog",
+                "type": "byDashboard",
+                "targetBlank": false,
+                "data": {
+                  "folder": "default",
+                  "dashboard": "Garden agent evals",
+                  "tab": "Task catalog",
+                  "passAllVariables": false,
+                  "variables": [
+                    {
+                      "name": "task",
+                      "value": "${row.field[\"task_id\"]}"
+                    }
+                  ]
+                }
+              }
+            ],
+            "wrap_table_cells": true,
+            "table_pagination": true,
+            "table_pagination_rows_per_page": 25
+          },
+          "queryType": "sql",
+          "queries": [
+            {
+              "query": "SELECT task_id, model, SUM(trials) AS trials, SUM(passes) AS passes, ROUND(100.0 * SUM(passes) / SUM(trials), 1) AS pass_rate_percent, CASE WHEN MIN(complete_pass) = 1 THEN 'PASS' ELSE 'FAIL' END AS pass_k FROM (SELECT run_id, task_id, model, COUNT(*) AS trials, SUM(CASE WHEN passed THEN 1 ELSE 0 END) AS passes, CASE WHEN COUNT(*) = MAX(requested_repeats) AND SUM(CASE WHEN passed THEN 1 ELSE 0 END) = MAX(requested_repeats) AND SUM(CASE WHEN aborted THEN 1 ELSE 0 END) = 0 THEN 1 ELSE 0 END AS complete_pass FROM \"garden_eval_trials\" WHERE ('_o2_all_' IN ({{run:singlequote}}) OR run_id IN ({{run:singlequote}})) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference' GROUP BY run_id, task_id, model) GROUP BY task_id, model ORDER BY task_id ASC, model ASC",
+              "vrlFunctionQuery": null,
+              "customQuery": true,
+              "fields": {
+                "stream": "garden_eval_trials",
+                "stream_type": "logs",
+                "x": [],
+                "y": [
+                  {
+                    "label": "task_id",
+                    "alias": "task_id",
+                    "column": "task_id",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "model",
+                    "alias": "model",
+                    "column": "model",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "trials",
+                    "alias": "trials",
+                    "column": "trials",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "passes",
+                    "alias": "passes",
+                    "column": "passes",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "pass_rate_percent",
+                    "alias": "pass_rate_percent",
+                    "column": "pass_rate_percent",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "pass_k",
+                    "alias": "pass_k",
+                    "column": "pass_k",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  }
+                ],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": ""
+              }
+            }
+          ],
+          "layout": {
+            "x": 0,
+            "y": 18,
+            "w": 192,
+            "h": 18,
+            "i": 3
+          }
+        },
+        {
+          "id": "eval-trial-costs",
+          "type": "bar",
+          "title": "Tool calls, tokens, and duration",
+          "description": "Grouped by task and model. Values keep their native units: calls, tokens, and seconds.",
+          "config": {
+            "show_legends": true,
+            "legends_position": null,
+            "base_map": null,
+            "map_view": null
+          },
+          "queryType": "sql",
+          "queries": [
+            {
+              "query": "SELECT CONCAT(task_id, ' / ', model) AS x, 'Tool calls' AS series, AVG(tool_calls) AS y FROM \"garden_eval_trials\" WHERE ('_o2_all_' IN ({{run:singlequote}}) OR run_id IN ({{run:singlequote}})) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference' GROUP BY task_id, model UNION ALL SELECT CONCAT(task_id, ' / ', model) AS x, 'Tokens' AS series, AVG(tokens) AS y FROM \"garden_eval_trials\" WHERE ('_o2_all_' IN ({{run:singlequote}}) OR run_id IN ({{run:singlequote}})) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference' GROUP BY task_id, model UNION ALL SELECT CONCAT(task_id, ' / ', model) AS x, 'Duration seconds' AS series, AVG(duration_seconds) AS y FROM \"garden_eval_trials\" WHERE ('_o2_all_' IN ({{run:singlequote}}) OR run_id IN ({{run:singlequote}})) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference' GROUP BY task_id, model ORDER BY x, series",
+              "vrlFunctionQuery": null,
+              "customQuery": true,
+              "fields": {
+                "stream": "garden_eval_trials",
+                "stream_type": "logs",
+                "x": [
+                  {
+                    "label": "x",
+                    "alias": "x",
+                    "column": "x",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  }
+                ],
+                "y": [
+                  {
+                    "label": "y",
+                    "alias": "y",
+                    "column": "y",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  }
+                ],
+                "z": [],
+                "breakdown": [
+                  {
+                    "label": "series",
+                    "alias": "series",
+                    "column": "series",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  }
+                ],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": ""
+              }
+            }
+          ],
+          "layout": {
+            "x": 0,
+            "y": 36,
+            "w": 192,
+            "h": 20,
+            "i": 4
+          }
+        },
+        {
+          "id": "eval-run-trend",
+          "type": "line",
+          "title": "Pass rate trend by run",
+          "description": "Each point is one run and model for the selected task and model filters.",
+          "config": {
+            "show_legends": true,
+            "legends_position": null,
+            "base_map": null,
+            "map_view": null
+          },
+          "queryType": "sql",
+          "queries": [
+            {
+              "query": "SELECT MIN(_timestamp) AS x, AVG(CASE WHEN passed THEN 100.0 ELSE 0.0 END) AS y, CONCAT(run_id, ' / ', model) AS series FROM \"garden_eval_trials\" WHERE ('_o2_all_' IN ({{run:singlequote}}) OR run_id IN ({{run:singlequote}})) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference' GROUP BY run_id, model ORDER BY x ASC",
+              "vrlFunctionQuery": null,
+              "customQuery": true,
+              "fields": {
+                "stream": "garden_eval_trials",
+                "stream_type": "logs",
+                "x": [
+                  {
+                    "label": "x",
+                    "alias": "x",
+                    "column": "x",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": false
+                  }
+                ],
+                "y": [
+                  {
+                    "label": "y",
+                    "alias": "y",
+                    "column": "y",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  }
+                ],
+                "z": [],
+                "breakdown": [
+                  {
+                    "label": "series",
+                    "alias": "series",
+                    "column": "series",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  }
+                ],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": ""
+              }
+            }
+          ],
+          "layout": {
+            "x": 0,
+            "y": 56,
+            "w": 192,
+            "h": 18,
+            "i": 5
+          }
+        },
+        {
+          "id": "eval-run-stats",
+          "type": "metric",
+          "title": "Selected run summary",
+          "description": "These values respond to the Run ID, Task, and Model filters above.",
+          "config": {
+            "show_legends": false,
+            "legends_position": null,
+            "unit": "percent",
+            "base_map": null,
+            "map_view": null
+          },
+          "queryType": "sql",
+          "queries": [
+            {
+              "query": "SELECT ROUND(100.0 * AVG(CASE WHEN passed THEN 1.0 ELSE 0.0 END), 1) AS y FROM \"garden_eval_trials\" WHERE ('_o2_all_' IN ({{run:singlequote}}) OR run_id IN ({{run:singlequote}})) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference'",
+              "vrlFunctionQuery": null,
+              "customQuery": true,
+              "fields": {
+                "stream": "garden_eval_trials",
+                "stream_type": "logs",
+                "x": [],
+                "y": [
+                  {
+                    "label": "y",
+                    "alias": "y",
+                    "column": "y",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  }
+                ],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": "Pass rate"
+              }
+            }
+          ],
+          "layout": {
+            "x": 0,
+            "y": 74,
+            "w": 192,
+            "h": 12,
+            "i": 6
+          }
+        },
+        {
+          "id": "eval-run-passes",
+          "type": "metric",
+          "title": "Passing trials",
+          "description": "Count of passing trials in the selected run and filters.",
+          "config": {
+            "show_legends": false,
+            "legends_position": null,
+            "base_map": null,
+            "map_view": null
+          },
+          "queryType": "sql",
+          "queries": [
+            {
+              "query": "SELECT SUM(CASE WHEN passed THEN 1 ELSE 0 END) AS y FROM \"garden_eval_trials\" WHERE ('_o2_all_' IN ({{run:singlequote}}) OR run_id IN ({{run:singlequote}})) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference'",
+              "vrlFunctionQuery": null,
+              "customQuery": true,
+              "fields": {
+                "stream": "garden_eval_trials",
+                "stream_type": "logs",
+                "x": [],
+                "y": [
+                  {
+                    "label": "y",
+                    "alias": "y",
+                    "column": "y",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  }
+                ],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": "Passing trials"
+              }
+            }
+          ],
+          "layout": {
+            "x": 0,
+            "y": 86,
+            "w": 48,
+            "h": 12,
+            "i": 7
+          }
+        },
+        {
+          "id": "eval-run-calls",
+          "type": "metric",
+          "title": "Tool calls",
+          "description": "Tool calls in the selected run and filters.",
+          "config": {
+            "show_legends": false,
+            "legends_position": null,
+            "base_map": null,
+            "map_view": null
+          },
+          "queryType": "sql",
+          "queries": [
+            {
+              "query": "SELECT SUM(tool_calls) AS y FROM \"garden_eval_trials\" WHERE ('_o2_all_' IN ({{run:singlequote}}) OR run_id IN ({{run:singlequote}})) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference'",
+              "vrlFunctionQuery": null,
+              "customQuery": true,
+              "fields": {
+                "stream": "garden_eval_trials",
+                "stream_type": "logs",
+                "x": [],
+                "y": [
+                  {
+                    "label": "y",
+                    "alias": "y",
+                    "column": "y",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  }
+                ],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": "Tool calls"
+              }
+            }
+          ],
+          "layout": {
+            "x": 48,
+            "y": 86,
+            "w": 48,
+            "h": 12,
+            "i": 8
+          }
+        },
+        {
+          "id": "eval-run-tokens",
+          "type": "metric",
+          "title": "Tokens",
+          "description": "Tokens in the selected run and filters.",
+          "config": {
+            "show_legends": false,
+            "legends_position": null,
+            "base_map": null,
+            "map_view": null
+          },
+          "queryType": "sql",
+          "queries": [
+            {
+              "query": "SELECT SUM(tokens) AS y FROM \"garden_eval_trials\" WHERE ('_o2_all_' IN ({{run:singlequote}}) OR run_id IN ({{run:singlequote}})) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference'",
+              "vrlFunctionQuery": null,
+              "customQuery": true,
+              "fields": {
+                "stream": "garden_eval_trials",
+                "stream_type": "logs",
+                "x": [],
+                "y": [
+                  {
+                    "label": "y",
+                    "alias": "y",
+                    "column": "y",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  }
+                ],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": "Tokens"
+              }
+            }
+          ],
+          "layout": {
+            "x": 96,
+            "y": 86,
+            "w": 48,
+            "h": 12,
+            "i": 9
+          }
+        },
+        {
+          "id": "eval-run-duration",
+          "type": "metric",
+          "title": "Duration seconds",
+          "description": "Total duration in the selected run and filters.",
+          "config": {
+            "show_legends": false,
+            "legends_position": null,
+            "unit": "seconds",
+            "base_map": null,
+            "map_view": null
+          },
+          "queryType": "sql",
+          "queries": [
+            {
+              "query": "SELECT ROUND(SUM(duration_seconds), 3) AS y FROM \"garden_eval_trials\" WHERE ('_o2_all_' IN ({{run:singlequote}}) OR run_id IN ({{run:singlequote}})) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference'",
+              "vrlFunctionQuery": null,
+              "customQuery": true,
+              "fields": {
+                "stream": "garden_eval_trials",
+                "stream_type": "logs",
+                "x": [],
+                "y": [
+                  {
+                    "label": "y",
+                    "alias": "y",
+                    "column": "y",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  }
+                ],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": "Duration seconds"
+              }
+            }
+          ],
+          "layout": {
+            "x": 144,
+            "y": 86,
+            "w": 48,
+            "h": 12,
+            "i": 10
+          }
+        },
+        {
+          "id": "eval-grader-verdicts",
+          "type": "table",
+          "title": "Grader verdicts",
+          "description": "Each row includes serialized grader verdicts and reasons from the trial record. Click a row to open its task in the Task catalog.",
+          "config": {
+            "show_legends": false,
+            "legends_position": null,
+            "base_map": null,
+            "map_view": null,
+            "drilldown": [
+              {
+                "name": "Open task in catalog",
+                "type": "byDashboard",
+                "targetBlank": false,
+                "data": {
+                  "folder": "default",
+                  "dashboard": "Garden agent evals",
+                  "tab": "Task catalog",
+                  "passAllVariables": false,
+                  "variables": [
+                    {
+                      "name": "task",
+                      "value": "${row.field[\"task_id\"]}"
+                    }
+                  ]
+                }
+              }
+            ],
+            "wrap_table_cells": true,
+            "table_pagination": true,
+            "table_pagination_rows_per_page": 25
+          },
+          "queryType": "sql",
+          "queries": [
+            {
+              "query": "SELECT _timestamp, run_id, task_id, model, repeat, passed, graders, failure_reason FROM \"garden_eval_trials\" WHERE ('_o2_all_' IN ({{run:singlequote}}) OR run_id IN ({{run:singlequote}})) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference' ORDER BY _timestamp DESC LIMIT 200",
+              "vrlFunctionQuery": null,
+              "customQuery": true,
+              "fields": {
+                "stream": "garden_eval_trials",
+                "stream_type": "logs",
+                "x": [],
+                "y": [
+                  {
+                    "label": "_timestamp",
+                    "alias": "_timestamp",
+                    "column": "_timestamp",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "run_id",
+                    "alias": "run_id",
+                    "column": "run_id",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "task_id",
+                    "alias": "task_id",
+                    "column": "task_id",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "model",
+                    "alias": "model",
+                    "column": "model",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "repeat",
+                    "alias": "repeat",
+                    "column": "repeat",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "passed",
+                    "alias": "passed",
+                    "column": "passed",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "graders",
+                    "alias": "graders",
+                    "column": "graders",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  }
+                ],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": ""
+              }
+            }
+          ],
+          "layout": {
+            "x": 0,
+            "y": 98,
+            "w": 192,
+            "h": 20,
+            "i": 11
+          }
+        },
+        {
+          "id": "eval-trial-drilldown",
+          "type": "table",
+          "title": "Trials and traces",
+          "description": "Click a row to open its task in the Task catalog or open trace_link in the trace viewer.",
+          "config": {
+            "show_legends": false,
+            "legends_position": null,
+            "base_map": null,
+            "map_view": null,
+            "drilldown": [
+              {
+                "name": "Open task in catalog",
+                "type": "byDashboard",
+                "targetBlank": false,
+                "data": {
+                  "folder": "default",
+                  "dashboard": "Garden agent evals",
+                  "tab": "Task catalog",
+                  "passAllVariables": false,
+                  "variables": [
+                    {
+                      "name": "task",
+                      "value": "${row.field[\"task_id\"]}"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "Open trace",
+                "type": "byUrl",
+                "targetBlank": true,
+                "data": {
+                  "url": "{{openobserve_url}}${row.field[\"trace_link\"]}"
+                }
+              }
+            ],
+            "wrap_table_cells": true,
+            "table_pagination": true,
+            "table_pagination_rows_per_page": 25
+          },
+          "queryType": "sql",
+          "queries": [
+            {
+              "query": "SELECT _timestamp, run_id, task_id, model, repeat, passed, tool_calls, tokens, duration_seconds, graders, failure_reason, trace_id, CONCAT('/web/traces/trace-details?stream=garden_eval_traces&trace_id=', trace_id, '&from=', CAST(_timestamp - 60000000 AS VARCHAR), '&to=', CAST(_timestamp + 60000000 AS VARCHAR), '&org_identifier=default') AS trace_link FROM \"garden_eval_trials\" WHERE ('_o2_all_' IN ({{run:singlequote}}) OR run_id IN ({{run:singlequote}})) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference' ORDER BY _timestamp DESC LIMIT 200",
+              "vrlFunctionQuery": null,
+              "customQuery": true,
+              "fields": {
+                "stream": "garden_eval_trials",
+                "stream_type": "logs",
+                "x": [],
+                "y": [
+                  {
+                    "label": "_timestamp",
+                    "alias": "_timestamp",
+                    "column": "_timestamp",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "run_id",
+                    "alias": "run_id",
+                    "column": "run_id",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "task_id",
+                    "alias": "task_id",
+                    "column": "task_id",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "model",
+                    "alias": "model",
+                    "column": "model",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "repeat",
+                    "alias": "repeat",
+                    "column": "repeat",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "passed",
+                    "alias": "passed",
+                    "column": "passed",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "tool_calls",
+                    "alias": "tool_calls",
+                    "column": "tool_calls",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "tokens",
+                    "alias": "tokens",
+                    "column": "tokens",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "duration_seconds",
+                    "alias": "duration_seconds",
+                    "column": "duration_seconds",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "graders",
+                    "alias": "graders",
+                    "column": "graders",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "trace_id",
+                    "alias": "trace_id",
+                    "column": "trace_id",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "trace_link",
+                    "alias": "trace_link",
+                    "column": "trace_link",
+                    "color": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  }
+                ],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": ""
+              }
+            }
+          ],
+          "layout": {
+            "x": 0,
+            "y": 118,
+            "w": 192,
+            "h": 36,
+            "i": 12
+          }
+        },
+        {
+          "id": "eval-artifacts",
+          "type": "table",
+          "title": "Generated artifacts",
+          "description": "Claim state and generated workspace file previews captured before trial cleanup. Click a row to open its task in the Task catalog.",
+          "config": {
+            "show_legends": false,
+            "legends_position": null,
+            "base_map": null,
+            "map_view": null,
+            "drilldown": [
+              {
+                "name": "Open task in catalog",
+                "type": "byDashboard",
+                "targetBlank": false,
+                "data": {
+                  "folder": "default",
+                  "dashboard": "Garden agent evals",
+                  "tab": "Task catalog",
+                  "passAllVariables": false,
+                  "variables": [
+                    {
+                      "name": "task",
+                      "value": "${row.field[\"task_id\"]}"
+                    }
+                  ]
+                }
+              }
+            ],
+            "wrap_table_cells": true,
+            "table_pagination": true,
+            "table_pagination_rows_per_page": 25
+          },
+          "queryType": "sql",
+          "queries": [
+            {
+              "query": "SELECT _timestamp, run_id, task_id, model, artifacts, trace_id FROM \"garden_eval_trials\" WHERE ('_o2_all_' IN ({{run:singlequote}}) OR run_id IN ({{run:singlequote}})) AND ('_o2_all_' IN ({{task:singlequote}}) OR task_id IN ({{task:singlequote}})) AND ('_o2_all_' IN ({{model:singlequote}}) OR model IN ({{model:singlequote}})) AND model <> 'reference' ORDER BY _timestamp DESC LIMIT 200",
+              "vrlFunctionQuery": null,
+              "customQuery": true,
+              "fields": {
+                "stream": "garden_eval_trials",
+                "stream_type": "logs",
+                "x": [],
+                "y": [
+                  {
+                    "label": "_timestamp",
+                    "alias": "_timestamp",
+                    "column": "_timestamp",
+                    "color": null,
+                    "aggregationFunction": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": false
+                  },
+                  {
+                    "label": "run_id",
+                    "alias": "run_id",
+                    "column": "run_id",
+                    "color": null,
+                    "aggregationFunction": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "task_id",
+                    "alias": "task_id",
+                    "column": "task_id",
+                    "color": null,
+                    "aggregationFunction": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "model",
+                    "alias": "model",
+                    "column": "model",
+                    "color": null,
+                    "aggregationFunction": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "artifacts",
+                    "alias": "artifacts",
+                    "column": "artifacts",
+                    "color": null,
+                    "aggregationFunction": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  },
+                  {
+                    "label": "trace_id",
+                    "alias": "trace_id",
+                    "column": "trace_id",
+                    "color": null,
+                    "aggregationFunction": null,
+                    "isDerived": false,
+                    "havingConditions": [],
+                    "treatAsNonTimestamp": true
+                  }
+                ],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": ""
+              }
+            }
+          ],
+          "layout": {
+            "x": 0,
+            "y": 154,
+            "w": 192,
+            "h": 24,
+            "i": 13
+          }
+        }
+      ]
+    }
+  ],
+  "variables": {
+    "list": [
+      {
+        "type": "query_values",
+        "name": "run",
+        "label": "Run ID",
+        "query_data": {
+          "stream_type": "logs",
+          "stream": "garden_eval_trials",
+          "field": "run_id",
+          "max_record_size": 1000,
+          "filter": []
+        },
+        "value": "",
+        "options": [],
+        "multiSelect": true,
+        "selectAllValueForMultiSelect": "all",
+        "customValueForMultiSelect": "",
+        "escapeSingleQuotes": true,
+        "showOn": []
+      },
+      {
+        "type": "query_values",
+        "name": "task",
+        "label": "Task",
+        "query_data": {
+          "stream_type": "logs",
+          "stream": "garden_eval_trials",
+          "field": "task_id",
+          "max_record_size": 1000,
+          "filter": []
+        },
+        "value": "",
+        "options": [],
+        "multiSelect": true,
+        "selectAllValueForMultiSelect": "all",
+        "customValueForMultiSelect": "",
+        "escapeSingleQuotes": true,
+        "showOn": []
+      },
+      {
+        "type": "query_values",
+        "name": "model",
+        "label": "Model",
+        "query_data": {
+          "stream_type": "logs",
+          "stream": "garden_eval_trials",
+          "field": "model",
+          "max_record_size": 1000,
+          "filter": []
+        },
+        "value": "",
+        "options": [],
+        "multiSelect": true,
+        "selectAllValueForMultiSelect": "all",
+        "customValueForMultiSelect": "",
+        "escapeSingleQuotes": true,
+        "showOn": []
+      }
+    ],
+    "showDynamicFilters": false
+  },
+  "defaultDatetimeDuration": {
+    "type": "relative",
+    "relativeTimePeriod": "7d"
+  }
+}

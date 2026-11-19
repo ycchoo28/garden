@@ -1206,7 +1206,7 @@ class Demo:
             api_command += ["--loop", "asyncio:SelectorEventLoop"]
         self.start(api_command, ROOT / "backend")
         self.start(["uv", "run", "python", "-m", "app.worker"], ROOT / "backend")
-        # Vite and the CLI never inherit the model upstream key.
+        # Rsbuild and the CLI never inherit the model upstream key.
         client_env = self.client_env()
         client_env["GARDEN_E2E_API_URL"] = self.api
         self.start(

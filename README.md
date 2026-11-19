@@ -79,7 +79,7 @@ When the portal's minimum CLI version is newer than the command, the command sto
 ## Hardware
 
 - Docker with Compose, running on a machine with about 4 to 8 GB of RAM.
-  Postgres, the API, the worker and the Vite dev server together are the main load.
+  Postgres, the API, the worker and the Rsbuild dev server together are the main load.
   These figures are estimates, not measurements.
 - Disk for the container images (Postgres 17 with pgvector, the fake identity provider, and the llama.cpp image when you use embeddings), plus Python and JavaScript dependencies.
   I have not measured the image sizes.
@@ -330,10 +330,38 @@ Run `just` with no arguments to list them.
 | `just agent-install-test` | Runs the installer unattended against the fake portal. It needs no network. |
 | `just agent-dsh-bundle` | Builds the dsh bundles for Linux and Windows. It needs network access to the npm registry. |
 | `just agent-publish` | Copies the installer files, the zipapp and the dsh bundles into `GARDEN_AGENT_DOWNLOADS_DIR`. |
+| `just agent-eval [flags]` | Runs model trials or scripted reference trials, then writes a JSON summary and exports telemetry to OpenObserve when available. |
+| `just eval-ui` | Starts or reuses local OpenObserve and opens its UI. Log in as `root@example.com`; its generated password is kept in the ignored `var/openobserve.env` file. |
+| `just eval-dashboards` | Applies the checked-in OpenObserve dashboards and regression alert. |
+| `just eval-down` | Stops OpenObserve while keeping its named data volume and generated password. |
 | `just secrets-check` | Scans the git history and the working tree with gitleaks. |
 | `just docs-check` | Checks that the relative links in the Markdown files point at real files and headings. |
 | `just deny-check` | Fails when a file names a term on the deny-list. |
 | `just backend-audit`, `just frontend-audit` | Audit the locked dependencies, with accepted advisories from `security/allowlist.txt`. |
+
+## Agent evals
+
+`just agent-eval` runs all registered tasks against the configured models by default.
+Set `GARDEN_EVAL_UPSTREAM_URL` and `GARDEN_EVAL_MODELS` before a model run, and set `GARDEN_EVAL_UPSTREAM_KEY` when the upstream requires authentication.
+`GARDEN_EVAL_MODELS` is a comma-separated allowlist, and `--model` selects one id from it.
+The available options are:
+
+| Option | Effect |
+| --- | --- |
+| `--reference` | Runs each selected task's `perfect` and `wrong` reference solutions without a model. |
+| `--task <id>` | Selects a task; repeat the option to select several tasks. The default is every registered task. |
+| `--model <id>` | Selects one configured model for a model run. |
+| `--repeat <n>` | Sets trials per task and model. The default is `3`. |
+| `--jobs <n>` | Sets the maximum number of concurrent model trials. The default is `2`. |
+| `--keep-failed` | Retains failed trial databases for inspection. |
+| `--no-embedding` | Skips selected knowledge tasks that require the embedding service. |
+| `--fake-embedding` | Uses an isolated deterministic embedder for reference runs; it requires `--reference`. |
+| `--junitxml <path>` | Writes a JUnit report for a reference run; it requires `--reference`. |
+
+`--model` cannot be combined with `--reference`.
+Knowledge tasks that use a real LLM judge need `GARDEN_EVAL_JUDGE_URL`, `GARDEN_EVAL_JUDGE_KEY` and `GARDEN_EVAL_JUDGE_MODEL`.
+Read the [eval authoring guide](agent/tests/evals/README.md) to add tasks, graders and reference solutions.
+The [agent eval design](docs/agent-evals.md) shows the runner flow, the OpenObserve grid and a trial trace thread.
 
 The `garden` command has these local commands: `login`, `logout`, `whoami`, `tools`, `mcp`, `skills install`, `dsh`, `dsh-config` and `dsh-launcher`.
 Every other command comes from the contract, named after its operation id, such as `garden files file upload`.
@@ -345,10 +373,13 @@ All of these bind to 127.0.0.1.
 | Port | Service |
 | --- | --- |
 | 55000 | The API (uvicorn). |
-| 55173 | The web app (Vite dev server). It proxies `/api` and `/auth` to the API. |
+| 55173 | The web app (Rsbuild dev server). It proxies `/api` and `/auth` to the API. |
 | 55432 | Postgres 17 with pgvector. |
 | 55081 | The fake OpenID Connect provider. |
 | 55083 | The llama.cpp embedding server, when you run `just embedding-up`. |
+| 55086 | OpenObserve UI and OTLP receiver for eval traces and agent telemetry, when you run `just eval-ui` or `just agent-eval`. |
+
+Set `GARDEN_EVAL_OPENOBSERVE_PORT` to use another free loopback port when 55086 is occupied.
 
 The fake sign-in provider shows a button for each seeded person, from `dev/oidc/login.html`, and the backend refuses it outside the `dev` environment.
 Add a button there when you add a person to the seed.

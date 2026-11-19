@@ -5,6 +5,7 @@ from typing import Annotated, cast
 
 from fastapi import Depends, FastAPI, Request, params
 from fastapi.routing import APIRoute, iter_route_contexts
+from garden.trace_contract import GARDEN_AGENT_FLAG, GARDEN_AGENT_LOGIN_ID, GARDEN_PERSON_ID
 
 from app.core.users.service import CurrentPerson, UserService, get_user_service
 from app.shared.errors import Forbidden
@@ -41,6 +42,9 @@ async def current_person(
         person, login = await service.current_cli_person(
             bearer, request.app.state.roles, agent_allowed
         )
+        request.scope["state"][GARDEN_PERSON_ID] = str(person.id)
+        request.scope["state"][GARDEN_AGENT_LOGIN_ID] = str(login.id)
+        request.scope["state"][GARDEN_AGENT_FLAG] = True
         _ = current_request_login.set(
             RequestLogin(
                 via=VIA_AGENT,
@@ -54,6 +58,8 @@ async def current_person(
     person = await service.current_person(
         request.cookies.get(SESSION_COOKIE), request.app.state.roles
     )
+    request.scope["state"][GARDEN_PERSON_ID] = str(person.id)
+    request.scope["state"][GARDEN_AGENT_FLAG] = False
     _ = current_request_login.set(RequestLogin(via=VIA_WEB))
     return person
 

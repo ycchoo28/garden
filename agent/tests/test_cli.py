@@ -9,8 +9,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from conftest import as_json, run_garden, store_token
-from fake_portal import GOOD_TOKEN, FakePortal
+from tests.shared.fake_portal import GOOD_TOKEN, FakePortal
+from tests.shared.garden_cli import as_json, run_garden, store_token
 
 SHA = "ab" * 32
 READ_ONLY_AND_SAVE = {"files_file_read", "files_file_upload", "knowledge_batch_upload"}

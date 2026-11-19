@@ -173,6 +173,12 @@ def load():
         )
         self.assertNotEqual(literal_url.returncode, 0)
         self.assertIn("garden/no-server-calls", literal_url.stdout)
+        cross_module = self.run_eslint(
+            "src/modules/claims/check.ts",
+            "import { budgetsRoutes } from '../budgets';\nvoid budgetsRoutes;\n",
+        )
+        self.assertNotEqual(cross_module.returncode, 0)
+        self.assertIn("garden/boundaries", cross_module.stdout)
 
     def test_frontend_server_calls_reject_urls_and_direct_network_calls(self) -> None:
         self.put("frontend/src/app/request.ts", "fetch('/api/example');\n")

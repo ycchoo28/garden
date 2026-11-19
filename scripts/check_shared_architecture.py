@@ -29,6 +29,7 @@ WORD_EXCEPTIONS = {
     "close": "Generic resource lifecycle operation.",
     "rule": "Generic validation rule in shared errors.",
     "queue": "Generic queue helper.",
+    "span": "OpenTelemetry spans are generic tracing records in shared middleware.",
 }
 
 
