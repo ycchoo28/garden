@@ -104,7 +104,7 @@ def _judge_month_close_answer(answer: str) -> JudgeDecision:
 
 HOTEL_LIMIT = KnowledgeTask(
     id="knowledge-hotel-limit",
-    prompt="Marcus asks: What is the hotel limit in the travel policy?",
+    prompt="What is the hotel limit in the travel policy?",
     asking_person="marcus.lee@fernhill.example",
     judge_criteria=(
         "The accessible travel policy says hotels are capped at 220 US dollars per night in "
@@ -123,7 +123,7 @@ HOTEL_LIMIT = KnowledgeTask(
 
 MONTH_CLOSE_PROCEDURE = KnowledgeTask(
     id="knowledge-month-close-procedure-unknown",
-    prompt="Marcus asks: What is the month close procedure?",
+    prompt="What is the month close procedure?",
     asking_person="marcus.lee@fernhill.example",
     judge_criteria=(
         "Marcus cannot read the finance-procedure collection and no month close procedure is "
