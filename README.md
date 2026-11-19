@@ -132,6 +132,7 @@ Neither the installer nor the client configuration receives the upstream key ([A
 The fake model returns a fixed reply and does not reason or call tools.
 
 Once the portal is healthy, the command runs its installer, opens CLI sign-in so you can choose a seeded persona, writes the `dsh` configuration, and verifies `garden tools`, `dsh --version` and a model turn through the portal.
+After setup, `just demo` opens the Garden portal in your browser; if it cannot open one, it prints the portal URL.
 If sign-in approval takes longer than 30 minutes, the demo stays running with everything else installed.
 Retry from another terminal with the printed `garden login` command, then run `garden dsh-config` to finish dsh setup.
 It installs into `~/.local/bin`, `~/.garden` and `~/.dsh` (under `%USERPROFILE%` on Windows).

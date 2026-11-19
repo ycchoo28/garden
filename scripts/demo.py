@@ -2409,6 +2409,10 @@ def main():
             print("Demo portal is running. Press Ctrl+C to stop.", flush=True)
         else:
             print("Demo ready. Press Ctrl+C to stop.", flush=True)
+        if not args.smoke and not args.non_interactive and sys.stdin.isatty():
+            print("Opening the Garden portal in your browser...", flush=True)
+            if not open_browser_link(demo.web):
+                print(f"Open the Garden portal manually at: {demo.web}", flush=True)
         if not args.smoke:
             while not demo.stop_event.wait(0.5):
                 demo.check_processes()
