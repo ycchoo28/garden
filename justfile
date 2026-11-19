@@ -431,6 +431,10 @@ frontend-audit:
 new-module name:
     uv run --project backend python scripts/new_module.py "{{name}}"
 
+# Scaffold a new agent eval task and unit test following the repo's grader standards.
+new-eval task_id *args:
+    uv run --no-project --python 3.12 python scripts/new_eval.py "{{task_id}}" {{args}}
+
 # Windows versions of the demo recipes. Recipes marked [unix] above are not on Windows, so only
 # these run there. Lines run one at a time through the shell set above.
 [windows]

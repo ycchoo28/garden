@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
 from tests.evals.grading import DraftClaimGrader, GraderResult, api_json
@@ -86,30 +85,3 @@ class ConfirmationClaimGrader(DraftClaimGrader):
             return GraderResult(
                 self.id, "fail", f"The claim status grader could not verify the claim: {error}"
             )
-
-
-@dataclass(frozen=True)
-class AnswerContainsGrader:
-    """Checks that the final answer contains every required phrase."""
-
-    id: str
-    required_phrases: tuple[str, ...]
-
-    def grade(self, answer: str, _task: ClaimDraftTask) -> GraderResult:
-        normalized = answer.casefold()
-        missing = [
-            phrase for phrase in self.required_phrases if phrase.casefold() not in normalized
-        ]
-        if missing:
-            return GraderResult(
-                self.id,
-                "fail",
-                "The final answer did not include: "
-                + ", ".join(repr(item) for item in missing)
-                + ".",
-            )
-        return GraderResult(
-            self.id,
-            "pass",
-            "The final answer explains the required next step or confirmation outcome.",
-        )

@@ -31,34 +31,42 @@ Stop the service with `just eval-down`; its named data volume and generated pass
 
 ## Add a task
 
+Scaffold a new task and unit test with:
+
+```sh
+just new-eval <task-id> --area claims --suite capability
+```
+
+This creates `task_<slug>.py` (auto-discovered by `tasks.py`) and `test_task_<slug>.py` with the standard state grader, `AnswerJudgeGrader`, `perfect`/`wrong` reference functions, and paraphrase test stub.
+
 Tasks are typed Python values that conform to the `EvalTask` protocol in [`task_types.py`](task_types.py).
 Each task supplies a unique id, prompt, asking person, expected confirmation (`approve`, `deny` or `none`), suite, area, graders, reference solutions and any task-specific fields.
 Optional fields set tool-call, time or token budgets, disable web tools, or mark a task as requiring embeddings.
 Choose an asking person whose permissions match the real user workflow the task is meant to measure.
 
-Use the closest existing task as the template.
 Claim tasks are defined in [`tasks.py`](tasks.py) and auto-discovered `task_*.py` modules.
 Knowledge tasks are defined in [`knowledge_tasks.py`](knowledge_tasks.py), set `requires_embedding` and judge criteria, and are added to that module's `TASKS` dictionary.
 The [`registry.py`](registry.py) module combines the registered tasks and supplies their ids to the CLI.
 
-Keep prompts grounded in a user outcome and make the required state observable.
-Give each task a stable id and an `area` that groups related work in the dashboard.
-Set `suite` to `capability` for a newly measured ability or `regression` for a known behavior being protected.
-Add a task-specific pytest that exercises its expected boundary where practical.
+Prompt and harness standards (enforced by [`test_eval_standards.py`](test_eval_standards.py)):
+- Write prompts as natural first-person user requests. Do not add third-person prefixes such as `Marcus asks:`.
+- Include every required structured input (filenames, dates, amounts) in the prompt unless the task specifically evaluates discovering them.
+- Never inject `AGENTS.md` or task-specific rubric hints into `DSH_HOME` inside `model_harness.py`.
+- Give each task a stable id and an `area` that groups related work in the dashboard.
+- Set `suite` to `capability` for a newly measured ability or `regression` for a known behavior being protected.
 
 ## Add a grader
 
 Every grader has a stable `id` and returns a result with a `pass`, `fail` or `unknown` verdict and a short reason.
 A task passes only when all of its grader results pass.
 
-Use a state grader to verify persisted records through the trial API with a read-capable Agent login.
-Do not use the final answer alone to infer whether a business change happened.
-Use a trajectory grader for response requirements or hard constraints that cannot be established from persisted state.
-Knowledge answer graders may use an LLM judge; a judge result of `unknown` fails the trial.
-Reference runs use scripted judges so grader behavior is repeatable.
+Grader separation rules (enforced by [`test_eval_standards.py`](test_eval_standards.py)):
+- **State graders** verify persisted records through the trial API with a read-capable Agent login. Do not inspect free-text `answer` inside deterministic state graders, and do not grade exact free-text description prose when structured fields (amount, category, date, receipt hash) establish correctness.
+- **Natural-language answer graders** must use `AnswerJudgeGrader` (or `KnowledgeAnswerGrader`) from [`knowledge_grading.py`](knowledge_grading.py) with semantic `criteria` and a scripted `reference_judge` for CI. Do not write exact English substring lists to grade free-form replies; real model runs call the configured LLM judge (`GARDEN_EVAL_JUDGE_*` or the portal default model) and a judge result of `unknown` fails the trial.
+- Add paraphrase unit tests proving the `reference_judge` accepts natural phrasings (including punctuation/synonyms) and rejects the `wrong` reference reply.
 
 Put state graders beside their task domain in [`grading.py`](grading.py) or the matching suite module, and add focused positive and negative grader tests.
-The claim grader in `grading.py` shows API-backed state checks, while [`knowledge_grading.py`](knowledge_grading.py) shows the judge interface.
+The claim grader in `grading.py` shows API-backed state checks, while [`knowledge_grading.py`](knowledge_grading.py) shows `AnswerJudgeGrader`.
 
 ## Add reference solutions
 

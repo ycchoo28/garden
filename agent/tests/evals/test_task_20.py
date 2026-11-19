@@ -78,6 +78,7 @@ def test_variance_answer_grader_rejects_the_wrong_budget_line() -> None:
         "grader-token",
         task_20.OVER_BUDGET_VARIANCE,
         answer="In 2026-10, Design's meals line is over by USD 6.00.",
+        reference=True,
     )
 
     assert result.verdict == "fail"
@@ -91,6 +92,7 @@ def test_conflict_answer_grader_requires_recovery() -> None:
         "grader-token",
         task_20.VERSION_CONFLICT,
         answer="The claim changed, so I stopped without finishing.",
+        reference=True,
     )
 
     assert result.verdict == "fail"

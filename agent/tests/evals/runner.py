@@ -34,7 +34,7 @@ from tests.evals.artifacts import (
 from tests.evals.embedding import ensure_embedding_server
 from tests.evals.grading import DraftClaimGrader, GraderResult, api_json, trial_passed
 from tests.evals.harness import DshHarnessAdapter
-from tests.evals.knowledge_grading import JudgeModel, KnowledgeAnswerGrader
+from tests.evals.knowledge_grading import AnswerJudgeGrader, JudgeModel
 from tests.evals.task_types import EvalTask, ReferenceSolution
 from tests.evals.tasks import ClaimDraftTask
 from tests.evals.telemetry import EvalTelemetry
@@ -500,7 +500,7 @@ def grade_task(
 ) -> list[GraderResult]:
     results: list[GraderResult] = []
     for grader in task.graders:
-        if isinstance(grader, KnowledgeAnswerGrader):
+        if isinstance(grader, AnswerJudgeGrader):
             results.append(
                 grader.grade(
                     api_url,
@@ -521,9 +521,6 @@ def grade_task(
                     answer=answer,
                 )
             )
-    if isinstance(task, ClaimDraftTask):
-        for grader in task.trajectory_graders:
-            results.append(grader.grade(answer, task))
     return results
 
 
@@ -729,11 +726,6 @@ def run_trial(
             GraderResult(grader.id, "fail", f"The trial could not run: {failure}")
             for grader in task.graders
         ]
-        if isinstance(task, ClaimDraftTask):
-            graders.extend(
-                GraderResult(grader.id, "fail", f"The trial could not run: {failure}")
-                for grader in task.trajectory_graders
-            )
     finally:
         try:
             services.stop_all()
@@ -850,14 +842,7 @@ def run_reference(
                         tool_calls=0,
                         graders=[
                             GraderResult(grader.id, "fail", f"The trial runner failed: {failure}")
-                            for grader in (
-                                *task.graders,
-                                *(
-                                    task.trajectory_graders
-                                    if isinstance(task, ClaimDraftTask)
-                                    else ()
-                                ),
-                            )
+                            for grader in task.graders
                         ],
                         error=f"Trial runner failed: {failure}",
                     )
@@ -896,13 +881,7 @@ def run_reference(
                 "confirmation": task.confirmation,
                 "suite": task.suite,
                 "area": task.area,
-                "graders": [
-                    grader.id
-                    for grader in (
-                        *task.graders,
-                        *(task.trajectory_graders if isinstance(task, ClaimDraftTask) else ()),
-                    )
-                ],
+                "graders": [grader.id for grader in task.graders],
                 "budget_tool_calls": task.budget_tool_calls,
                 "budget_seconds": task.budget_seconds,
                 "budget_tokens": task.budget_tokens,

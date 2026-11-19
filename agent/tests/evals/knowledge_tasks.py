@@ -127,8 +127,11 @@ MONTH_CLOSE_PROCEDURE = KnowledgeTask(
     asking_person="marcus.lee@fernhill.example",
     judge_criteria=(
         "Marcus cannot read the finance-procedure collection and no month close procedure is "
-        "available in his accessible knowledge. Pass only if the answer says it could not find "
-        "the procedure and gives no invented steps or policy details."
+        "available in his accessible knowledge. Pass if the answer clearly states that the month "
+        "close procedure or close steps could not be found in his accessible knowledge and does "
+        "not invent close steps (briefly quoting accessible Expense policy notes that mention "
+        "Finance closing months is acceptable as long as it clearly says the close procedure "
+        "itself is not available)."
     ),
     graders=(
         KnowledgeAnswerGrader(

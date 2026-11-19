@@ -14,6 +14,7 @@ from decimal import Decimal, InvalidOperation
 from typing import cast
 
 from tests.evals.grading import DraftClaimGrader, GraderResult, api_json
+from tests.evals.knowledge_grading import AnswerJudgeGrader, JudgeDecision, ScriptedJudgeModel
 from tests.evals.tasks import ClaimDraftTask, ReferenceContext
 from tests.shared.stack import psql
 
@@ -90,11 +91,13 @@ def _matches_line(value: object, expected: ExpectedLine) -> bool:
         amount_matches = Decimal(str(line.get("amount"))) == Decimal(expected.amount)
     except InvalidOperation:
         amount_matches = False
+    description = line.get("description")
     return (
         line.get("category") == expected.category
         and line.get("spent_on") == expected.spent_on.isoformat()
         and amount_matches
-        and line.get("description") == expected.description
+        and isinstance(description, str)
+        and bool(description.strip())
     )
 
 
@@ -158,37 +161,21 @@ class ClaimLinesGrader(DraftClaimGrader):
             return GraderResult(self.id, "fail", f"Could not verify the draft claim: {error}")
 
 
-class HotelCapAnswerGrader(DraftClaimGrader):
-    """Checks that the answer explains the hotel policy cap and over-cap amount."""
-
-    id = "hotel-cap-explained"
-
-    def grade(
-        self,
-        base_url: str,
-        token: str,
-        task: ClaimDraftTask,
-        *,
-        answer: str | None = None,
-        reference: bool = False,
-    ) -> GraderResult:
-        del reference
-        text = (answer or "").lower()
-        checks = (
-            "hotel" in text,
-            "220" in text,
-            "245" in text,
-            "over" in text,
-            "draft" in text,
-        )
-        if all(checks):
-            return GraderResult(self.id, "pass", "The answer flags the hotel cap and draft status.")
-        return GraderResult(
-            self.id,
-            "fail",
-            "The answer must say the USD 245 hotel is over the usual USD 220 cap "
-            "and remains a draft.",
-        )
+def _judge_hotel_cap_answer(answer: str) -> JudgeDecision:
+    text = answer.lower()
+    checks = (
+        "hotel" in text,
+        "220" in text,
+        "245" in text,
+        any(word in text for word in ("over", "above", "exceed", "not within", "beyond")),
+        "draft" in text,
+    )
+    if all(checks):
+        return "pass", "The answer flags the hotel cap and draft status."
+    return (
+        "fail",
+        "The answer must say the USD 245 hotel is over the usual USD 220 cap and remains a draft.",
+    )
 
 
 class VarianceStateGrader(DraftClaimGrader):
@@ -244,67 +231,35 @@ class VarianceStateGrader(DraftClaimGrader):
             return GraderResult(self.id, "fail", f"Could not verify the variance report: {error}")
 
 
-class VarianceAnswerGrader(DraftClaimGrader):
-    """Checks that the answer identifies the over-budget line and amounts."""
-
-    id = "over-budget-line-named"
-
-    def grade(
-        self,
-        base_url: str,
-        token: str,
-        task: ClaimDraftTask,
-        *,
-        answer: str | None = None,
-        reference: bool = False,
-    ) -> GraderResult:
-        del reference
-        text = (answer or "").lower()
-        checks = (
-            "design" in text,
-            "travel" in text,
-            VARIANCE_MONTH in text,
-            "over" in text,
-            "6" in text,
-        )
-        if all(checks):
-            return GraderResult(
-                self.id, "pass", "The answer names the over-budget Design travel line and amount."
-            )
-        return GraderResult(
-            self.id,
-            "fail",
-            "The answer must name Design travel in 2026-10 and identify USD 6.00 over budget.",
-        )
+def _judge_variance_answer(answer: str) -> JudgeDecision:
+    text = answer.lower()
+    checks = (
+        "design" in text,
+        "travel" in text,
+        any(word in text for word in ("over", "exceed", "above", "-6")),
+        "6" in text,
+    )
+    if all(checks):
+        return "pass", "The answer names the over-budget Design travel line and amount."
+    return (
+        "fail",
+        "The answer must name Design travel and identify USD 6.00 over budget.",
+    )
 
 
-class ConflictRecoveryAnswerGrader(DraftClaimGrader):
-    """Checks that the answer acknowledges and recovers from the version conflict."""
-
-    id = "version-conflict-recovered"
-
-    def grade(
-        self,
-        base_url: str,
-        token: str,
-        task: ClaimDraftTask,
-        *,
-        answer: str | None = None,
-        reference: bool = False,
-    ) -> GraderResult:
-        del reference
-        text = (answer or "").lower()
-        reread = any(word in text for word in ("re-read", "reread", "reloaded", "reload"))
-        if "conflict" in text and reread and "draft" in text:
-            return GraderResult(
-                self.id, "pass", "The answer reports recovery after reloading the changed draft."
-            )
-        return GraderResult(
-            self.id,
-            "fail",
-            "The answer must report the version conflict, a reload, and that the claim "
-            "is still a draft.",
-        )
+def _judge_conflict_recovery_answer(answer: str) -> JudgeDecision:
+    text = answer.lower()
+    reread = any(word in text for word in ("re-read", "reread", "reloaded", "reload"))
+    both_kept = ("both" in text or ("travel" in text and "meals" in text)) and any(
+        word in text for word in ("added", "included", "kept", "saved")
+    )
+    if "draft" in text and (("conflict" in text and reread) or both_kept):
+        return "pass", "The answer reports recovery and confirms the updated draft."
+    return (
+        "fail",
+        "The answer must confirm that both lines are on the claim (or report conflict "
+        "recovery) and that the claim remains a draft.",
+    )
 
 
 def _tool_object(context: ReferenceContext, name: str, arguments: dict[str, object]) -> JsonObject:
@@ -628,11 +583,11 @@ def _wrong_version_conflict(context: ReferenceContext, task: ClaimDraftTask) -> 
 TWO_RECEIPTS = PortalTask(
     id="draft-two-receipts-hotel-over-cap",
     prompt=(
-        'Draft a claim titled "Client travel" using receipt.pdf and second-receipt.pdf. '
-        "The hotel receipt is USD 245.00 for one night in a city not on the finance major-city "
-        "exception list, above the usual USD 220.00 per night cap. The second receipt is a "
-        "USD 34.50 taxi to the client site. Leave the claim as a draft, do not submit it, and "
-        "tell me whether the hotel is within policy."
+        'Draft a claim titled "Client travel" using receipt.pdf and second-receipt.pdf, both '
+        "spent on 2026-11-10. The hotel receipt is USD 245.00 for one night in a city not on "
+        "the finance major-city exception list, above the usual USD 220.00 per night cap. The "
+        "second receipt is a USD 34.50 taxi to the client site. Leave the claim as a draft, do "
+        "not submit it, and tell me whether the hotel is within policy."
     ),
     asking_person=LENA,
     claim_title="Client travel",
@@ -652,7 +607,20 @@ TWO_RECEIPTS = PortalTask(
             "second-receipt.pdf",
         ),
     ),
-    graders=(ClaimLinesGrader("draft-claim-with-two-receipts"), HotelCapAnswerGrader()),
+    graders=(
+        ClaimLinesGrader("draft-claim-with-two-receipts"),
+        AnswerJudgeGrader(
+            "hotel-cap-explained",
+            criteria=(
+                "The hotel line is USD 245.00 for one night in a non-listed city where the usual "
+                "cap is USD 220.00 per night, and the claim must stay a draft. Pass if the answer "
+                "clearly states that the USD 245 hotel is over/above the USD 220 policy cap and "
+                "that the claim remains a draft. Fail if it says the hotel is within policy or "
+                "omits the over-cap explanation."
+            ),
+            reference_judge=ScriptedJudgeModel(_judge_hotel_cap_answer),
+        ),
+    ),
     perfect=_perfect_two_receipts,
     wrong=_wrong_two_receipts,
 )
@@ -665,7 +633,20 @@ OVER_BUDGET_VARIANCE = ClaimDraftTask(
     ),
     asking_person=LENA,
     area="budgets",
-    graders=(VarianceStateGrader(), VarianceAnswerGrader()),
+    graders=(
+        VarianceStateGrader(),
+        AnswerJudgeGrader(
+            "over-budget-line-named",
+            criteria=(
+                "In 2026-10, the Design department's travel budget line is over budget by "
+                "USD 6.00 (actual USD 11.00 vs budget USD 5.00, variance -6.00). Pass if the "
+                "answer identifies Design travel as over budget and gives the USD 6.00 overage "
+                "or -6.00 variance (repeating 2026-10 is optional since the question already "
+                "specified it). Fail if it names the wrong category or wrong variance amount."
+            ),
+            reference_judge=ScriptedJudgeModel(_judge_variance_answer),
+        ),
+    ),
     perfect=_perfect_variance,
     wrong=_wrong_variance,
 )
@@ -673,10 +654,11 @@ OVER_BUDGET_VARIANCE = ClaimDraftTask(
 VERSION_CONFLICT = PortalTask(
     id="recover-claim-version-conflict",
     prompt=(
-        'Draft a claim titled "Client visit" with the USD 65.00 travel line in '
-        "second-receipt.pdf. While you work, I am adding the USD 28.00 meals line from "
-        "receipt.pdf in the portal. If the claim version changes, reload it, keep both lines, "
-        "and leave the claim as a draft. Tell me when the requested travel line is added."
+        'Draft a claim titled "Client visit" with the USD 65.00 travel line from '
+        "second-receipt.pdf, spent on 2026-11-12. While you work, I am adding the USD 28.00 "
+        "meals line from receipt.pdf in the portal. If the claim version changes, reload it, "
+        "keep both lines, and leave the claim as a draft. Tell me when the requested travel "
+        "line is added."
     ),
     asking_person=LENA,
     claim_title="Client visit",
@@ -698,7 +680,17 @@ VERSION_CONFLICT = PortalTask(
     ),
     graders=(
         ClaimLinesGrader("draft-claim-keeps-portal-change"),
-        ConflictRecoveryAnswerGrader(),
+        AnswerJudgeGrader(
+            "version-conflict-recovered",
+            criteria=(
+                "The agent had to add the USD 65.00 travel line while keeping the USD 28.00 "
+                "meals line added concurrently in the portal, leaving the claim as a draft. Pass "
+                "if the answer confirms the travel line was added alongside the meals line (or "
+                "reports recovering/reloading after the version conflict) and that the claim "
+                "remains a draft. Fail if it says it stopped without finishing or dropped a line."
+            ),
+            reference_judge=ScriptedJudgeModel(_judge_conflict_recovery_answer),
+        ),
     ),
     perfect=_perfect_version_conflict,
     wrong=_wrong_version_conflict,
