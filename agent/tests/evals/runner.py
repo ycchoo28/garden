@@ -14,7 +14,7 @@ import sys
 import tempfile
 import time
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import cast
 from urllib.error import HTTPError, URLError
@@ -48,9 +48,12 @@ OUTPUT = AGENT_ROOT / "dist" / "evals"
 RUNS = OUTPUT / "runs"
 
 
+RUN_ID_TIMEZONE = timezone(timedelta(hours=8))
+
+
 def make_run_id(*, task_count: int | None = None, mode: str | None = None) -> str:
-    """Build a chronological, human-readable run id safe for filenames and DB prefixes."""
-    stamp = datetime.now(UTC).strftime("%Y-%m-%d-%H%M%Sz")
+    """Build a chronological, human-readable run id (GMT+8) safe for filenames and DB prefixes."""
+    stamp = datetime.now(RUN_ID_TIMEZONE).strftime("%Y-%m-%d-%H%M%S-gmt8")
     short = uuid.uuid4().hex[:6]
     parts = [stamp]
     if mode == "reference":
