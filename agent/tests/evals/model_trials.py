@@ -12,7 +12,6 @@ import sys
 import tempfile
 import threading
 import time
-import uuid
 from collections.abc import Callable
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from datetime import UTC, date, datetime
@@ -214,7 +213,7 @@ def run_model_trials(
         for budget in (task.budget_tool_calls, task.budget_seconds, task.budget_tokens)
     ):
         raise StepFailed("Task budgets must be positive integers.")
-    active_run_id = run_id or str(uuid.uuid4())
+    active_run_id = run_id or runner.make_run_id(task_count=len(tasks))
     started_at = datetime.now(UTC)
     active_runner = trial_runner or run_model_trial
     active_logins = {} if logins is None else logins
@@ -811,8 +810,9 @@ def run_model_trial(
     """Run one real dsh trial in its own cloned database and sealed home."""
     started = time.monotonic()
     db_suffix = hashlib.sha256(trial_id.encode()).hexdigest()[:12]
-    database = f"garden_agent_eval_{run_id[:8]}-{db_suffix}-{repeat}"
-    log_path = output / "logs" / f"{run_id[:8]}-{db_suffix}-{repeat}.log"
+    db_tag = runner.run_db_tag(run_id)
+    database = f"garden_agent_eval_{db_tag}-{db_suffix}-{repeat}"
+    log_path = output / "logs" / f"{db_tag}-{db_suffix}-{repeat}.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
     services = Services()
     db_created = False

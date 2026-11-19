@@ -48,6 +48,24 @@ OUTPUT = AGENT_ROOT / "dist" / "evals"
 RUNS = OUTPUT / "runs"
 
 
+def make_run_id(*, task_count: int | None = None, mode: str | None = None) -> str:
+    """Build a chronological, human-readable run id safe for filenames and DB prefixes."""
+    stamp = datetime.now(UTC).strftime("%Y-%m-%d-%H%M%Sz")
+    short = uuid.uuid4().hex[:6]
+    parts = [stamp]
+    if mode == "reference":
+        parts.append("ref")
+    if task_count is not None:
+        parts.append(f"{task_count}task" if task_count == 1 else f"{task_count}tasks")
+    parts.append(short)
+    return "-".join(parts)
+
+
+def run_db_tag(run_id: str) -> str:
+    """Short unique lowercase hex tag derived from run_id for Postgres DB names."""
+    return hashlib.sha256(run_id.encode()).hexdigest()[:8]
+
+
 def _as_object(value: object) -> dict[str, object] | None:
     if not isinstance(value, dict):
         return None
@@ -563,7 +581,7 @@ def _trial_record(
     failure_reason = error or (" ".join(failures) if failures else None)
     return {
         "run_id": run_id,
-        "trial_id": f"{run_id[:8]}-{variant}",
+        "trial_id": f"{run_db_tag(run_id)}-{variant}",
         "task_id": task.id,
         "suite": task.suite,
         "area": task.area,
@@ -608,7 +626,7 @@ def run_trial(
     keep_failed: bool,
 ) -> dict[str, object]:
     started = time.monotonic()
-    trial_id = f"{run_id[:8]}-{variant}"
+    trial_id = f"{run_db_tag(run_id)}-{variant}"
     database = f"garden_agent_eval_{trial_id}"
     db_created = False
     db_kept = False
@@ -794,7 +812,7 @@ def run_reference(
             embedder = selected_embedder.embedder
             env["GARDEN_EMBEDDING_URL"] = selected_embedder.url
         logins = ensure_template(env, OUTPUT, task, embedder)
-        run_id = str(uuid.uuid4())
+        run_id = make_run_id(task_count=1, mode="reference")
         telemetry = EvalTelemetry(env)
         records: list[dict[str, object]] = []
         for variant, expected_pass, solution in (
@@ -803,7 +821,7 @@ def run_reference(
         ):
             if solution is None:
                 raise StepFailed(f"Task {task.id!r} has no {variant} reference solution.")
-            trial_id = f"{run_id[:8]}-{variant}"
+            trial_id = f"{run_db_tag(run_id)}-{variant}"
             with telemetry.trial_span(
                 run_id=run_id,
                 trial_id=trial_id,
@@ -834,7 +852,7 @@ def run_reference(
                         variant=variant,
                         expected_pass=expected_pass,
                         started=time.monotonic(),
-                        database=f"garden_agent_eval_{run_id[:8]}-{variant}",
+                        database=f"garden_agent_eval_{run_db_tag(run_id)}-{variant}",
                         db_kept=False,
                         reference_solution=variant,
                         answer="",
