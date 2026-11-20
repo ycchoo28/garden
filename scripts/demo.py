@@ -1940,6 +1940,29 @@ class DemoCleanup:
                 clean = False
         return clean
 
+    def checkout_logout(self, env: dict) -> subprocess.CompletedProcess:
+        root = getattr(self, "root", ROOT)
+        return run_bounded(
+            command_for(
+                [
+                    "uv",
+                    "run",
+                    "--project",
+                    root / "agent",
+                    "python",
+                    "-m",
+                    "garden",
+                    "logout",
+                    "--json",
+                    "--force",
+                ],
+                path=env.get("PATH"),
+            ),
+            env=env,
+            timeout=LOGOUT_TIMEOUT,
+            cwd=root,
+        )
+
     def logout(self):
         for login in list(self.data["logins"]):
             launcher = Path(login["launcher"])
@@ -1947,19 +1970,7 @@ class DemoCleanup:
                 getattr(getattr(self, "args", None), "force", False)
                 or getattr(getattr(self, "args", None), "drop_login", False)
             )
-            if not launcher.exists():
-                if force:
-                    # Without the launcher the portal cannot be asked, so only the record goes.
-                    print(
-                        f"Warning: garden is missing at {launcher}, so sign-out for "
-                        f"{login['portal']} was not sent to the portal. The login record was "
-                        "dropped (--drop-login). The portal login remains valid until it expires "
-                        "or is revoked in the portal. The local keyring entry, if any, could not "
-                        "be removed.",
-                        file=sys.stderr,
-                    )
-                    self.data["logins"].remove(login)
-                    continue
+            if not launcher.exists() and not force:
                 print(
                     f"Warning: cannot revoke {login['portal']} because {launcher} is missing; "
                     "the local keyring entry may remain.",
@@ -1979,15 +1990,19 @@ class DemoCleanup:
                     env["GARDEN_CLIENT_TIMEOUT"] = "10"
             except ValueError:
                 env["GARDEN_CLIENT_TIMEOUT"] = "10"
-            cmd = [str(launcher), "logout", "--json"]
-            if force:
-                cmd.append("--force")
+            source_cli_used = not launcher.exists()
             try:
-                result = run_bounded(
-                    command_for(cmd, path=env.get("PATH")),
-                    env=env,
-                    timeout=LOGOUT_TIMEOUT,
-                )
+                if source_cli_used:
+                    result = self.checkout_logout(env)
+                else:
+                    cmd = [str(launcher), "logout", "--json"]
+                    if force:
+                        cmd.append("--force")
+                    result = run_bounded(
+                        command_for(cmd, path=env.get("PATH")),
+                        env=env,
+                        timeout=LOGOUT_TIMEOUT,
+                    )
             except (OSError, subprocess.SubprocessError) as error:
                 print(
                     f"Warning: garden logout failed for {login['portal']}: {error}",
@@ -2007,33 +2022,17 @@ class DemoCleanup:
             )
             forced_drop_message = "local login was dropped (--force)"
             forced_drop = result.returncode == 0 and forced_drop_message in result.stderr
-            if force and not forced_drop and (result.returncode or warning):
-                root = getattr(self, "root", ROOT)
-                retry_cmd = command_for(
-                    [
-                        "uv",
-                        "run",
-                        "--project",
-                        root / "agent",
-                        "python",
-                        "-m",
-                        "garden",
-                        "logout",
-                        "--json",
-                        "--force",
-                    ],
-                    path=env.get("PATH"),
-                )
+            if force and not source_cli_used and not forced_drop and (result.returncode or warning):
                 try:
-                    result = run_bounded(
-                        retry_cmd,
-                        env=env,
-                        timeout=LOGOUT_TIMEOUT,
-                        cwd=root,
-                    )
+                    result = self.checkout_logout(env)
                 except (OSError, subprocess.SubprocessError) as error:
                     result = subprocess.CompletedProcess(
-                        args=retry_cmd,
+                        args=[
+                            "uv",
+                            "run",
+                            "--project",
+                            str(getattr(self, "root", ROOT) / "agent"),
+                        ],
                         returncode=1,
                         stdout="",
                         stderr=f"Checkout CLI could not force logout: {error}",

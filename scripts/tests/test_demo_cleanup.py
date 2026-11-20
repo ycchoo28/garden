@@ -787,17 +787,29 @@ def test_drop_login_drops_record_when_launcher_is_missing(
     manifest_file = MANIFEST.manifest_path(home)
     MANIFEST.save_manifest(manifest_file, manifest)
     seen: list[list[str]] = []
-    _fake_logout(monkeypatch, 0, FORCED_LOGOUT, seen)
+
+    def run_bounded(command, **_kwargs):
+        seen.append(list(command))
+        return subprocess.CompletedProcess(
+            args=command,
+            returncode=0,
+            stdout='{"signed_out": true, "unconfirmed": true}\n',
+            stderr=FORCED_LOGOUT,
+        )
+
+    monkeypatch.setattr(DEMO, "run_bounded", run_bounded)
 
     assert DEMO.DemoCleanup(_cleanup_args(tmp_path, force=True), "uninstall").run() == 0
 
-    assert seen == []
+    assert len(seen) == 1
+    assert "--project" in seen[0]
+    assert str(DEMO.ROOT / "agent") in seen[0]
+    assert seen[0][-3:] == ["logout", "--json", "--force"]
     assert not leftover.exists()
     assert not manifest_file.exists()
     err = capsys.readouterr().err
-    assert f"garden is missing at {missing}" in err
-    assert "The login record was dropped (--drop-login)" in err
-    assert "could not be removed" in err
+    assert "The local login record was removed (--force)." in err
+    assert "local keyring entry, if any, could not be removed" not in err
 
 
 def test_path_restore_keeps_entries_for_kept_recovery_folders() -> None:

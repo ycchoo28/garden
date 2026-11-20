@@ -141,10 +141,10 @@ Add the printed bin directory to PATH if your shell does not already include it.
 The services run until Ctrl+C, which stops only the demo's child processes; the local Compose dependencies stay available for the next run.
 Run `just demo-clean` to stop the demo processes and remove this clone's Compose containers, network and volumes.
 That command keeps Garden tools, installs, the CLI login and `.env`.
-Run `just demo-uninstall` while the portal is still running to revoke the CLI login, then remove the Docker image and files recorded in the Garden install manifest, and restore only user PATH entries that Garden added.
-Do not run `just demo-clean` or stop the demo first if you want the portal to confirm sign-out.
-If the portal is unreachable, `--drop-login` lets uninstall remove the local credential and continue; the portal-side session remains active until it expires or is revoked in the portal.
-When passing cleanup flags through Just, put `--` before the recipe name, for example `just -- demo-uninstall --yes --drop-login`.
+Run `just demo-uninstall` to try revoking the CLI login, stop the demo, remove the Docker image and files recorded in the Garden install manifest, and restore only user PATH entries that Garden added.
+The recipe automatically drops local credentials if the portal cannot confirm sign-out, so it also recovers when the demo was already stopped or the installed Garden CLI is outdated or missing.
+Run uninstall before stopping the demo if you want the portal to confirm sign-out; otherwise its server-side session remains active until it expires or is revoked in the portal.
+When passing cleanup flags through Just, put `--` before the recipe name, for example `just -- demo-uninstall --yes --remove-env`.
 It also removes dependency folders that the demo created, including `backend/.venv`, `agent/.venv` and `frontend/node_modules`.
 Both cleanup commands show a preview and ask before changing anything; pass `--yes` to confirm or `--dry-run` to inspect without changing files or services.
 The uninstall command preserves `.env` unless you separately confirm its removal with the prompt or `--remove-env`.

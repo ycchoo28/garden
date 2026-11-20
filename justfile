@@ -119,13 +119,13 @@ demo-clean *args:
     set -euo pipefail
     uv run --no-project --python 3.12 python scripts/demo.py --clean "$@"
 
-# Revoke the Garden CLI login, then remove this clone's recorded Garden installation and demo artifacts.
-# Use `just -- demo-uninstall ...` so Just forwards cleanup flags such as --yes to the script.
+# Revoke or drop the local Garden CLI login, then remove this clone's recorded install and demo artifacts.
+# Local login removal is automatic when portal revocation is unavailable. Use `just --` to forward other flags.
 [unix]
 demo-uninstall *args:
     #!/usr/bin/env bash
     set -euo pipefail
-    uv run --no-project --python 3.12 python scripts/demo.py --uninstall "$@"
+    uv run --no-project --python 3.12 python scripts/demo.py --uninstall --drop-login "$@"
 
 # Exercise both demo commands with fresh test databases, ports, environment files and homes.
 [unix]
@@ -461,4 +461,4 @@ demo-clean *args:
 
 [windows]
 demo-uninstall *args:
-    uv run --no-project --python 3.12 python scripts/demo.py --uninstall "$@"
+    uv run --no-project --python 3.12 python scripts/demo.py --uninstall --drop-login "$@"
