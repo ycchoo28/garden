@@ -120,6 +120,7 @@ demo-clean *args:
     uv run --no-project --python 3.12 python scripts/demo.py --clean "$@"
 
 # Revoke the Garden CLI login, then remove this clone's recorded Garden installation and demo artifacts.
+# Use `just -- demo-uninstall ...` so Just forwards cleanup flags such as --yes to the script.
 [unix]
 demo-uninstall *args:
     #!/usr/bin/env bash

@@ -726,6 +726,48 @@ def test_drop_login_finishes_after_unconfirmed_uninstall(
     assert not installed_demo["manifest_file"].exists()
 
 
+def test_drop_login_retries_with_checkout_cli_when_installed_cli_keeps_login(
+    installed_demo: dict[str, Any], tmp_path: Path, monkeypatch
+) -> None:
+    seen: list[tuple[list[str], dict[str, Any]]] = []
+    cleanup = DEMO.DemoCleanup(_cleanup_args(tmp_path, force=True), "uninstall", root=DEMO.ROOT)
+
+    def run(command, **kwargs):
+        seen.append((list(command), kwargs))
+        if len(seen) == 1:
+            return subprocess.CompletedProcess(
+                args=command,
+                returncode=1,
+                stdout="",
+                stderr=UNCONFIRMED_LOGOUT,
+            )
+        return subprocess.CompletedProcess(
+            args=command,
+            returncode=0,
+            stdout='{"signed_out": true, "unconfirmed": true}\n',
+            stderr=FORCED_LOGOUT,
+        )
+
+    monkeypatch.setattr(DEMO, "run_bounded", run)
+
+    assert cleanup.run() == 0
+
+    assert seen[0][0] == [
+        str(installed_demo["launcher"]),
+        "logout",
+        "--json",
+        "--force",
+    ]
+    assert "--project" in seen[1][0]
+    assert str(DEMO.ROOT / "agent") in seen[1][0]
+    assert seen[1][0][-3:] == ["logout", "--json", "--force"]
+    assert seen[1][1]["cwd"] == DEMO.ROOT
+    assert seen[1][1]["env"]["GARDEN_HOME"] == str(installed_demo["garden_home"])
+    assert not installed_demo["manifest_file"].exists()
+    for name in ("launcher", "garden_home", "bin", "just", "uv"):
+        assert not installed_demo[name].exists(), name
+
+
 def test_drop_login_drops_record_when_launcher_is_missing(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:

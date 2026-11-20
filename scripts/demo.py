@@ -2005,9 +2005,48 @@ class DemoCleanup:
                 (line for line in result.stderr.splitlines() if "portal did not confirm" in line),
                 None,
             )
-            forced_drop = (
-                result.returncode == 0 and "local login was dropped (--force)" in result.stderr
-            )
+            forced_drop_message = "local login was dropped (--force)"
+            forced_drop = result.returncode == 0 and forced_drop_message in result.stderr
+            if force and not forced_drop and (result.returncode or warning):
+                root = getattr(self, "root", ROOT)
+                retry_cmd = command_for(
+                    [
+                        "uv",
+                        "run",
+                        "--project",
+                        root / "agent",
+                        "python",
+                        "-m",
+                        "garden",
+                        "logout",
+                        "--json",
+                        "--force",
+                    ],
+                    path=env.get("PATH"),
+                )
+                try:
+                    result = run_bounded(
+                        retry_cmd,
+                        env=env,
+                        timeout=LOGOUT_TIMEOUT,
+                        cwd=root,
+                    )
+                except (OSError, subprocess.SubprocessError) as error:
+                    result = subprocess.CompletedProcess(
+                        args=retry_cmd,
+                        returncode=1,
+                        stdout="",
+                        stderr=f"Checkout CLI could not force logout: {error}",
+                    )
+                warning = next(
+                    (
+                        line
+                        for line in result.stderr.splitlines()
+                        if "portal did not confirm" in line
+                    ),
+                    None,
+                )
+                forced_drop = result.returncode == 0 and forced_drop_message in result.stderr
             if forced_drop:
                 message = warning or result.stderr.strip()
                 if message.lower().startswith("warning: "):
