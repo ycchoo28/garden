@@ -24,6 +24,22 @@ def _demo() -> DEMO.Demo:
     return demo
 
 
+def test_demo_urls_use_ipv4_loopback() -> None:
+    assert DEMO.loopback_url(55000) == "http://127.0.0.1:55000"
+    assert DEMO.loopback_url(55173) == "http://127.0.0.1:55173"
+
+
+def test_demo_normalizes_an_older_localhost_oidc_issuer() -> None:
+    assert (
+        DEMO.demo_oidc_issuer_url("http://localhost:55081/default", 55082)
+        == "http://127.0.0.1:55082/default"
+    )
+    assert (
+        DEMO.demo_oidc_issuer_url("https://identity.example/default", 55082)
+        == "https://identity.example/default"
+    )
+
+
 def _docker_ps(stdout: str, calls: list):
     def fake_run(command, **_kwargs):
         calls.append([str(part) for part in command])

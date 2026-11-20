@@ -60,8 +60,12 @@ def test_demo_port_preflight_rejects_an_active_listener() -> None:
         listener.listen()
         port = listener.getsockname()[1]
 
-        with pytest.raises(RuntimeError, match=f"Demo loopback port {port} is unavailable"):
+        with pytest.raises(RuntimeError) as error:
             DEMO.check_demo_port(port)
+        assert f"Demo loopback port {port} is unavailable" in str(error.value)
+        assert "A previous Garden demo may still be running" in str(error.value)
+        assert "run just demo-clean" in str(error.value)
+        assert "rerun just demo here" in str(error.value)
 
 
 def test_empty_web_only_model_environment_overrides_populated_dotenv(
@@ -520,7 +524,9 @@ def test_unresponsive_demo_runner_is_still_a_failure(capsys) -> None:
     assert "did not respond" in capsys.readouterr().err
 
 
-def test_empty_cleanup_is_idempotent(tmp_path: Path, monkeypatch) -> None:
+def test_empty_cleanup_is_idempotent_and_reports_missing_manifest(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     args = argparse.Namespace(
         dry_run=False,
@@ -531,6 +537,7 @@ def test_empty_cleanup_is_idempotent(tmp_path: Path, monkeypatch) -> None:
 
     assert DEMO.DemoCleanup(args, "clean").run() == 0
     assert DEMO.DemoCleanup(args, "uninstall").run() == 0
+    assert capsys.readouterr().out.count("Garden install manifest already absent:") == 2
 
 
 def test_shared_directory_is_removed_only_when_empty(tmp_path: Path) -> None:
@@ -719,6 +726,48 @@ def test_drop_login_finishes_after_unconfirmed_uninstall(
     assert not installed_demo["manifest_file"].exists()
 
 
+def test_drop_login_retries_with_checkout_cli_when_installed_cli_keeps_login(
+    installed_demo: dict[str, Any], tmp_path: Path, monkeypatch
+) -> None:
+    seen: list[tuple[list[str], dict[str, Any]]] = []
+    cleanup = DEMO.DemoCleanup(_cleanup_args(tmp_path, force=True), "uninstall", root=DEMO.ROOT)
+
+    def run(command, **kwargs):
+        seen.append((list(command), kwargs))
+        if len(seen) == 1:
+            return subprocess.CompletedProcess(
+                args=command,
+                returncode=1,
+                stdout="",
+                stderr=UNCONFIRMED_LOGOUT,
+            )
+        return subprocess.CompletedProcess(
+            args=command,
+            returncode=0,
+            stdout='{"signed_out": true, "unconfirmed": true}\n',
+            stderr=FORCED_LOGOUT,
+        )
+
+    monkeypatch.setattr(DEMO, "run_bounded", run)
+
+    assert cleanup.run() == 0
+
+    assert seen[0][0] == [
+        str(installed_demo["launcher"]),
+        "logout",
+        "--json",
+        "--force",
+    ]
+    assert "--project" in seen[1][0]
+    assert str(DEMO.ROOT / "agent") in seen[1][0]
+    assert seen[1][0][-3:] == ["logout", "--json", "--force"]
+    assert seen[1][1]["cwd"] == DEMO.ROOT
+    assert seen[1][1]["env"]["GARDEN_HOME"] == str(installed_demo["garden_home"])
+    assert not installed_demo["manifest_file"].exists()
+    for name in ("launcher", "garden_home", "bin", "just", "uv"):
+        assert not installed_demo[name].exists(), name
+
+
 def test_drop_login_drops_record_when_launcher_is_missing(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
@@ -738,17 +787,29 @@ def test_drop_login_drops_record_when_launcher_is_missing(
     manifest_file = MANIFEST.manifest_path(home)
     MANIFEST.save_manifest(manifest_file, manifest)
     seen: list[list[str]] = []
-    _fake_logout(monkeypatch, 0, FORCED_LOGOUT, seen)
+
+    def run_bounded(command, **_kwargs):
+        seen.append(list(command))
+        return subprocess.CompletedProcess(
+            args=command,
+            returncode=0,
+            stdout='{"signed_out": true, "unconfirmed": true}\n',
+            stderr=FORCED_LOGOUT,
+        )
+
+    monkeypatch.setattr(DEMO, "run_bounded", run_bounded)
 
     assert DEMO.DemoCleanup(_cleanup_args(tmp_path, force=True), "uninstall").run() == 0
 
-    assert seen == []
+    assert len(seen) == 1
+    assert "--project" in seen[0]
+    assert str(DEMO.ROOT / "agent") in seen[0]
+    assert seen[0][-3:] == ["logout", "--json", "--force"]
     assert not leftover.exists()
     assert not manifest_file.exists()
     err = capsys.readouterr().err
-    assert f"garden is missing at {missing}" in err
-    assert "The login record was dropped (--drop-login)" in err
-    assert "could not be removed" in err
+    assert "The local login record was removed (--force)." in err
+    assert "local keyring entry, if any, could not be removed" not in err
 
 
 def test_path_restore_keeps_entries_for_kept_recovery_folders() -> None:
@@ -779,6 +840,33 @@ def _uninstall_args(env_file: Path, **flags) -> argparse.Namespace:
     }
     values.update(flags)
     return argparse.Namespace(**values)
+
+
+def test_uninstall_continues_when_manifest_is_already_missing(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    env_file = tmp_path / ".env"
+    env_file.write_text("GARDEN_X=1\n")
+    moved: list[Path] = []
+
+    def record_trash(path):
+        target = Path(path)
+        moved.append(target)
+        target.unlink()
+
+    monkeypatch.setattr(DEMO, "trash_path", record_trash)
+    manifest_file = MANIFEST.manifest_path(tmp_path)
+    assert not manifest_file.exists()
+
+    result = DEMO.DemoCleanup(_uninstall_args(env_file, remove_env=True), "uninstall").run()
+
+    assert result == 0
+    assert moved == [env_file]
+    assert not env_file.exists()
+    output = capsys.readouterr().out
+    assert output.count("Garden install manifest already absent") == 1
+    assert f"Move {env_file} to Trash after separate confirmation" in output
 
 
 def test_uninstall_dry_run_lists_exactly_what_it_removes(

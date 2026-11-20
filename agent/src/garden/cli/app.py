@@ -156,6 +156,14 @@ def _login(args: argparse.Namespace, *, get_settings: Callable[[], Settings]) ->
 
     def on_url(url: str) -> None:
         print(f"Approve this login for {args.device} in your browser:\n  {url}", flush=True)
+        timeout_seconds = max(1, int(args.timeout))
+        if timeout_seconds >= 60:
+            timeout = max(1, int((timeout_seconds + 59) // 60))
+            unit = "minute" if timeout == 1 else "minutes"
+        else:
+            timeout = timeout_seconds
+            unit = "second" if timeout == 1 else "seconds"
+        print(f"Waiting for approval, up to {timeout} {unit}.", flush=True)
 
     def exchange(path: str, payload: dict[str, object]) -> dict[str, Any]:
         client = PortalClient(settings.portal_url)

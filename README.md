@@ -116,6 +116,9 @@ Node must be at least version 24.
 Windows bootstrap also locates Git Bash or installs a checksum-verified portable Git, and updates the current and user PATH.
 POSIX bootstrap must be sourced to update the current shell's PATH.
 Supported bootstrap hosts are Linux and macOS on x64 or ARM64, and Windows on x64.
+Inside WSL 2, `just demo` opens CLI sign-in in the Windows browser automatically.
+No extra browser package or `BROWSER` setting is required.
+Installing `wslu` and setting `BROWSER=wslview` are optional if you prefer that opener.
 
 `just demo` initializes `.env` and missing dependencies, validates the saved model upstream, publishes the agent downloads, and starts the seeded portal.
 When model settings are missing or unusable, it offers a provider menu (OpenRouter, OpenAI, another OpenAI-compatible URL, or the local fake model), then asks for a hidden API token.
@@ -129,13 +132,19 @@ Neither the installer nor the client configuration receives the upstream key ([A
 The fake model returns a fixed reply and does not reason or call tools.
 
 Once the portal is healthy, the command runs its installer, opens CLI sign-in so you can choose a seeded persona, writes the `dsh` configuration, and verifies `garden tools`, `dsh --version` and a model turn through the portal.
+After setup, `just demo` opens the Garden portal in your browser; if it cannot open one, it prints the portal URL.
+If sign-in approval takes longer than 30 minutes, the demo stays running with everything else installed.
+Retry from another terminal with the printed `garden login` command, then run `garden dsh-config` to finish dsh setup.
 It installs into `~/.local/bin`, `~/.garden` and `~/.dsh` (under `%USERPROFILE%` on Windows).
 Both installers supply Python and Node when needed.
 Add the printed bin directory to PATH if your shell does not already include it.
 The services run until Ctrl+C, which stops only the demo's child processes; the local Compose dependencies stay available for the next run.
 Run `just demo-clean` to stop the demo processes and remove this clone's Compose containers, network and volumes.
 That command keeps Garden tools, installs, the CLI login and `.env`.
-Run `just demo-uninstall` to revoke the CLI login, remove the Docker image and files recorded in the Garden install manifest, and restore only user PATH entries that Garden added.
+Run `just demo-uninstall` to try revoking the CLI login, stop the demo, remove the Docker image and files recorded in the Garden install manifest, and restore only user PATH entries that Garden added.
+The recipe automatically drops local credentials if the portal cannot confirm sign-out, so it also recovers when the demo was already stopped or the installed Garden CLI is outdated or missing.
+Run uninstall before stopping the demo if you want the portal to confirm sign-out; otherwise its server-side session remains active until it expires or is revoked in the portal.
+When passing cleanup flags through Just, put `--` before the recipe name, for example `just -- demo-uninstall --yes --remove-env`.
 It also removes dependency folders that the demo created, including `backend/.venv`, `agent/.venv` and `frontend/node_modules`.
 Both cleanup commands show a preview and ask before changing anything; pass `--yes` to confirm or `--dry-run` to inspect without changing files or services.
 The uninstall command preserves `.env` unless you separately confirm its removal with the prompt or `--remove-env`.

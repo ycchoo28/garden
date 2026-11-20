@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -84,6 +85,54 @@ def test_cleanup_removes_only_matching_managed_paths(tmp_path: Path) -> None:
     assert edited.read_text() == "changed by the person"
     assert [entry["path"] for entry in remaining["artifacts"]] == [str(edited.resolve())]
     assert any("changed since Garden recorded it" in warning for warning in warnings)
+
+
+def test_artifact_removed_after_preview_is_reported_as_already_absent(
+    tmp_path: Path, capsys
+) -> None:
+    launcher = tmp_path / "garden"
+    launcher.write_text("created by Garden")
+    manifest = MANIFEST.empty_manifest()
+    MANIFEST.record_artifact(manifest, launcher, owner="agent-installer", kind="file")
+    plan = MANIFEST.artifact_plan(manifest)
+    launcher.unlink()
+
+    remaining, warnings = MANIFEST.apply_artifact_plan(
+        manifest, plan, trash_root=tmp_path / "trash"
+    )
+
+    assert remaining["artifacts"] == []
+    assert warnings == []
+    assert capsys.readouterr().out == f"Already absent: {launcher}\n"
+
+
+def test_trash_failure_does_not_skip_later_recorded_artifacts(tmp_path: Path, monkeypatch) -> None:
+    first = tmp_path / "garden-first"
+    second = tmp_path / "garden-second"
+    first.write_text("first")
+    second.write_text("second")
+    manifest = MANIFEST.empty_manifest()
+    MANIFEST.record_artifact(manifest, first, owner="agent-installer", kind="file")
+    MANIFEST.record_artifact(manifest, second, owner="agent-installer", kind="file")
+    plan = MANIFEST.artifact_plan(manifest)
+    failed_path = Path(plan[0]["path"])
+    real_trash = MANIFEST._trash_path
+
+    def trash(path, trash_root=None):
+        if Path(path) == failed_path:
+            raise subprocess.CalledProcessError(1, ["trash", str(path)], stderr="simulated failure")
+        real_trash(path, trash_root)
+
+    monkeypatch.setattr(MANIFEST, "_trash_path", trash)
+
+    remaining, warnings = MANIFEST.apply_artifact_plan(
+        manifest, plan, trash_root=tmp_path / "trash"
+    )
+
+    assert [entry["path"] for entry in remaining["artifacts"]] == [str(failed_path)]
+    assert not Path(plan[1]["path"]).exists()
+    assert len(warnings) == 1
+    assert "simulated failure" in warnings[0]
 
 
 def test_cleanup_removes_owned_symlink_without_following_its_target(

@@ -94,6 +94,14 @@ COMPOSE_ENV_KEYS = (
 )
 
 
+def open_browser_link(url: str) -> bool:
+    """Use the agent package's shared browser opener from the source checkout."""
+    sys.path.insert(0, str(ROOT / "agent" / "src"))
+    from garden.shared import open_link
+
+    return open_link(url)
+
+
 def wsl_env(existing: str, keys: tuple[str, ...]) -> str:
     """Add keys to a WSLENV value without dropping or repeating existing entries."""
     parts = [part for part in existing.split(":") if part]
@@ -150,7 +158,24 @@ def check_demo_port(port: int) -> None:
         try:
             probe.bind(("127.0.0.1", port))
         except OSError as error:
-            raise RuntimeError(f"Demo loopback port {port} is unavailable: {error}") from error
+            raise RuntimeError(
+                f"Demo loopback port {port} is unavailable: {error}. A previous Garden demo may "
+                "still be running; in the checkout that started it, run just demo-clean, then "
+                "rerun just demo here."
+            ) from error
+
+
+def loopback_url(port: int) -> str:
+    return f"http://127.0.0.1:{port}"
+
+
+def demo_oidc_issuer_url(issuer: str, demo_port: int) -> str:
+    parsed = urllib.parse.urlsplit(issuer)
+    if parsed.hostname != "localhost":
+        return issuer
+    port = demo_port if parsed.port == 55081 else parsed.port
+    netloc = f"127.0.0.1:{port}" if port is not None else "127.0.0.1"
+    return urllib.parse.urlunsplit(parsed._replace(netloc=netloc))
 
 
 def with_user_path(env: dict) -> None:
@@ -190,6 +215,7 @@ CHILD_STOP_TIMEOUT = 15
 RUNNER_GONE_TIMEOUT = 30
 # A listening loopback socket accepts at once; this only bounds a refusal Windows retries.
 CONTROL_CONNECT_TIMEOUT = 3
+LOGIN_TIMEOUT_SECONDS = 1800
 
 
 def run_bounded(command, *, timeout: float, env=None, cwd=None) -> subprocess.CompletedProcess:
@@ -717,14 +743,15 @@ class Demo:
                 self.env[key] = ""
             self.env[FAKE_FLAG] = "0"
         self.procs = []
+        self.agent_pending_signin = False
         self.servers = []
         self.control_server = None
         self.control_thread = None
         self.work = Path(tempfile.mkdtemp(prefix="garden-demo-"))
         self.api_port = int(self.env.get("GARDEN_DEMO_API_PORT", "55000"))
         self.web_port = int(self.env.get("GARDEN_DEMO_WEB_PORT", "55173"))
-        self.api = f"http://127.0.0.1:{self.api_port}"
-        self.web = f"http://localhost:{self.web_port}"
+        self.api = loopback_url(self.api_port)
+        self.web = loopback_url(self.web_port)
         self.manifest_file = manifest_path()
         self.project = demo_project_name(ROOT, Path.home())
         self.postgres_image = self.env.get("GARDEN_DEV_POSTGRES_IMAGE") or demo_image_reference(
@@ -741,10 +768,14 @@ class Demo:
             self.env["GARDEN_DATABASE_URL"] = self.env["GARDEN_DATABASE_URL"].replace(
                 ":55432/", f":{self.compose_postgres_port}/", 1
             )
+        self.env.setdefault("GARDEN_OIDC_ISSUER", example["GARDEN_OIDC_ISSUER"])
         if self.env.get("GARDEN_OIDC_ISSUER") == example.get("GARDEN_OIDC_ISSUER"):
             self.env["GARDEN_OIDC_ISSUER"] = self.env["GARDEN_OIDC_ISSUER"].replace(
                 ":55081/", f":{self.compose_oidc_port}/", 1
             )
+        self.env["GARDEN_OIDC_ISSUER"] = demo_oidc_issuer_url(
+            self.env["GARDEN_OIDC_ISSUER"], self.compose_oidc_port
+        )
         self.env["COMPOSE_PROJECT_NAME"] = self.project
         self.env.pop("VIRTUAL_ENV", None)
         self.stop_event = threading.Event()
@@ -1198,6 +1229,8 @@ class Demo:
         env = self.client_env()
         env["GARDEN_API_URL"] = self.api
         env["GARDEN_LOGIN_LINK_FILE"] = str(self.work / "login-link")
+        env["GARDEN_LOGIN_STATUS_FILE"] = str(self.work / "login-status")
+        env.setdefault("GARDEN_LOGIN_TIMEOUT_SECONDS", str(LOGIN_TIMEOUT_SECONDS))
         unattended = self.args.non_interactive
         if unattended and not self.args.persona:
             raise RuntimeError("--non-interactive requires --persona (for example 'Dev Admin')")
@@ -1221,12 +1254,19 @@ class Demo:
         process = self.start(command, env=env)
         deadline = time.monotonic() + 600
         link = ""
+        status_file = Path(env["GARDEN_LOGIN_STATUS_FILE"])
         while not link:
             if (self.work / "login-link").exists():
                 link = (self.work / "login-link").read_text().strip()
                 if link:
                     break
             if process.poll() is not None:
+                if (
+                    process.returncode == 0
+                    and status_file.exists()
+                    and status_file.read_text(encoding="utf-8").strip() == "pending"
+                ):
+                    break
                 raise RuntimeError("Installer failed before sign-in")
             if time.monotonic() > deadline:
                 raise RuntimeError("Installer timed out before sign-in")
@@ -1259,19 +1299,39 @@ class Demo:
                 ],
                 env=env,
             )
-        else:
-            import webbrowser
-
+        elif link:
+            print("Sign-in URL:", flush=True)
+            print(f"  {link}", flush=True)
             print(
                 "Choose your seeded persona in the browser to approve CLI sign-in.",
                 flush=True,
             )
-            webbrowser.open(link)
-        process.wait(timeout=300)
+            print("Opening the sign-in link in your browser...", flush=True)
+            if not open_browser_link(link):
+                print(
+                    "No browser could be opened here. Open this sign-in link yourself:",
+                    flush=True,
+                )
+                print(f"  {link}", flush=True)
+        process.wait()
         self.procs.remove(process)
         if process.returncode:
             raise RuntimeError("Installer failed")
         bin_dir = Path(env.get("GARDEN_BIN_DIR", str(Path.home() / ".local/bin")))
+        login_status = (
+            status_file.read_text(encoding="utf-8").strip() if status_file.exists() else "signed-in"
+        )
+        if login_status != "signed-in":
+            garden = bin_dir / ("garden.cmd" if os.name == "nt" else "garden")
+            self.agent_pending_signin = True
+            print("Sign-in approval did not finish. Everything else is installed.", flush=True)
+            print(
+                "The demo portal is still running. To retry from another terminal, run:",
+                flush=True,
+            )
+            print(f"  {garden} login", flush=True)
+            print(f"After signing in, finish dsh setup with: {garden} dsh-config", flush=True)
+            return
         manifest = load_manifest(self.manifest_file)
         record_login(
             manifest,
@@ -1288,7 +1348,8 @@ class Demo:
             [garden, "tools"],
             [dsh, "--version"],
             [
-                dsh,
+                garden,
+                "dsh",
                 "--profile",
                 "headless",
                 "--json",
@@ -1704,6 +1765,7 @@ class DemoCleanup:
         self.data = load_manifest(self.manifest_file)
         self.projects = demo_projects_for(self.data, self.root)
         self.failed = False
+        self.manifest_finalized = False
 
     def confirm(self, preview: list[str]) -> bool:
         print("Garden demo cleanup preview:", flush=True)
@@ -1878,6 +1940,29 @@ class DemoCleanup:
                 clean = False
         return clean
 
+    def checkout_logout(self, env: dict) -> subprocess.CompletedProcess:
+        root = getattr(self, "root", ROOT)
+        return run_bounded(
+            command_for(
+                [
+                    "uv",
+                    "run",
+                    "--project",
+                    root / "agent",
+                    "python",
+                    "-m",
+                    "garden",
+                    "logout",
+                    "--json",
+                    "--force",
+                ],
+                path=env.get("PATH"),
+            ),
+            env=env,
+            timeout=LOGOUT_TIMEOUT,
+            cwd=root,
+        )
+
     def logout(self):
         for login in list(self.data["logins"]):
             launcher = Path(login["launcher"])
@@ -1885,19 +1970,7 @@ class DemoCleanup:
                 getattr(getattr(self, "args", None), "force", False)
                 or getattr(getattr(self, "args", None), "drop_login", False)
             )
-            if not launcher.exists():
-                if force:
-                    # Without the launcher the portal cannot be asked, so only the record goes.
-                    print(
-                        f"Warning: garden is missing at {launcher}, so sign-out for "
-                        f"{login['portal']} was not sent to the portal. The login record was "
-                        "dropped (--drop-login). The portal login remains valid until it expires "
-                        "or is revoked in the portal. The local keyring entry, if any, could not "
-                        "be removed.",
-                        file=sys.stderr,
-                    )
-                    self.data["logins"].remove(login)
-                    continue
+            if not launcher.exists() and not force:
                 print(
                     f"Warning: cannot revoke {login['portal']} because {launcher} is missing; "
                     "the local keyring entry may remain.",
@@ -1917,15 +1990,19 @@ class DemoCleanup:
                     env["GARDEN_CLIENT_TIMEOUT"] = "10"
             except ValueError:
                 env["GARDEN_CLIENT_TIMEOUT"] = "10"
-            cmd = [str(launcher), "logout", "--json"]
-            if force:
-                cmd.append("--force")
+            source_cli_used = not launcher.exists()
             try:
-                result = run_bounded(
-                    command_for(cmd, path=env.get("PATH")),
-                    env=env,
-                    timeout=LOGOUT_TIMEOUT,
-                )
+                if source_cli_used:
+                    result = self.checkout_logout(env)
+                else:
+                    cmd = [str(launcher), "logout", "--json"]
+                    if force:
+                        cmd.append("--force")
+                    result = run_bounded(
+                        command_for(cmd, path=env.get("PATH")),
+                        env=env,
+                        timeout=LOGOUT_TIMEOUT,
+                    )
             except (OSError, subprocess.SubprocessError) as error:
                 print(
                     f"Warning: garden logout failed for {login['portal']}: {error}",
@@ -1943,9 +2020,32 @@ class DemoCleanup:
                 (line for line in result.stderr.splitlines() if "portal did not confirm" in line),
                 None,
             )
-            forced_drop = (
-                result.returncode == 0 and "local login was dropped (--force)" in result.stderr
-            )
+            forced_drop_message = "local login was dropped (--force)"
+            forced_drop = result.returncode == 0 and forced_drop_message in result.stderr
+            if force and not source_cli_used and not forced_drop and (result.returncode or warning):
+                try:
+                    result = self.checkout_logout(env)
+                except (OSError, subprocess.SubprocessError) as error:
+                    result = subprocess.CompletedProcess(
+                        args=[
+                            "uv",
+                            "run",
+                            "--project",
+                            str(getattr(self, "root", ROOT) / "agent"),
+                        ],
+                        returncode=1,
+                        stdout="",
+                        stderr=f"Checkout CLI could not force logout: {error}",
+                    )
+                warning = next(
+                    (
+                        line
+                        for line in result.stderr.splitlines()
+                        if "portal did not confirm" in line
+                    ),
+                    None,
+                )
+                forced_drop = result.returncode == 0 and forced_drop_message in result.stderr
             if forced_drop:
                 message = warning or result.stderr.strip()
                 if message.lower().startswith("warning: "):
@@ -2094,11 +2194,32 @@ class DemoCleanup:
             or self.data["docker_images"]
         )
         if nothing_left:
+            if not self.manifest_finalized:
+                self.trash_with_report(self.manifest_file, "Garden install manifest")
+                self.manifest_finalized = True
             with contextlib.suppress(OSError):
-                trash_path(self.manifest_file)
                 self.manifest_file.parent.rmdir()
             return
         save_manifest(self.manifest_file, self.data)
+
+    def trash_with_report(self, path: Path, description: str) -> None:
+        if not os.path.lexists(path):
+            print(f"{description} already absent: {path}", flush=True)
+            return
+        try:
+            trash_path(path)
+        except (OSError, subprocess.SubprocessError) as error:
+            if not os.path.lexists(path):
+                print(f"{description} already absent: {path}", flush=True)
+                return
+            print(f"Warning: could not move {description} to Trash: {error}", file=sys.stderr)
+            self.failed = True
+            return
+        if os.path.lexists(path):
+            print(f"Warning: {description} remains at {path}.", file=sys.stderr)
+            self.failed = True
+            return
+        print(f"Moved {description} to Trash: {path}", flush=True)
 
     def run(self):
         force = bool(getattr(self.args, "force", False) or getattr(self.args, "drop_login", False))
@@ -2183,13 +2304,14 @@ class DemoCleanup:
         # Only --remove-env or an interactive answer moves .env. --yes confirms the listed
         # cleanup and never prompts, so an unattended run cannot wait here.
         env_file = Path(self.args.env_file).resolve()
+        if self.args.remove_env:
+            self.trash_with_report(env_file, "Environment file")
+            return
         if not env_file.exists():
             return
-        if self.args.remove_env:
-            trash_path(env_file)
-        elif sys.stdin.isatty() and not self.args.yes:
+        if sys.stdin.isatty() and not self.args.yes:
             if input(f"Also move {env_file} to Trash? [y/N] ").strip().lower() in {"y", "yes"}:
-                trash_path(env_file)
+                self.trash_with_report(env_file, "Environment file")
         else:
             print(f"Kept {env_file}; pass --remove-env to move it to Trash.", flush=True)
 
@@ -2321,7 +2443,14 @@ def main():
         demo.stack()
         if not args.web_only:
             demo.install()
-        print("Demo ready. Press Ctrl+C to stop.", flush=True)
+        if demo.agent_pending_signin:
+            print("Demo portal is running. Press Ctrl+C to stop.", flush=True)
+        else:
+            print("Demo ready. Press Ctrl+C to stop.", flush=True)
+        if not args.smoke and not args.non_interactive and sys.stdin.isatty():
+            print("Opening the Garden portal in your browser...", flush=True)
+            if not open_browser_link(demo.web):
+                print(f"Open the Garden portal manually at: {demo.web}", flush=True)
         if not args.smoke:
             while not demo.stop_event.wait(0.5):
                 demo.check_processes()

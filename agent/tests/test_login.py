@@ -32,6 +32,7 @@ def test_login_then_whoami_then_logout(
     signed = sign_in(env, device="laptop-1")
     assert signed.returncode == 0, signed.stderr
     assert "Signed in as Marcus Lee (marcus.lee@fernhill.example) on laptop-1." in signed.stdout
+    assert "Waiting for approval, up to 30 minutes." in signed.stdout
 
     stored = json.loads(json.loads((tmp_path / "secrets.json").read_text())[portal.url])
     assert stored == {"token": GOOD_TOKEN, "device": "laptop-1"}
@@ -110,6 +111,20 @@ def test_no_portal_address_is_reported_as_a_fix(tmp_path: Path, env: dict[str, s
     error = as_json(result.stdout)["error"]
     assert error["title"] == "No portal address"
     assert "GARDEN_API_URL" in error["fix"]
+
+
+def test_login_with_portal_down_explains_how_to_start_the_demo(env: dict[str, str]) -> None:
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        closed_port = probe.getsockname()[1]
+    portal_url = f"http://127.0.0.1:{closed_port}"
+
+    result = run_garden({**env, "GARDEN_API_URL": portal_url}, "login", "--no-open")
+
+    assert result.returncode == 1
+    assert f"The portal at {portal_url} is not running." in result.stderr
+    assert "Start it with: just demo" in result.stderr
+    assert "Approve this login" not in result.stdout + result.stderr
 
 
 def test_switching_portals_does_not_reuse_another_portals_login(

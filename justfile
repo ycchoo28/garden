@@ -119,12 +119,13 @@ demo-clean *args:
     set -euo pipefail
     uv run --no-project --python 3.12 python scripts/demo.py --clean "$@"
 
-# Revoke the Garden CLI login, then remove this clone's recorded Garden installation and demo artifacts.
+# Revoke or drop the local Garden CLI login, then remove this clone's recorded install and demo artifacts.
+# Local login removal is automatic when portal revocation is unavailable. Use `just --` to forward other flags.
 [unix]
 demo-uninstall *args:
     #!/usr/bin/env bash
     set -euo pipefail
-    uv run --no-project --python 3.12 python scripts/demo.py --uninstall "$@"
+    uv run --no-project --python 3.12 python scripts/demo.py --uninstall --drop-login "$@"
 
 # Exercise both demo commands with fresh test databases, ports, environment files and homes.
 [unix]
@@ -397,9 +398,9 @@ architecture-check:
 guardrail-test:
     uv run --project backend pytest scripts/tests -q
 
-# Scan the git history and the working tree for committed secrets.
+# Scan all committed history reachable from the checked-out commit.
 secrets-check:
-    gitleaks git --no-banner --redact --exit-code 1 .
+    gitleaks git --no-banner --redact --exit-code 1 --log-opts='HEAD' .
 
 # Check that the relative links in the Markdown files point at files and headings that exist.
 docs-check:
@@ -465,4 +466,4 @@ demo-clean *args:
 
 [windows]
 demo-uninstall *args:
-    uv run --no-project --python 3.12 python scripts/demo.py --uninstall "$@"
+    uv run --no-project --python 3.12 python scripts/demo.py --uninstall --drop-login "$@"

@@ -70,6 +70,7 @@ $script:DshFolderCreated = $false
 $script:DshPatchWritten = $false
 $script:DshPatchBackup = $null
 $script:LoginSucceeded = $false
+$script:LoginPending = $false
 $script:NodeTreePath = $null
 $script:NodeTreeExisted = $true
 $script:WebDirCreated = $false
@@ -204,11 +205,11 @@ function Start-Step([string]$message) {
 }
 
 function Complete-Step {
-    Write-Host "[$($script:StepNumber)/$($script:TotalSteps)] Done: $($script:CurrentStep)"
-    $script:CurrentStep = $null
     # Record after every stage: a forced stop skips the finally below, and uninstall removes only
     # what the manifest lists.
     try { Write-InstallManifest } catch { Write-Warning "Could not update the Garden install manifest: $($_.Exception.Message)" }
+    Write-Host "[$($script:StepNumber)/$($script:TotalSteps)] Done: $($script:CurrentStep)"
+    $script:CurrentStep = $null
 }
 
 function Format-Size([long]$bytes) {
@@ -512,7 +513,7 @@ function Get-LoginOutputTail {
         $file = Join-Path $tmp $name
         if (Test-Path $file) { Get-Content -Path $file -ErrorAction SilentlyContinue }
     }
-    $shown = @($lines | Where-Object { $_ -and $_ -notmatch '^\s*https?://' } | Select-Object -Last 8)
+    $shown = @($lines | Where-Object { $_ -and $_ -notmatch '^\s*https?://' -and $_ -notmatch 'Approve this login for ' } | Select-Object -Last 8)
     if ($shown.Count -eq 0) { return '' }
     return ' garden login said: ' + (($shown | ForEach-Object { $_.Trim() }) -join ' | ')
 }
@@ -523,7 +524,13 @@ function Get-LoginOutputTail {
 # carries the last lines garden login printed, so the person sees the real reason.
 function Invoke-SignIn([string]$python, [string]$pyz) {
     $log = Join-Path $tmp 'login.log'
-    $login = Start-Process -FilePath $python -ArgumentList ('"{0}" login --no-open' -f $pyz) `
+    $timeoutSeconds = if ($env:GARDEN_LOGIN_TIMEOUT_SECONDS) {
+        [int]$env:GARDEN_LOGIN_TIMEOUT_SECONDS
+    } else { 1800 }
+    if ($env:GARDEN_LOGIN_STATUS_FILE) {
+        [System.IO.File]::WriteAllText($env:GARDEN_LOGIN_STATUS_FILE, "pending`r`n", $utf8)
+    }
+    $login = Start-Process -FilePath $python -ArgumentList ('"{0}" login --no-open --timeout {1}' -f $pyz, $timeoutSeconds) `
         -RedirectStandardOutput $log -RedirectStandardError (Join-Path $tmp 'login.err') `
         -NoNewWindow -PassThru
     # PowerShell 5.1 keeps the exit code only if the process handle was read before the wait.
@@ -537,23 +544,29 @@ function Invoke-SignIn([string]$python, [string]$pyz) {
         }
     }
     if (-not $link) { $login.Kill(); throw ('the login link did not appear.' + (Get-LoginOutputTail)) }
+    Write-Output 'Approve this login in your browser:'
+    Write-Output "  $link"
     if ($env:GARDEN_LOGIN_LINK_FILE) {
         [System.IO.File]::WriteAllText($env:GARDEN_LOGIN_LINK_FILE, "$link`r`n", $utf8)
-        Write-Output "The login link is in $($env:GARDEN_LOGIN_LINK_FILE). Open it to approve the login."
     } else {
-        Write-Output "Approve the sign-in in your browser: $link"
+        Write-Output 'Opening the sign-in link in your browser...'
         if ($env:GARDEN_INSTALL_TEST) {
             Invoke-WebRequest -UseBasicParsing -Uri $link | Out-Null
         } else {
             try { Start-Process $link } catch { }
         }
     }
-    # The wait ends when a person approves the link. A login nobody approves is ended after ten minutes.
-    if (-not $login.WaitForExit(600000)) {
-        $login.Kill()
-        throw 'the sign-in was not approved within ten minutes'
+    if ($timeoutSeconds -ge 60) {
+        $timeoutMinutes = [Math]::Ceiling($timeoutSeconds / 60)
+        Write-Output "Waiting for approval, up to $timeoutMinutes minute$(if ($timeoutMinutes -ne 1) { 's' })."
+    } else {
+        Write-Output "Waiting for approval, up to $timeoutSeconds second$(if ($timeoutSeconds -ne 1) { 's' })."
     }
+    $login.WaitForExit()
     if ($login.ExitCode -ne 0) { throw ('garden login exited with an error.' + (Get-LoginOutputTail)) }
+    if ($env:GARDEN_LOGIN_STATUS_FILE) {
+        [System.IO.File]::WriteAllText($env:GARDEN_LOGIN_STATUS_FILE, "signed-in`r`n", $utf8)
+    }
 }
 
 $tar = Join-Path $env:SystemRoot 'System32\tar.exe'
@@ -649,8 +662,13 @@ try {
     Start-Step 'Unpacking dsh...'
     if (Test-Path -LiteralPath $dshFolder) {
         $existingDsh = Get-Item -LiteralPath $dshFolder -Force
-        if (($existingDsh.Attributes -band [IO.FileAttributes]::ReparsePoint) -or -not (Test-ManifestOwnsPath $dshFolder)) {
-            throw "Refusing to replace the existing unrecorded dsh folder at $dshFolder."
+        $ownerMarker = Join-Path $dshFolder '.garden-install-owner'
+        $markedGardenFolder = (Test-Path -LiteralPath $ownerMarker) -and (
+            (Get-Content -Raw -LiteralPath $ownerMarker).Trim() -eq 'garden-agent-installer-v1'
+        )
+        if (($existingDsh.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
+            (-not $markedGardenFolder -and -not (Test-ManifestOwnsPath $dshFolder))) {
+            throw "Refusing to replace the existing unrecorded dsh folder at $dshFolder. Move it aside with: Move-Item -LiteralPath '$dshFolder' -Destination '$dshFolder.old', then run just demo again."
         }
         $dshBackup = "$dshFolder.bak-$stamp-$([Guid]::NewGuid())"
         Move-Item -LiteralPath $dshFolder -Destination $dshBackup
@@ -658,6 +676,7 @@ try {
     }
     New-Item -ItemType Directory -Path $dshFolder | Out-Null
     $script:DshFolderCreated = $true
+    [System.IO.File]::WriteAllText((Join-Path $dshFolder '.garden-install-owner'), "garden-agent-installer-v1`r`n", $utf8)
     & $tar -xzf $bundle -C $dshFolder
     if ($LASTEXITCODE -ne 0) { throw 'dsh could not be unpacked from the portal''s bundle.' }
     Complete-Step
@@ -691,30 +710,41 @@ try {
         Invoke-SignIn $python $pyz
         $script:LoginSucceeded = $true
     } catch {
-        throw "Sign-in did not finish ($($_.Exception.Message)). Everything else is installed. Run garden login to sign in."
+        $script:LoginPending = $true
+        if ($env:GARDEN_LOGIN_STATUS_FILE) {
+            [System.IO.File]::WriteAllText($env:GARDEN_LOGIN_STATUS_FILE, "pending`r`n", $utf8)
+        }
+        Write-Warning "Sign-in approval did not finish ($($_.Exception.Message)). Everything else is installed."
     }
-    # The patch names the portal's default model, which needs the sign-in, so garden writes it now.
-    $patchWrite = Invoke-Program $launcher @('dsh-config')
-    if ($patchWrite.Code -ne 0) { throw 'Writing the dsh patch failed. Run garden dsh-config for details.' }
-    $script:DshPatchWritten = $true
+    if (-not $script:LoginPending) {
+        # The patch names the portal's default model, which needs the sign-in, so garden writes it now.
+        $patchWrite = Invoke-Program $launcher @('dsh-config')
+        if ($patchWrite.Code -ne 0) { throw 'Writing the dsh patch failed. Run garden dsh-config for details.' }
+        $script:DshPatchWritten = $true
 
-    # A smoke check: the signed-in person can list their tools.
-    $tools = Invoke-Program $launcher @('tools', '--json')
-    if ($tools.Code -ne 0) { throw 'The smoke check failed. Run garden whoami for details.' }
-    $listed = ($tools.Output -join [Environment]::NewLine) | ConvertFrom-Json
-    $toolCount = @($listed).Count
-    if ($toolCount -gt 0) {
-        Write-Output "Ready: $toolCount tools are available. Run garden tools to see them."
-    } else {
-        Write-Warning 'No tools are listed for you yet. Ask the person who runs Garden to give you a permission, then run garden tools again.'
+        # A smoke check: the signed-in person can list their tools.
+        $tools = Invoke-Program $launcher @('tools', '--json')
+        if ($tools.Code -ne 0) { throw 'The smoke check failed. Run garden whoami for details.' }
+        $listed = ($tools.Output -join [Environment]::NewLine) | ConvertFrom-Json
+        $toolCount = @($listed).Count
+        if ($toolCount -gt 0) {
+            Write-Output "Ready: $toolCount tools are available. Run garden tools to see them."
+        } else {
+            Write-Warning 'No tools are listed for you yet. Ask the person who runs Garden to give you a permission, then run garden tools again.'
+        }
     }
 
-    Write-Output "garden is installed at $launcher. Skills are in $(Join-Path $gardenHome 'skills')."
-    Write-Output "dsh is installed at $dshLauncher. It uses the portal's model with your sign-in."
-    if (Get-Command node -ErrorAction SilentlyContinue) {
-        Write-Output 'Run dsh to start it. Your sign-in is read when it starts, and is never written to dsh''s config.'
+    if ($script:LoginPending) {
+        Write-Output "Everything else is installed. Retry sign-in with: $launcher login"
+        Write-Output "After signing in, finish dsh setup with: $launcher dsh-config"
     } else {
-        Write-Warning 'Node.js is not installed. dsh needs it: install Node.js, then run dsh.'
+        Write-Output "garden is installed at $launcher. Skills are in $(Join-Path $gardenHome 'skills')."
+        Write-Output "dsh is installed at $dshLauncher. It uses the portal's model with your sign-in."
+        if (Get-Command node -ErrorAction SilentlyContinue) {
+            Write-Output 'Run dsh to start it. Your sign-in is read when it starts, and is never written to dsh''s config.'
+        } else {
+            Write-Warning 'Node.js is not installed. dsh needs it: install Node.js, then run dsh.'
+        }
     }
 } catch {
     if ($script:CurrentStep) { Write-Host "[$($script:StepNumber)/$($script:TotalSteps)] Failed: $($script:CurrentStep)" }

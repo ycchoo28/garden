@@ -75,3 +75,15 @@ def test_windows_demo_recipes_are_in_the_windows_set() -> None:
     windows = {name for name, tag, _ in parse_recipes(text) if tag != "unix"}
 
     assert {"setup", "demo", "demo-web", "demo-clean", "demo-uninstall"} <= windows
+
+
+def test_demo_uninstall_always_drops_local_login_on_both_platforms() -> None:
+    lines = (ROOT / "justfile").read_text(encoding="utf-8").splitlines()
+    commands = [
+        line.strip() for line in lines if "scripts/demo.py --uninstall --drop-login" in line
+    ]
+
+    assert commands == [
+        'uv run --no-project --python 3.12 python scripts/demo.py --uninstall --drop-login "$@"',
+        'uv run --no-project --python 3.12 python scripts/demo.py --uninstall --drop-login "$@"',
+    ]

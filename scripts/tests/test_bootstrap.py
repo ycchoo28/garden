@@ -120,6 +120,51 @@ def test_bootstrap_does_not_claim_a_reused_tool_on_path(tmp_path):
     assert str(just) not in {entry["path"] for entry in manifest["artifacts"]}
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="POSIX executable fixture; Windows bootstrap is checked on win-test",
+)
+def test_missing_libatomic_reports_the_ubuntu_fix(tmp_path):
+    script = tmp_path / "bootstrap.py"
+    shutil.copy2(ROOT / "scripts/bootstrap.py", script)
+    shutil.copy2(ROOT / "scripts/install_manifest.py", script.with_name("install_manifest.py"))
+    archive = tmp_path / "tool.zip"
+    with zipfile.ZipFile(archive, "w") as package:
+        for tool in ("just", "bun"):
+            package.writestr(tool, f"#!{sys.executable}\nprint('26.13.0')\n")
+        package.writestr("node-v26.13.0-linux-x64/include/node/", "")
+        package.writestr(
+            "node-v26.13.0-linux-x64/bin/node",
+            f"#!{sys.executable}\nimport sys\n"
+            "print('error while loading shared libraries: libatomic.so.1', file=sys.stderr)\n"
+            "raise SystemExit(127)\n",
+        )
+    digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+    machine = platform.machine().lower()
+    arch = {"x86_64": "x64", "aarch64": "arm64"}.get(machine, machine)
+    pins = {
+        f"{platform.system().lower()}-{arch}": {
+            tool: {"url": archive.as_uri(), "sha256": digest} for tool in ("just", "bun", "node")
+        }
+    }
+    script.with_name("bootstrap-tools.json").write_text(json.dumps(pins))
+    home = tmp_path / "home"
+    home.mkdir()
+    result = subprocess.run(
+        [sys.executable, str(script)],
+        env={**os.environ, "HOME": str(home), "PATH": str(tmp_path / "empty")},
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "sudo apt install libatomic1" in result.stderr
+    assert "source scripts/bootstrap.sh again" in result.stderr
+    assert "Traceback (most recent call last)" not in result.stderr
+
+
 @pytest.mark.parametrize(
     ("system", "marker"),
     [("linux", "Docker Engine"), ("darwin", "Docker Desktop"), ("windows", "WSL 2")],

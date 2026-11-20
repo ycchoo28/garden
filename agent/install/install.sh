@@ -68,6 +68,7 @@ begin_step() {
     printf '[%s/%s] %s\n' "$step" "$total_steps" "$current_step" >&2
 }
 finish_step() {
+    write_install_manifest || true
     printf '[%s/%s] Done: %s\n' "$step" "$total_steps" "$current_step" >&2
     current_step=""
 }
@@ -92,11 +93,6 @@ on_exit() {
 }
 
 write_install_manifest() {
-    local interpreter="${python:-}"
-    if [ -z "$interpreter" ] || [ ! -x "$interpreter" ]; then
-        interpreter="$(command -v python3 || true)"
-    fi
-    [ -n "$interpreter" ] || return 0
     local record_tree
     record_tree() {
         local path="$1" existed="$2" root="$3"
@@ -146,8 +142,18 @@ write_install_manifest() {
     fi
 }
 
+run_manifest_python() {
+    if [ -n "${python:-}" ] && [ -x "$python" ]; then
+        "$python" "$@"
+    elif command -v python3 >/dev/null 2>&1; then
+        python3 "$@"
+    else
+        return 0
+    fi
+}
+
 manifest_update() {
-    "$interpreter" - "$manifest_path" "$@" <<'PY'
+    run_manifest_python - "$manifest_path" "$@" <<'PY'
 import hashlib
 import json
 import os
@@ -378,18 +384,40 @@ export GARDEN_HOME="$garden_home" GARDEN_API_URL="$portal"
 
 # Opens a link in the browser without printing anything. A machine with no opener is not an error.
 open_link() {
-    if command -v open >/dev/null 2>&1; then
+    if "$python" - "$garden_home/garden.pyz" >/dev/null 2>&1 <<'PY'
+import sys
+
+sys.path.insert(0, sys.argv[1])
+from garden.shared.browser import is_wsl
+
+raise SystemExit(0 if is_wsl() else 1)
+PY
+    then
+        "$python" - "$garden_home/garden.pyz" "$1" >/dev/null 2>&1 <<'PY' || true
+import sys
+
+sys.path.insert(0, sys.argv[1])
+from garden.shared import open_link
+
+open_link(sys.argv[2])
+PY
+    elif command -v open >/dev/null 2>&1; then
         open "$1" >/dev/null 2>&1 || true
     elif command -v xdg-open >/dev/null 2>&1; then
         xdg-open "$1" >/dev/null 2>&1 || true
     fi
 }
 
-# The last lines garden login printed, without the sign-in link, so the reason reaches the person.
+# The last lines garden login printed, without the link or its heading, so the reason reaches the person.
 show_login_output() {
     [ -s "$1" ] || return 0
     echo "garden login said:" >&2
-    grep -v '^  https\?://' "$1" | tail -n 8 | sed 's/^/  /' >&2 || true
+    grep -Ev '^  https?://|Approve this login for ' "$1" | tail -n 8 | sed 's/^/  /' >&2 || true
+}
+
+write_login_status() {
+    [ -n "${GARDEN_LOGIN_STATUS_FILE:-}" ] || return 0
+    printf '%s\n' "$1" > "$GARDEN_LOGIN_STATUS_FILE"
 }
 
 # Signs the person in with the CLI. Its output is the sign-in link with one line on what to do, not
@@ -398,7 +426,8 @@ show_login_output() {
 sign_in() {
     local log link login_pid
     log="$tmp/login.log"
-    "$bin_dir/garden" login --no-open > "$log" 2>&1 &
+    write_login_status pending
+    "$bin_dir/garden" login --no-open --timeout "${GARDEN_LOGIN_TIMEOUT_SECONDS:-1800}" > "$log" 2>&1 &
     login_pid=$!
     link=""
     for _ in $(seq 1 100); do
@@ -411,16 +440,24 @@ sign_in() {
         show_login_output "$log"
         return 1
     fi
+    echo "Approve this login in your browser:"
+    printf '  %s\n' "$link"
     if [ -n "${GARDEN_LOGIN_LINK_FILE:-}" ]; then
         printf '%s\n' "$link" > "$GARDEN_LOGIN_LINK_FILE"
-        echo "The login link is in $GARDEN_LOGIN_LINK_FILE. Open it to approve the login."
     else
-        echo "Approve the sign-in in your browser: $link"
+        echo "Opening the sign-in link in your browser..."
         if [ -n "${GARDEN_INSTALL_TEST:-}" ]; then
             curl --fail --silent --location --output /dev/null "$link"
         else
             open_link "$link"
         fi
+    fi
+    if [ "${GARDEN_LOGIN_TIMEOUT_SECONDS:-1800}" -ge 60 ]; then
+        timeout_minutes=$(( (${GARDEN_LOGIN_TIMEOUT_SECONDS:-1800} + 59) / 60 ))
+        printf 'Waiting for approval, up to %s minute%s.\n' "$timeout_minutes" "$([ "$timeout_minutes" -eq 1 ] && echo || echo s)"
+    else
+        timeout_seconds="${GARDEN_LOGIN_TIMEOUT_SECONDS:-1800}"
+        printf 'Waiting for approval, up to %s second%s.\n' "$timeout_seconds" "$([ "$timeout_seconds" -eq 1 ] && echo || echo s)"
     fi
     if ! wait "$login_pid"; then
         show_login_output "$log"
@@ -437,29 +474,85 @@ finish_step
 fetch_artifact dsh-bundle.tar.gz
 begin_step "Unpacking dsh..."
 if [ -e "$garden_home/dsh" ]; then
-    if [ -L "$garden_home/dsh" ] || ! "$python" - "$manifest_path" "$garden_home/dsh" <<'PY'
+    dsh_ownership=""
+    if [ ! -L "$garden_home/dsh" ]; then
+        if dsh_ownership="$("$python" - "$manifest_path" "$garden_home/dsh" <<'PY'
 import json
 import os
 import sys
 from pathlib import Path
 
-manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")) if Path(sys.argv[1]).exists() else {}
 target = Path(os.path.normcase(os.path.abspath(sys.argv[2])))
+marker = target / ".garden-install-owner"
+try:
+    if marker.read_text(encoding="utf-8").strip() == "garden-agent-installer-v1":
+        print("recorded")
+        raise SystemExit(0)
+except (OSError, UnicodeError):
+    pass
+manifest_path = Path(sys.argv[1])
+try:
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {}
+except (OSError, ValueError, UnicodeError):
+    manifest = {}
 for item in manifest.get("artifacts", []):
     recorded = Path(os.path.normcase(os.path.abspath(item["path"])))
     if target == recorded:
+        print("recorded")
         raise SystemExit(0)
     if item.get("kind") == "tree":
         try:
             target.relative_to(recorded)
         except ValueError:
             continue
+        print("recorded")
         raise SystemExit(0)
+try:
+    bundle = json.loads((target / "package.json").read_text(encoding="utf-8"))
+    package_path = target / "node_modules" / "@deepseek-ai" / "dsh"
+    package = json.loads((package_path / "package.json").read_text(encoding="utf-8"))
+except (OSError, ValueError, UnicodeError):
+    raise SystemExit(1)
+dependencies = bundle.get("dependencies", {}) if isinstance(bundle, dict) else {}
+if (
+    isinstance(bundle, dict)
+    and isinstance(package, dict)
+    and bundle.get("name") == "garden-dsh-bundle"
+    and isinstance(dependencies, dict)
+    and dependencies.get("@deepseek-ai/dsh") == package.get("version")
+    and package.get("name") == "@deepseek-ai/dsh"
+    and (package_path / "lib" / "bin.js").is_file()
+):
+    print("legacy")
+    raise SystemExit(0)
 raise SystemExit(1)
 PY
-    then
-        echo "Refusing to replace the existing unrecorded dsh folder at $garden_home/dsh." >&2
+        )"; then
+            :
+        else
+            dsh_ownership=""
+        fi
+    fi
+    if [ "$dsh_ownership" != "recorded" ] && [ "$dsh_ownership" != "legacy" ]; then
+        recovery_command="$("$python" - "$garden_home/dsh" <<'PY'
+import os
+import shlex
+import sys
+
+path = sys.argv[1]
+destination = path + ".old"
+suffix = 1
+while os.path.lexists(destination):
+    destination = f"{path}.old.{suffix}"
+    suffix += 1
+print(f"mv {shlex.quote(path)} {shlex.quote(destination)} && just demo")
+PY
+)"
+        printf 'This dsh folder is not a recognized Garden install; run: %s\n' "$recovery_command" >&2
         exit 1
+    fi
+    if [ "$dsh_ownership" = "legacy" ]; then
+        printf 'Found an earlier Garden dsh installation; replacing it.\n' >&2
     fi
     backup="$garden_home/dsh.bak-$stamp-$$"
     mv "$garden_home/dsh" "$backup"
@@ -467,6 +560,7 @@ PY
 fi
 mkdir -p "$garden_home/dsh"
 dsh_replaced=1
+printf '%s\n' "garden-agent-installer-v1" > "$garden_home/dsh/.garden-install-owner"
 tar -xzf "$tmp/dsh-bundle.tar.gz" -C "$garden_home/dsh"
 finish_step
 
@@ -486,10 +580,13 @@ finish_step
 # Sign in last: garden, dsh and the skills are installed before it, so a failed sign-in
 # leaves them in place, and the message names the one command to retry.
 if ! sign_in; then
-    echo "Sign-in did not finish. Everything else is installed. Run garden login to sign in." >&2
-    exit 1
+    echo "Sign-in approval did not finish. Everything else is installed." >&2
+    echo "The demo portal will keep running. Retry from another terminal with: $bin_dir/garden login" >&2
+    echo "After signing in, finish dsh setup with: $bin_dir/garden dsh-config" >&2
+    exit 0
 fi
 login_succeeded=1
+write_login_status signed-in
 
 # The patch names the portal's default model, which needs the sign-in, so garden writes it now.
 "$bin_dir/garden" dsh-config >/dev/null

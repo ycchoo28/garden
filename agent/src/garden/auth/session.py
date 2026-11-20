@@ -144,6 +144,23 @@ def _default_exchange_code(
         ) from error
 
 
+def _check_portal(portal_url: str) -> None:
+    health_url = f"{portal_url.rstrip('/')}/api/health"
+    try:
+        with urllib.request.urlopen(health_url, timeout=3.0) as response:
+            if response.status == 200:
+                return
+    except (urllib.error.URLError, OSError, http.client.HTTPException) as error:
+        raise GardenError(
+            title=f"The portal at {portal_url} is not running.",
+            fix="Start it with: just demo",
+        ) from error
+    raise GardenError(
+        title=f"The portal at {portal_url} is not running.",
+        fix="Start it with: just demo",
+    )
+
+
 def login(
     *,
     settings: Settings | None = None,
@@ -157,6 +174,7 @@ def login(
 ) -> Login:
     resolved_portal = portal_url or (settings or load_settings()).portal_url
     resolved_device = device or device_name()
+    _check_portal(resolved_portal)
 
     with LoopbackLoginServer(
         portal_url=resolved_portal,
@@ -168,6 +186,8 @@ def login(
         else:
             print(f"Approve this login for {resolved_device} in your browser:")
             print(f"  {server.authorize_url}", flush=True)
+        if open_browser:
+            print("Opening the sign-in link in your browser...", flush=True)
         if open_browser and not open_link(server.authorize_url):
             print(
                 "No browser could be opened here. "

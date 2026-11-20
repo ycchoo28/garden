@@ -3,8 +3,10 @@
 It works with any standard OIDC provider, and with the fake one in dev/compose.yaml.
 """
 
+import asyncio
 from collections.abc import Sequence
 from functools import lru_cache
+from http import HTTPStatus
 from typing import Annotated, Any
 from urllib.parse import urlencode
 
@@ -14,6 +16,7 @@ from fastapi import Depends
 
 from app.config import Settings, get_settings
 from app.core.users.identity import IdentityClaims, IdentityProvider, IdentityRejected, TokenSet
+from app.shared.errors import ProblemError
 
 # Asymmetric algorithms only. A token signed with a shared secret is never accepted.
 SIGNING_ALGORITHMS: Sequence[str] = (
@@ -26,6 +29,15 @@ SIGNING_ALGORITHMS: Sequence[str] = (
     "ES256",
     "ES384",
 )
+DISCOVERY_ATTEMPTS = 3
+DISCOVERY_RETRY_DELAY_SECONDS = 0.25
+
+
+class IdentityProviderUnavailable(ProblemError):
+    """The configured identity provider did not answer its OIDC discovery request."""
+
+    status = HTTPStatus.SERVICE_UNAVAILABLE
+    title = HTTPStatus.SERVICE_UNAVAILABLE.phrase
 
 
 class OidcIdentityProvider:
@@ -40,10 +52,29 @@ class OidcIdentityProvider:
 
     async def _discovery(self) -> dict[str, Any]:
         base = self._issuer.rstrip("/")
-        response = await self._http.get(f"{base}/.well-known/openid-configuration")
-        _ = response.raise_for_status()
-        discovery: dict[str, Any] = response.json()
-        return discovery
+        url = f"{base}/.well-known/openid-configuration"
+        last_error: httpx.HTTPError | None = None
+        for attempt in range(DISCOVERY_ATTEMPTS):
+            try:
+                response = await self._http.get(url)
+                _ = response.raise_for_status()
+                discovery: dict[str, Any] = response.json()
+                return discovery
+            except httpx.TransportError as error:
+                last_error = error
+            except httpx.HTTPStatusError as error:
+                if not error.response.is_server_error:
+                    raise IdentityProviderUnavailable(
+                        "The sign-in provider could not return its discovery document. "
+                        "Ask an administrator to check the OIDC issuer URL."
+                    ) from error
+                last_error = error
+            if attempt + 1 < DISCOVERY_ATTEMPTS:
+                await asyncio.sleep(DISCOVERY_RETRY_DELAY_SECONDS * (attempt + 1))
+        raise IdentityProviderUnavailable(
+            "The sign-in provider is not responding. Try again in a moment.",
+            headers={"Retry-After": "2"},
+        ) from last_error
 
     async def authorization_url(
         self, *, redirect_uri: str, state: str, nonce: str, code_challenge: str
